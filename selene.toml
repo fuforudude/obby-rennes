@@ -1,0 +1,6 @@
+std = "roblox"
+
+[lints]
+# Une globale inconnue est presque toujours une faute de frappe ou un oubli de « local ».
+unscoped_variables = "deny"
+shadowing = "warn"

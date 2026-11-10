@@ -1,0 +1,21 @@
+{
+  "name": "obby-rennes",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "Partage": { "$path": "src/partage" }
+    },
+    "ServerScriptService": {
+      "Serveur": { "$path": "src/serveur" },
+      "ServerPackages": { "$path": "ServerPackages" }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Client": { "$path": "src/client" }
+      }
+    },
+    "Workspace": {
+      "Monde": { "$path": "monde" }
+    }
+  }
+}

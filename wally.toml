@@ -1,0 +1,16 @@
+[package]
+name = "titouan/obby-rennes"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+private = true
+
+[dependencies]
+
+# Côté serveur seulement (installé dans ServerPackages/, branché sous ServerScriptService).
+[server-dependencies]
+ProfileStore = "lm-loleris/profilestore@1.0.3"
+
+# Outils de test (installés dans DevPackages/, présents seulement dans la construction de test).
+[dev-dependencies]
+TestEZ = "roblox/testez@0.4.1"

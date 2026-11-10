@@ -1,0 +1,8 @@
+{
+  "projet": "default.project.json",
+  "projetTests": "test.project.json",
+  "places": {
+    "test": { "universeId": 0, "placeId": 0 },
+    "prod": { "universeId": 0, "placeId": 0 }
+  }
+}

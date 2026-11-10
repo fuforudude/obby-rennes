@@ -1,0 +1,23 @@
+{
+  "name": "obby-rennes-tests",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "Partage": { "$path": "src/partage" },
+      "DevPackages": { "$path": "DevPackages" }
+    },
+    "ServerScriptService": {
+      "Serveur": { "$path": "src/serveur" },
+      "ServerPackages": { "$path": "ServerPackages" },
+      "Tests": { "$path": "tests" }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Client": { "$path": "src/client" }
+      }
+    },
+    "Workspace": {
+      "Monde": { "$path": "monde" }
+    }
+  }
+}

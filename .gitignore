@@ -1,0 +1,12 @@
+# Constructions Rojo (regénérées par « roblox construire »)
+build/
+
+# Dépendances Wally (réinstallées par « wally install » ; wally.lock, lui, est commité)
+Packages/
+DevPackages/
+ServerPackages/
+
+# Fichiers locaux de Studio et de Rojo
+*.rbxl.lock
+*.rbxlx.lock
+sourcemap.json

@@ -1,0 +1,6 @@
+# Fins de ligne Unix partout : StyLua les vérifie, et les worktrees des agents sous Windows ne doivent pas les changer.
+* text=auto eol=lf
+*.cmd text eol=crlf
+# Fichiers Roblox binaires (cartes, modèles, places).
+*.rbxm binary
+*.rbxl binary
