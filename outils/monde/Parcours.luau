@@ -58,7 +58,18 @@ return function(R)
 	end
 
 	-- Bloc ancré. `dessus` est la hauteur de sa face supérieure : on raisonne en « où pose-t-on les pieds ».
-	local function bloc(parent, nom: string, sx: number, sy: number, sz: number, x: number, dessus: number, z: number, couleur, materiau)
+	local function bloc(
+		parent,
+		nom: string,
+		sx: number,
+		sy: number,
+		sz: number,
+		x: number,
+		dessus: number,
+		z: number,
+		couleur,
+		materiau
+	)
 		local p = Instance.new("Part")
 		p.Name = nom
 		p.Anchored = true
@@ -162,9 +173,11 @@ return function(R)
 		p:SetAttribute("Numero", numero)
 		etiqueter(p, "Checkpoint")
 		-- Le numéro, posé à plat sur la dalle.
-		local marque = decor(bloc(parent, `Marque{numero}`, 4, 0.05, 4, x, dessus + 0.05, z, p.Color, Enum.Material.Neon))
+		local marque =
+			decor(bloc(parent, `Marque{numero}`, 4, 0.05, 4, x, dessus + 0.05, z, p.Color, Enum.Material.Neon))
 		marque.CanCollide = false
-		texte(Enum.NormalId.Top, tostring(numero), Color3.fromRGB(20, 30, 40), Color3.fromRGB(255, 255, 255)).Parent = marque
+		texte(Enum.NormalId.Top, tostring(numero), Color3.fromRGB(20, 30, 40), Color3.fromRGB(255, 255, 255)).Parent =
+			marque
 		panneau(parent, `{numero} · {nomZone}`, x - taille / 2 + 1, dessus, -taille / 2 - 2, 9)
 		return p
 	end
@@ -208,12 +221,39 @@ return function(R)
 		local corps = pilier(parent, nom, largeur, largeur, x, dessus, z, couleurs.facade, Enum.Material.Plaster)
 		local hauteur = dessus - SOL
 		for i = -1, 1 do
-			decor(bloc(parent, "Poutre", 0.5, hauteur, 0.3, x + i * largeur / 3, dessus, z - largeur / 2 - 0.1, couleurs.colombage, Enum.Material.Wood))
+			decor(
+				bloc(
+					parent,
+					"Poutre",
+					0.5,
+					hauteur,
+					0.3,
+					x + i * largeur / 3,
+					dessus,
+					z - largeur / 2 - 0.1,
+					couleurs.colombage,
+					Enum.Material.Wood
+				)
+			)
 		end
 		for h = SOL + 4, dessus - 1, 4 do
-			decor(bloc(parent, "Poutre", largeur, 0.5, 0.3, x, h, z - largeur / 2 - 0.1, couleurs.colombage, Enum.Material.Wood))
+			decor(
+				bloc(
+					parent,
+					"Poutre",
+					largeur,
+					0.5,
+					0.3,
+					x,
+					h,
+					z - largeur / 2 - 0.1,
+					couleurs.colombage,
+					Enum.Material.Wood
+				)
+			)
 		end
-		local bordure = dalle(parent, "Toit", largeur + 0.4, largeur + 0.4, x, dessus, z, couleurs.toit, Enum.Material.Slate)
+		local bordure =
+			dalle(parent, "Toit", largeur + 0.4, largeur + 0.4, x, dessus, z, couleurs.toit, Enum.Material.Slate)
 		bordure.CanTouch = false
 		corps.CanTouch = false
 		return bordure
@@ -253,7 +293,13 @@ return function(R)
 	decor(bloc(coloc, "Bureau", 6, 3, 3, -16, 4, -9, couleurs.bois, Enum.Material.Wood))
 	decor(bloc(coloc, "PizzaDHier", 2, 0.3, 2, -15, 4.3, -9, Color3.fromRGB(230, 170, 80), Enum.Material.SmoothPlastic))
 	local mur = decor(bloc(coloc, "Mur", 1, 12, 30, -23, 13, 0, Color3.fromRGB(230, 225, 215), Enum.Material.Plaster))
-	texte(Enum.NormalId.Right, "PARTIEL À 8H\nSUP DE VINCI\n(Rennes 2 est bloquée, pas Sup de Vinci)", Color3.fromRGB(200, 30, 30), Color3.fromRGB(255, 250, 230)).Parent = mur
+	texte(
+		Enum.NormalId.Right,
+		"PARTIEL À 8H\nSUP DE VINCI\n(Rennes 2 est bloquée, pas Sup de Vinci)",
+		Color3.fromRGB(200, 30, 30),
+		Color3.fromRGB(255, 250, 230)
+	).Parent =
+		mur
 	tableauClassement(coloc, -4, 1, -14, Enum.NormalId.Back)
 
 	---------------------------------------------------------------------------------------------------------------
@@ -264,7 +310,7 @@ return function(R)
 	dalle(fac, "Table", 6, 4, 32, 4, 3, couleurs.bois, Enum.Material.Wood)
 	checkpoint(fac, 1, 44, 4, 0, "Fac bloquée")
 	dalle(fac, "Chaises", 4, 4, 56, 7, 0, couleurs.chaise)
-	fragile(dalle(fac, "PileDeCopies", 4, 4, 63, 10, 2))
+	fragile(dalle(fac, "PileDeCopies", 4, 4, 63, 10, 2, couleurs.papier))
 	dalle(fac, "Chaises", 4, 4, 70, 13, -1, couleurs.chaise)
 	checkpoint(fac, 2, 82, 13, 0, "Fac bloquée (le blocus)")
 	-- Décor : la barricade de chaises et la banderole de l'AG.
@@ -273,8 +319,15 @@ return function(R)
 	end
 	decor(bloc(fac, "Mat", 0.5, 20, 0.5, 30, 18, -12, Color3.fromRGB(80, 80, 80)))
 	decor(bloc(fac, "Mat", 0.5, 20, 0.5, 60, 18, -12, Color3.fromRGB(80, 80, 80)))
-	local banderoleAG = decor(bloc(fac, "BanderoleAG", 30, 4, 0.3, 45, 17, -12, couleurs.banderole, Enum.Material.Fabric))
-	texte(Enum.NormalId.Back, "FAC BLOQUÉE · AG À 10H · PARTIELS REPORTÉS (pas les tiens)", Color3.fromRGB(180, 20, 20), couleurs.banderole).Parent = banderoleAG
+	local banderoleAG =
+		decor(bloc(fac, "BanderoleAG", 30, 4, 0.3, 45, 17, -12, couleurs.banderole, Enum.Material.Fabric))
+	texte(
+		Enum.NormalId.Back,
+		"FAC BLOQUÉE · AG À 10H · PARTIELS REPORTÉS (pas les tiens)",
+		Color3.fromRGB(180, 20, 20),
+		couleurs.banderole
+	).Parent =
+		banderoleAG
 
 	---------------------------------------------------------------------------------------------------------------
 	-- 3-4 · Métro en grève
@@ -283,7 +336,9 @@ return function(R)
 		local r = bloc(metro, nom, longueur, 7, 6, x, 13, 0, couleurs.metro, Enum.Material.Metal)
 		if avecVitres then
 			-- Les vitres sont une pièce à part : seulement sur les rames immobiles, sinon elles resteraient sur place.
-			decor(bloc(metro, "Vitres", longueur - 2, 2, 6.1, x, 11, 0, Color3.fromRGB(30, 40, 60), Enum.Material.Glass))
+			decor(
+				bloc(metro, "Vitres", longueur - 2, 2, 6.1, x, 11, 0, Color3.fromRGB(30, 40, 60), Enum.Material.Glass)
+			)
 		end
 		return r
 	end
@@ -313,7 +368,11 @@ return function(R)
 	banderole(236, 8, "NON AUX PARTIELS À 8H", Vector3.new(0, 0, -8), 3)
 	dalle(cortege, "Pancarte", 2, 2, 244, 9, 0, couleurs.pancarte)
 	checkpoint(cortege, 5, 256, 9, 0, "Place de la République")
-	local sono = mobile(dalle(cortege, "CamionSono", 8, 8, 272, 9, 0, couleurs.camion, Enum.Material.Metal), Vector3.new(12, 0, 0), 4)
+	local sono = mobile(
+		dalle(cortege, "CamionSono", 8, 8, 272, 9, 0, couleurs.camion, Enum.Material.Metal),
+		Vector3.new(12, 0, 0),
+		4
+	)
 	sono.Size = Vector3.new(8, 2, 8)
 	sono.CFrame = CFrame.new(272, 8, 0)
 	checkpoint(cortege, 6, 300, 9, 0, "Le cortège")
@@ -334,9 +393,9 @@ return function(R)
 	local jus = mortel(dalle(poubelles, "JusDePoubelle", 34, 20, 330, 6, 0, couleurs.jus, Enum.Material.Mud))
 	jus.CanQuery = false
 	pilier(poubelles, "Bac", 4, 4, 311, 10, 0, couleurs.bac)
-	fragile(dalle(poubelles, "Carton", 4, 4, 318, 10, 2))
+	fragile(dalle(poubelles, "Carton", 4, 4, 318, 10, 2, couleurs.papier))
 	pilier(poubelles, "Bac", 4, 4, 325, 12, -2, couleurs.bacJaune)
-	fragile(dalle(poubelles, "Carton", 4, 4, 332, 12, 1))
+	fragile(dalle(poubelles, "Carton", 4, 4, 332, 12, 1, couleurs.papier))
 	pilier(poubelles, "Bac", 4, 4, 339, 14, 0, couleurs.bac)
 	checkpoint(poubelles, 7, 352, 14, 0, "Barricades de poubelles")
 	decor(bloc(poubelles, "GrandeBarricade", 6, 23 - SOL, 24, 382, 22, 0, couleurs.bac))
@@ -356,7 +415,10 @@ return function(R)
 	maison(soif, "Maison", 442, 0, 8, 22)
 	checkpoint(soif, 9, 456, 22, 0, "Rue de la Soif")
 	dalle(soif, "Passerelle", 30, 10, 480, 22, 0, couleurs.toit, Enum.Material.Slate)
-	local enseigne = tournant(bloc(soif, "EnseigneDeBar", 1.2, 2, 22, 480, 25, 0, Color3.fromRGB(220, 60, 140), Enum.Material.Neon), 1.6)
+	local enseigne = tournant(
+		bloc(soif, "EnseigneDeBar", 1.2, 2, 22, 480, 25, 0, Color3.fromRGB(220, 60, 140), Enum.Material.Neon),
+		1.6
+	)
 	enseigne.CanQuery = false
 	checkpoint(soif, 10, 507, 22, 0, "Le dernier bar avant le partiel")
 	for i = 0, 5 do
@@ -372,13 +434,17 @@ return function(R)
 	dalle(vilaine, "Quai", 4, 6, 519, 19, 0, couleurs.pierre, Enum.Material.Cobblestone)
 	dalle(vilaine, "Quai", 4, 6, 526, 16, 0, couleurs.pierre, Enum.Material.Cobblestone)
 	dalle(vilaine, "Ponton", 4, 8, 534, 16, 0, couleurs.ponton, Enum.Material.WoodPlanks)
-	mobile(dalle(vilaine, "PenicheALaDerive", 10, 6, 545, 16, 0, Color3.fromRGB(30, 80, 50), Enum.Material.Wood), Vector3.new(0, 0, 10), 5)
+	mobile(
+		dalle(vilaine, "PenicheALaDerive", 10, 6, 545, 16, 0, Color3.fromRGB(30, 80, 50), Enum.Material.Wood),
+		Vector3.new(0, 0, 10),
+		5
+	)
 	dalle(vilaine, "Ponton", 4, 8, 556, 16, 0, couleurs.ponton, Enum.Material.WoodPlanks)
 	checkpoint(vilaine, 11, 568, 16, 0, "La Vilaine")
 	dalle(vilaine, "Bouee", 3, 3, 580, 16, 0, Color3.fromRGB(240, 90, 40))
-	fragile(dalle(vilaine, "BoueeCrevee", 3, 3, 587, 17, 2))
+	fragile(dalle(vilaine, "BoueeCrevee", 3, 3, 587, 17, 2, couleurs.papier))
 	dalle(vilaine, "Bouee", 3, 3, 594, 18, -1, Color3.fromRGB(240, 90, 40))
-	fragile(dalle(vilaine, "BoueeCrevee", 3, 3, 601, 18, 1))
+	fragile(dalle(vilaine, "BoueeCrevee", 3, 3, 601, 18, 1, couleurs.papier))
 	checkpoint(vilaine, 12, 614, 18, 0, "Les quais")
 
 	---------------------------------------------------------------------------------------------------------------
@@ -391,7 +457,8 @@ return function(R)
 	pilier(parlement, "Colonne", 2, 2, 654, 27, 0, couleurs.pierre, Enum.Material.Marble)
 	checkpoint(parlement, 13, 666, 28, 0, "Parlement de Bretagne")
 	local facadeParlement = immeuble(parlement, 650, 40, 70, 16, 40, couleurs.pierre)
-	texte(Enum.NormalId.Front, "PARLEMENT DE BRETAGNE", Color3.fromRGB(150, 120, 40), couleurs.pierre).Parent = facadeParlement
+	texte(Enum.NormalId.Front, "PARLEMENT DE BRETAGNE", Color3.fromRGB(150, 120, 40), couleurs.pierre).Parent =
+		facadeParlement
 	decor(bloc(parlement, "Toit", 70, 8, 16, 650, 38, 40, Color3.fromRGB(50, 60, 80), Enum.Material.Slate))
 
 	---------------------------------------------------------------------------------------------------------------

@@ -51,9 +51,14 @@ function Classement.rafraichir()
 	for rang, entree in page do
 		local id = tonumber(entree.key)
 		local nom = if id then nomDe(id) else "?"
-		table.insert(lignes, string.format("%2d. %-18s %s", rang, string.sub(nom, 1, 18), Regles.formaterTemps(entree.value / 1000)))
+		table.insert(
+			lignes,
+			string.format("%2d. %-18s %s", rang, string.sub(nom, 1, 18), Regles.formaterTemps(entree.value / 1000))
+		)
 	end
-	afficher(if #lignes > 0 then table.concat(lignes, "\n") else "Personne n'a encore eu son partiel.\nSois le premier !")
+	afficher(
+		if #lignes > 0 then table.concat(lignes, "\n") else "Personne n'a encore eu son partiel.\nSois le premier !"
+	)
 end
 
 --- Enregistre un temps (en secondes) s'il bat celui déjà classé pour ce joueur. Ne bloque pas l'appelant.
