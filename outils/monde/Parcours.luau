@@ -19,41 +19,69 @@
 
 return function(R)
 	local Instance, Vector3, Color3, CFrame, Enum, UDim2 = R.Instance, R.Vector3, R.Color3, R.CFrame, R.Enum, R.UDim2
+	local Vector2, NumberRange, NumberSequence, ColorSequence, ColorSequenceKeypoint =
+		R.Vector2, R.NumberRange, R.NumberSequence, R.ColorSequence, R.ColorSequenceKeypoint
 
 	local SOL = -10 -- dessus du sol de la ville (décor)
+
+	-- Direction artistique (règles de genre des obbys qui marchent, adaptées à Rennes) :
+	-- 1. Le chemin se lit d'un coup d'œil : ce qui se marche est saturé et cerné de la couleur de sa zone ;
+	--    le décor de fond est en teintes douces, il ne se confond jamais avec une plateforme.
+	-- 2. Une couleur par zone (arche du checkpoint, contours, drapeaux) : on sait où on est, on voit qu'on avance.
+	-- 3. Ce qui tue est toujours signalé de la même façon : cerné de rouge vif.
+	-- 4. Checkpoints très visibles : dalle lumineuse, grand numéro, arche avec le nom de la zone.
+	-- 5. Des repères de Rennes en fond (tours, cathédrale, drapeaux bretons, arbres) pour l'ambiance, sans surcharge.
 	local couleurs = {
-		bois = Color3.fromRGB(150, 105, 65),
-		chaise = Color3.fromRGB(60, 90, 160),
-		papier = Color3.fromRGB(245, 245, 235),
-		metro = Color3.fromRGB(210, 40, 45),
-		quai = Color3.fromRGB(120, 120, 125),
-		banderole = Color3.fromRGB(240, 235, 220),
-		pancarte = Color3.fromRGB(250, 200, 60),
-		camion = Color3.fromRGB(70, 70, 80),
-		bac = Color3.fromRGB(40, 110, 60),
-		bacJaune = Color3.fromRGB(230, 190, 40),
-		carton = Color3.fromRGB(185, 140, 90),
-		jus = Color3.fromRGB(95, 110, 40),
-		facade = Color3.fromRGB(235, 225, 200),
-		colombage = Color3.fromRGB(70, 45, 30),
-		toit = Color3.fromRGB(90, 85, 95),
-		eau = Color3.fromRGB(50, 110, 160),
-		ponton = Color3.fromRGB(120, 90, 60),
-		pierre = Color3.fromRGB(210, 200, 175),
-		haie = Color3.fromRGB(40, 95, 45),
-		pelouse = Color3.fromRGB(110, 190, 70),
-		vinci = Color3.fromRGB(20, 60, 120),
-		or_ = Color3.fromRGB(240, 190, 50),
-		checkpoint = Color3.fromRGB(80, 200, 255),
+		bois = Color3.fromRGB(196, 132, 74),
+		chaise = Color3.fromRGB(64, 120, 235),
+		papier = Color3.fromRGB(255, 252, 235),
+		metro = Color3.fromRGB(235, 50, 60),
+		quai = Color3.fromRGB(150, 155, 165),
+		banderole = Color3.fromRGB(255, 248, 225),
+		pancarte = Color3.fromRGB(255, 205, 40),
+		camion = Color3.fromRGB(255, 120, 40),
+		bac = Color3.fromRGB(40, 170, 90),
+		bacJaune = Color3.fromRGB(255, 210, 40),
+		carton = Color3.fromRGB(215, 160, 95),
+		jus = Color3.fromRGB(150, 210, 30),
+		facade = Color3.fromRGB(250, 236, 205),
+		colombage = Color3.fromRGB(95, 55, 35),
+		toit = Color3.fromRGB(85, 95, 120),
+		eau = Color3.fromRGB(40, 150, 230),
+		ponton = Color3.fromRGB(170, 115, 70),
+		pierre = Color3.fromRGB(235, 222, 190),
+		haie = Color3.fromRGB(45, 150, 60),
+		pelouse = Color3.fromRGB(120, 230, 70),
+		vinci = Color3.fromRGB(25, 85, 185),
+		or_ = Color3.fromRGB(255, 200, 40),
+		checkpoint = Color3.fromRGB(70, 220, 255),
+		danger = Color3.fromRGB(255, 40, 40),
+		feuillage = Color3.fromRGB(70, 175, 75),
+		tronc = Color3.fromRGB(110, 75, 50),
 	}
+	-- Couleur de chaque zone, dans l'ordre du parcours.
+	local accents = {
+		coloc = Color3.fromRGB(255, 140, 60),
+		fac = Color3.fromRGB(160, 90, 255),
+		metro = Color3.fromRGB(255, 60, 80),
+		cortege = Color3.fromRGB(255, 200, 30),
+		poubelles = Color3.fromRGB(120, 230, 40),
+		soif = Color3.fromRGB(255, 80, 190),
+		vilaine = Color3.fromRGB(40, 190, 255),
+		parlement = Color3.fromRGB(255, 215, 90),
+		thabor = Color3.fromRGB(60, 220, 120),
+		vinci = Color3.fromRGB(60, 140, 255),
+	}
+	local accentDe: { [any]: any } = {} -- dossier de zone → sa couleur (contours posés à la fin)
 
 	local parcours = Instance.new("Model")
 	parcours.Name = "Parcours"
 
-	local function dossier(nom: string)
+	local function dossier(nom: string, accent)
 		local d = Instance.new("Folder")
 		d.Name = nom
 		d.Parent = parcours
+		accentDe[d] = accent
 		return d
 	end
 
@@ -178,8 +206,96 @@ return function(R)
 		marque.CanCollide = false
 		texte(Enum.NormalId.Top, tostring(numero), Color3.fromRGB(20, 30, 40), Color3.fromRGB(255, 255, 255)).Parent =
 			marque
-		panneau(parent, `{numero} · {nomZone}`, x - taille / 2 + 1, dessus, -taille / 2 - 2, 9)
+		-- Arche aux couleurs de la zone, au-dessus de la dalle : le nom se lit en arrivant et en repartant.
+		local accent = accentDe[parent] or couleurs.checkpoint
+		local demi = taille / 2 + 0.6
+		for _, cote in { -1, 1 } do
+			decor(
+				bloc(parent, "PilierArche", 1.2, 11, 1.2, x, dessus + 11, z + cote * demi, accent, Enum.Material.Neon)
+			)
+		end
+		local fronton =
+			decor(bloc(parent, "Arche", 1.2, 3, taille + 2.4, x, dessus + 14, z, Color3.fromRGB(25, 25, 35)))
+		local nom = if numero == 0 then nomZone else `{numero} · {nomZone}`
+		texte(Enum.NormalId.Left, nom, accent).Parent = fronton
+		texte(Enum.NormalId.Right, nom, accent).Parent = fronton
+		decor(bloc(parent, "LiseréArche", 1.3, 0.4, taille + 2.4, x, dessus + 11.2, z, accent, Enum.Material.Neon))
 		return p
+	end
+
+	-- Contour d'une pièce (SelectionBox : aucune pièce en plus, juste un trait autour).
+	local function contour(p, couleur, epaisseur)
+		local boite = Instance.new("SelectionBox")
+		boite.Name = "Contour"
+		boite.Adornee = p
+		boite.Color3 = couleur
+		boite.LineThickness = epaisseur or 0.06
+		boite.SurfaceTransparency = 1
+		boite.Parent = p
+		return boite
+	end
+
+	local function arbre(parent, x, z, taille)
+		taille = taille or 1
+		decor(
+			bloc(
+				parent,
+				"Tronc",
+				1.2 * taille,
+				6 * taille,
+				1.2 * taille,
+				x,
+				SOL + 6 * taille,
+				z,
+				couleurs.tronc,
+				Enum.Material.Wood
+			)
+		)
+		local feuilles = decor(Instance.new("Part"))
+		feuilles.Name = "Feuillage"
+		feuilles.Shape = Enum.PartType.Ball
+		feuilles.Anchored = true
+		feuilles.Size = Vector3.new(7, 7, 7) * taille
+		feuilles.CFrame = CFrame.new(x, SOL + 9 * taille, z)
+		feuilles.Color = couleurs.feuillage
+		feuilles.Material = Enum.Material.Grass
+		feuilles.CastShadow = true
+		feuilles.Parent = parent
+	end
+
+	local function lampadaire(parent, x, z)
+		decor(bloc(parent, "Lampadaire", 0.5, 12, 0.5, x, SOL + 12, z, Color3.fromRGB(45, 50, 60), Enum.Material.Metal))
+		local tete = decor(
+			bloc(parent, "Lampe", 1.6, 0.8, 1.6, x, SOL + 12.6, z, Color3.fromRGB(255, 230, 160), Enum.Material.Neon)
+		)
+		local lumiere = Instance.new("PointLight")
+		lumiere.Range = 14
+		lumiere.Brightness = 1.2
+		lumiere.Color = Color3.fromRGB(255, 220, 160)
+		lumiere.Parent = tete
+	end
+
+	-- Gwenn-ha-du simplifié : bandes noires et blanches et un carré d'hermines (blanc).
+	local function drapeauBreton(parent, x, dessus, z)
+		decor(bloc(parent, "Mat", 0.4, 14, 0.4, x, dessus + 14, z, Color3.fromRGB(220, 220, 220), Enum.Material.Metal))
+		for i = 0, 8 do
+			local couleur = if i % 2 == 0 then Color3.fromRGB(20, 20, 20) else Color3.fromRGB(250, 250, 250)
+			decor(bloc(parent, "Bande", 0.15, 0.5, 7, x, dessus + 14 - i * 0.5, z + 3.7, couleur, Enum.Material.Fabric))
+		end
+		decor(
+			bloc(
+				parent,
+				"Hermines",
+				0.2,
+				2.5,
+				3,
+				x,
+				dessus + 14,
+				z + 1.7,
+				Color3.fromRGB(250, 250, 250),
+				Enum.Material.Fabric
+			)
+		)
 	end
 
 	local function tableauClassement(parent, x, dessus, z, face)
@@ -217,8 +333,9 @@ return function(R)
 	end
 
 	-- Maison à colombages : façade claire, poutres sombres sur la face avant (-Z), toit plat où l'on marche.
-	local function maison(parent, nom, x, z, largeur, dessus)
+	local function maison(parent, nom, x, z, largeur, dessus, estDecor)
 		local corps = pilier(parent, nom, largeur, largeur, x, dessus, z, couleurs.facade, Enum.Material.Plaster)
+		corps.CanQuery = false
 		local hauteur = dessus - SOL
 		for i = -1, 1 do
 			decor(
@@ -256,27 +373,108 @@ return function(R)
 			dalle(parent, "Toit", largeur + 0.4, largeur + 0.4, x, dessus, z, couleurs.toit, Enum.Material.Slate)
 		bordure.CanTouch = false
 		corps.CanTouch = false
+		if estDecor then
+			decor(bordure)
+		end
 		return bordure
 	end
 
 	-- Immeuble de décor, loin du chemin.
-	local function immeuble(parent, x, z, sx, sz, hauteur, couleur)
-		return decor(bloc(parent, "Immeuble", sx, hauteur, sz, x, SOL + hauteur, z, couleur, Enum.Material.Concrete))
+	local function immeuble(parent, x, z, sx, sz, hauteur, couleur, sansFenetres)
+		local corps =
+			decor(bloc(parent, "Immeuble", sx, hauteur, sz, x, SOL + hauteur, z, couleur, Enum.Material.Concrete))
+		if not sansFenetres then
+			local face = if z > 0 then z - sz / 2 - 0.1 else z + sz / 2 + 0.1
+			for h = SOL + 6, SOL + hauteur - 3, 6 do
+				local f = decor(
+					bloc(
+						parent,
+						"Fenetres",
+						sx - 3,
+						2,
+						0.2,
+						x,
+						h,
+						face,
+						Color3.fromRGB(150, 200, 235),
+						Enum.Material.Glass
+					)
+				)
+				f.CastShadow = false
+			end
+			decor(
+				bloc(
+					parent,
+					"Corniche",
+					sx + 1,
+					1,
+					sz + 1,
+					x,
+					SOL + hauteur + 1,
+					z,
+					Color3.fromRGB(90, 95, 110),
+					Enum.Material.Slate
+				)
+			)
+		end
+		return corps
 	end
 
 	---------------------------------------------------------------------------------------------------------------
 	-- La ville : sol, zone mortelle sous le parcours, immeubles.
 	local ville = dossier("Ville")
-	decor(bloc(ville, "Sol", 900, 2, 300, 380, SOL, 0, Color3.fromRGB(70, 70, 75), Enum.Material.Asphalt))
+	decor(bloc(ville, "Sol", 900, 2, 300, 380, SOL, 0, Color3.fromRGB(110, 175, 85), Enum.Material.Grass))
+	decor(bloc(ville, "Rue", 900, 0.2, 40, 380, SOL + 0.1, 0, Color3.fromRGB(60, 62, 70), Enum.Material.Asphalt))
+	for _, cote in { -1, 1 } do
+		decor(
+			bloc(
+				ville,
+				"Trottoir",
+				900,
+				0.6,
+				10,
+				380,
+				SOL + 0.6,
+				cote * 25,
+				Color3.fromRGB(200, 195, 185),
+				Enum.Material.Concrete
+			)
+		)
+	end
+	for x = -40, 820, 16 do
+		local trait = decor(
+			bloc(
+				ville,
+				"Marquage",
+				7,
+				0.05,
+				0.6,
+				x,
+				SOL + 0.25,
+				0,
+				Color3.fromRGB(250, 250, 250),
+				Enum.Material.SmoothPlastic
+			)
+		)
+		trait.CastShadow = false
+	end
+	for i = 0, 26 do
+		local x = -30 + i * 32
+		lampadaire(ville, x, 21)
+		lampadaire(ville, x + 16, -21)
+		arbre(ville, x + 8, 34, 0.9 + (i % 3) * 0.15)
+		arbre(ville, x + 24, -34, 1 + (i % 2) * 0.2)
+	end
 	local vide = mortel(bloc(ville, "Vide", 900, 2, 300, 380, -4, 0, Color3.fromRGB(0, 0, 0)))
 	vide.Transparency = 1
 	vide.CanCollide = false
 	vide.CanQuery = false
+	-- Teintes douces : le fond ne doit jamais ressembler à une plateforme.
 	local teintes = {
-		Color3.fromRGB(200, 190, 175),
-		Color3.fromRGB(170, 160, 150),
-		Color3.fromRGB(215, 205, 190),
-		Color3.fromRGB(150, 145, 140),
+		Color3.fromRGB(240, 215, 190),
+		Color3.fromRGB(200, 215, 230),
+		Color3.fromRGB(235, 200, 200),
+		Color3.fromRGB(215, 230, 205),
 	}
 	for i = 0, 15 do
 		local x = -20 + i * 52
@@ -284,9 +482,58 @@ return function(R)
 		immeuble(ville, x + 20, -75 - (i % 2) * 10, 26, 22, 26 + ((i + 1) % 4) * 14, teintes[(i + 2) % 4 + 1])
 	end
 
+	-- Repères de Rennes, en fond. Les tours Les Horizons : deux tours rondes, l'une plus haute que l'autre.
+	for _, tour in { { x = 120, h = 110 }, { x = 150, h = 85 } } do
+		local t = decor(Instance.new("Part"))
+		t.Name = "TourLesHorizons"
+		t.Shape = Enum.PartType.Cylinder
+		t.Anchored = true
+		t.Size = Vector3.new(tour.h, 22, 22)
+		t.CFrame = CFrame.new(tour.x, SOL + tour.h / 2, -125) * CFrame.Angles(0, 0, math.rad(90))
+		t.Color = Color3.fromRGB(235, 235, 240)
+		t.Material = Enum.Material.Concrete
+		t.Parent = ville
+		for h = SOL + 8, SOL + tour.h - 4, 7 do
+			local bague = decor(Instance.new("Part"))
+			bague.Name = "Balcons"
+			bague.Shape = Enum.PartType.Cylinder
+			bague.Anchored = true
+			bague.Size = Vector3.new(1, 23, 23)
+			bague.CFrame = CFrame.new(tour.x, h, -125) * CFrame.Angles(0, 0, math.rad(90))
+			bague.Color = Color3.fromRGB(120, 130, 150)
+			bague.Material = Enum.Material.Glass
+			bague.CastShadow = false
+			bague.Parent = ville
+		end
+	end
+	-- La cathédrale Saint-Pierre : façade claire et deux tours carrées, près de la rue de la Soif.
+	immeuble(ville, 470, -110, 40, 24, 45, Color3.fromRGB(225, 210, 180), true)
+	for _, dx in { -14, 14 } do
+		immeuble(ville, 470 + dx, -105, 12, 12, 70, Color3.fromRGB(215, 200, 170), true)
+		decor(
+			bloc(
+				ville,
+				"Lanterne",
+				8,
+				6,
+				8,
+				470 + dx,
+				SOL + 76,
+				-105,
+				Color3.fromRGB(110, 120, 140),
+				Enum.Material.Slate
+			)
+		)
+	end
+	local rosace = decor(
+		bloc(ville, "Rosace", 0.4, 10, 10, 470, SOL + 32, -97.6, Color3.fromRGB(80, 120, 200), Enum.Material.Glass)
+	)
+	rosace.Orientation = Vector3.new(0, 90, 0)
+	drapeauBreton(ville, -26, 25, 14)
+
 	---------------------------------------------------------------------------------------------------------------
 	-- 0 · La coloc à Villejean
-	local coloc = dossier("0_Coloc")
+	local coloc = dossier("0_Coloc", accents.coloc)
 	checkpoint(coloc, 0, 0, 1, 0, "La coloc à Villejean", 14)
 	pilier(coloc, "Plancher", 30, 30, -8, 0.9, 0, couleurs.bois, Enum.Material.WoodPlanks).CanTouch = false
 	decor(bloc(coloc, "Matelas", 6, 1.5, 9, -16, 2.4, 8, Color3.fromRGB(200, 70, 80), Enum.Material.Fabric))
@@ -300,11 +547,14 @@ return function(R)
 		Color3.fromRGB(255, 250, 230)
 	).Parent =
 		mur
+	local titre =
+		decor(bloc(coloc, "Titre", 1, 7, 30, -23, 21, 0, Color3.fromRGB(25, 25, 35), Enum.Material.SmoothPlastic))
+	texte(Enum.NormalId.Right, "OBBY RENNES · PARTIEL MAINTENU", accents.coloc).Parent = titre
 	tableauClassement(coloc, -4, 1, -14, Enum.NormalId.Back)
 
 	---------------------------------------------------------------------------------------------------------------
 	-- 1-2 · Fac bloquée
-	local fac = dossier("1_FacBloquee")
+	local fac = dossier("1_FacBloquee", accents.fac)
 	dalle(fac, "Table", 6, 4, 14, 2, 3, couleurs.bois, Enum.Material.Wood)
 	dalle(fac, "Table", 6, 4, 23, 3, -3, couleurs.bois, Enum.Material.Wood)
 	dalle(fac, "Table", 6, 4, 32, 4, 3, couleurs.bois, Enum.Material.Wood)
@@ -331,7 +581,7 @@ return function(R)
 
 	---------------------------------------------------------------------------------------------------------------
 	-- 3-4 · Métro en grève
-	local metro = dossier("2_MetroEnGreve")
+	local metro = dossier("2_MetroEnGreve", accents.metro)
 	local function rame(nom, longueur, x, avecVitres)
 		local r = bloc(metro, nom, longueur, 7, 6, x, 13, 0, couleurs.metro, Enum.Material.Metal)
 		if avecVitres then
@@ -356,7 +606,7 @@ return function(R)
 
 	---------------------------------------------------------------------------------------------------------------
 	-- 5-6 · Cortège place de la République
-	local cortege = dossier("3_Cortege")
+	local cortege = dossier("3_Cortege", accents.cortege)
 	local function banderole(x, dessus, slogan, deplacement, duree)
 		local b = dalle(cortege, "Banderole", 4, 12, x, dessus, 0, couleurs.banderole, Enum.Material.Fabric)
 		texte(Enum.NormalId.Top, slogan, Color3.fromRGB(190, 30, 30), couleurs.banderole).Parent = b
@@ -389,7 +639,7 @@ return function(R)
 
 	---------------------------------------------------------------------------------------------------------------
 	-- 7-8 · Barricades de poubelles
-	local poubelles = dossier("4_Barricades")
+	local poubelles = dossier("4_Barricades", accents.poubelles)
 	local jus = mortel(dalle(poubelles, "JusDePoubelle", 34, 20, 330, 6, 0, couleurs.jus, Enum.Material.Mud))
 	jus.CanQuery = false
 	pilier(poubelles, "Bac", 4, 4, 311, 10, 0, couleurs.bac)
@@ -408,7 +658,7 @@ return function(R)
 
 	---------------------------------------------------------------------------------------------------------------
 	-- 9-10 · Rue de la Soif (rue Saint-Michel)
-	local soif = dossier("5_RueDeLaSoif")
+	local soif = dossier("5_RueDeLaSoif", accents.soif)
 	maison(soif, "Maison", 412, 0, 8, 20)
 	maison(soif, "Maison", 424, 0, 8, 22)
 	pilier(soif, "Cheminee", 2, 2, 433, 24, 0, Color3.fromRGB(150, 70, 50), Enum.Material.Brick)
@@ -422,12 +672,12 @@ return function(R)
 	enseigne.CanQuery = false
 	checkpoint(soif, 10, 507, 22, 0, "Le dernier bar avant le partiel")
 	for i = 0, 5 do
-		maison(soif, "MaisonDecor", 412 + i * 18, 24, 12, 14 + (i % 3) * 4)
+		maison(soif, "MaisonDecor", 412 + i * 18, 24, 12, 14 + (i % 3) * 4, true)
 	end
 
 	---------------------------------------------------------------------------------------------------------------
 	-- 11-12 · La Vilaine
-	local vilaine = dossier("6_LaVilaine")
+	local vilaine = dossier("6_LaVilaine", accents.vilaine)
 	local eau = mortel(dalle(vilaine, "LaVilaine", 106, 70, 569, 14, 0, couleurs.eau, Enum.Material.Glass))
 	eau.Transparency = 0.25
 	eau.CanQuery = false
@@ -449,7 +699,7 @@ return function(R)
 
 	---------------------------------------------------------------------------------------------------------------
 	-- 13 · Parlement de Bretagne
-	local parlement = dossier("7_Parlement")
+	local parlement = dossier("7_Parlement", accents.parlement)
 	pilier(parlement, "Colonne", 4, 4, 626, 20, 0, couleurs.pierre, Enum.Material.Marble)
 	pilier(parlement, "Colonne", 3, 3, 633, 22, 0, couleurs.pierre, Enum.Material.Marble)
 	pilier(parlement, "Colonne", 3, 3, 640, 24, 0, couleurs.pierre, Enum.Material.Marble)
@@ -460,10 +710,12 @@ return function(R)
 	texte(Enum.NormalId.Front, "PARLEMENT DE BRETAGNE", Color3.fromRGB(150, 120, 40), couleurs.pierre).Parent =
 		facadeParlement
 	decor(bloc(parlement, "Toit", 70, 8, 16, 650, 38, 40, Color3.fromRGB(50, 60, 80), Enum.Material.Slate))
+	drapeauBreton(parlement, 625, 38, 36)
+	drapeauBreton(parlement, 675, 38, 36)
 
 	---------------------------------------------------------------------------------------------------------------
 	-- 14 · Le Thabor
-	local thabor = dossier("8_Thabor")
+	local thabor = dossier("8_Thabor", accents.thabor)
 	local pelouse = mortel(dalle(thabor, "PelouseInterdite", 60, 40, 705, 20, 0, couleurs.pelouse, Enum.Material.Grass))
 	pelouse.CanQuery = false
 	bloc(thabor, "Haie", 4, 3, 8, 680, 25, 0, couleurs.haie, Enum.Material.Grass)
@@ -473,10 +725,14 @@ return function(R)
 	bloc(thabor, "Haie", 4, 3, 8, 712, 24, 0, couleurs.haie, Enum.Material.Grass)
 	checkpoint(thabor, 14, 726, 24, 0, "Le Thabor")
 	panneau(thabor, "PELOUSE INTERDITE\n(vraiment)", 678, 20, 12, 8)
+	for i = 0, 6 do
+		arbre(thabor, 678 + i * 9, 26 + (i % 2) * 4, 1.4)
+		arbre(thabor, 682 + i * 9, -26 - (i % 2) * 4, 1.3)
+	end
 
 	---------------------------------------------------------------------------------------------------------------
 	-- 15 · Sup de Vinci, salle de partiel
-	local vinci = dossier("9_SupDeVinci")
+	local vinci = dossier("9_SupDeVinci", accents.vinci)
 	dalle(vinci, "Marche", 4, 10, 737, 26, 0, couleurs.pierre, Enum.Material.Concrete)
 	dalle(vinci, "Marche", 4, 10, 743, 28, 0, couleurs.pierre, Enum.Material.Concrete)
 	dalle(vinci, "Marche", 4, 10, 749, 30, 0, couleurs.pierre, Enum.Material.Concrete)
@@ -491,6 +747,42 @@ return function(R)
 		end
 	end
 	tableauClassement(vinci, 762, 30, -14, Enum.NormalId.Back)
+	drapeauBreton(vinci, 772, 52, -16)
+	local canon = decor(bloc(vinci, "Confettis", 14, 0.2, 14, 762, 45, 0, couleurs.or_))
+	canon.Transparency = 1
+	canon.CanCollide = false
+	local confettis = Instance.new("ParticleEmitter")
+	confettis.Rate = 25
+	confettis.Lifetime = NumberRange.new(3, 5)
+	confettis.Speed = NumberRange.new(2, 5)
+	confettis.SpreadAngle = Vector2.new(30, 30)
+	confettis.Acceleration = Vector3.new(0, -4, 0)
+	confettis.Rotation = NumberRange.new(0, 360)
+	confettis.RotSpeed = NumberRange.new(-180, 180)
+	confettis.Size = NumberSequence.new(0.35)
+	confettis.EmissionDirection = Enum.NormalId.Bottom
+	confettis.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, accents.vinci),
+		ColorSequenceKeypoint.new(0.5, couleurs.or_),
+		ColorSequenceKeypoint.new(1, accents.soif),
+	})
+	confettis.Parent = canon
+
+	---------------------------------------------------------------------------------------------------------------
+	-- Lisibilité du chemin : contour de la couleur de la zone sur chaque pièce où l'on pose les pieds,
+	-- contour rouge épais sur tout ce qui tue. Le décor (CanQuery = false) n'en a pas.
+	for zone, accent in accentDe do
+		for _, p in zone:GetDescendants() do
+			if not p:IsA("BasePart") or p.Transparency >= 1 then
+				continue
+			end
+			if p:HasTag("Mortel") then
+				contour(p, couleurs.danger, 0.2)
+			elseif not p:HasTag("Checkpoint") and p.CanCollide and p.CanQuery then
+				contour(p, accent)
+			end
+		end
+	end
 
 	return parcours
 end

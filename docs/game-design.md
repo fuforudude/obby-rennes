@@ -27,6 +27,15 @@ Ton : **satire du quotidien étudiant**, sans prendre parti. Pas de police, pas 
 | 14 | Le Thabor | Haies au-dessus de la pelouse interdite (mortelle) |
 | 15 | Sup de Vinci | Arrivée en salle de partiel |
 
+## Direction artistique
+Reprise des règles de genre des obbys qui marchent, adaptées à Rennes (sans copier un jeu précis) :
+- **Le chemin se lit d'un coup d'œil** : tout ce qui se marche est saturé et cerné de la couleur de sa zone ; le décor de fond est en teintes douces.
+- **Une couleur par zone** (arche du checkpoint, contours) : on sait où on est et on voit qu'on avance.
+- **Ce qui tue est toujours cerné de rouge vif** (jus de poubelle, Vilaine, pelouse interdite).
+- **Checkpoints très visibles** : dalle lumineuse, grand numéro, arche néon avec le nom de la zone.
+- **Rennes en fond** : rues, arbres, lampadaires, immeubles avec fenêtres, tours Les Horizons, cathédrale Saint-Pierre, drapeaux bretons, palais du Commerce, Parlement.
+- **Éclairage doux d'après-midi** : ombres claires, couleurs légèrement relevées, halo discret sur le néon, brume qui détache le fond (`Lighting` dans `default.project.json`). Confettis à l'arrivée.
+
 ## Règles
 - Un checkpoint ne compte que s'il est **le suivant** : on ne saute pas d'étapes en coupant.
 - Le checkpoint atteint est **sauvegardé** : en revenant, on reprend là où on était.

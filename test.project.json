@@ -3,21 +3,103 @@
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": {
-      "Partage": { "$path": "src/partage" },
-      "DevPackages": { "$path": "DevPackages" }
+      "Partage": {
+        "$path": "src/partage"
+      },
+      "DevPackages": {
+        "$path": "DevPackages"
+      }
     },
     "ServerScriptService": {
-      "Serveur": { "$path": "src/serveur" },
-      "ServerPackages": { "$path": "ServerPackages" },
-      "Tests": { "$path": "tests" }
+      "Serveur": {
+        "$path": "src/serveur"
+      },
+      "ServerPackages": {
+        "$path": "ServerPackages"
+      },
+      "Tests": {
+        "$path": "tests"
+      }
     },
     "StarterPlayer": {
       "StarterPlayerScripts": {
-        "Client": { "$path": "src/client" }
+        "Client": {
+          "$path": "src/client"
+        }
       }
     },
     "Workspace": {
-      "Monde": { "$path": "monde" }
+      "Monde": {
+        "$path": "monde"
+      }
+    },
+    "Lighting": {
+      "$properties": {
+        "Technology": "ShadowMap",
+        "ClockTime": 14.5,
+        "GeographicLatitude": 48,
+        "Brightness": 2.5,
+        "Ambient": [
+          0.45,
+          0.45,
+          0.5
+        ],
+        "OutdoorAmbient": [
+          0.55,
+          0.55,
+          0.62
+        ],
+        "EnvironmentDiffuseScale": 0.6,
+        "EnvironmentSpecularScale": 0.4,
+        "ShadowSoftness": 0.25
+      },
+      "Atmosphere": {
+        "$className": "Atmosphere",
+        "$properties": {
+          "Density": 0.28,
+          "Offset": 0.2,
+          "Color": [
+            0.78,
+            0.85,
+            0.95
+          ],
+          "Decay": [
+            0.55,
+            0.65,
+            0.8
+          ],
+          "Glare": 0.15,
+          "Haze": 0.8
+        }
+      },
+      "Couleurs": {
+        "$className": "ColorCorrectionEffect",
+        "$properties": {
+          "Brightness": 0.02,
+          "Contrast": 0.08,
+          "Saturation": 0.18,
+          "TintColor": [
+            1,
+            0.98,
+            0.96
+          ]
+        }
+      },
+      "Halo": {
+        "$className": "BloomEffect",
+        "$properties": {
+          "Intensity": 0.35,
+          "Size": 20,
+          "Threshold": 1.4
+        }
+      },
+      "RayonsDeSoleil": {
+        "$className": "SunRaysEffect",
+        "$properties": {
+          "Intensity": 0.06,
+          "Spread": 0.6
+        }
+      }
     }
   }
 }
