@@ -2,8 +2,8 @@
 -- Tous les RemoteEvent du jeu, créés par le serveur et retrouvés par le client. Aucun n'est créé ailleurs.
 --
 -- Serveur → client
---   EtatCourse(etat: EtatCourse)      à chaque changement : étape, chrono, passages, record
---   Arrivee(temps: number, classable: boolean, record: boolean)
+--   EtatCourse(etat: EtatCourse)      à chaque changement : étape, chrono, passages, record, aura, série
+--   Arrivee(temps: number, classable: boolean, record: boolean, gainAura: number)
 -- Client → serveur
 --   DemanderRecommencer()             repartir de la coloc, chrono à zéro
 -- (« Passer l'étape » passe par MarketplaceService : le client affiche l'achat, le serveur le traite.)
@@ -16,6 +16,8 @@ export type EtatCourse = {
 	passages: number,
 	reprise: boolean,
 	meilleurTemps: number,
+	aura: number,
+	serie: number,
 }
 
 local NOMS = { "EtatCourse", "Arrivee", "DemanderRecommencer" }

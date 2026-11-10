@@ -12,6 +12,7 @@ return function()
 			expect(etape.numero).to.equal(numero)
 			expect(#etape.zone > 0).to.equal(true)
 			expect(#etape.anecdote > 0).to.equal(true)
+			expect(#etape.blague > 0).to.equal(true)
 		end
 	end)
 

@@ -1,5 +1,6 @@
 --!strict
--- Le parcours : checkpoints, réapparition au dernier checkpoint, chrono, arrivée, « Recommencer », « Passer l'étape ».
+-- Le parcours : checkpoints, réapparition au dernier checkpoint, chrono, aura (série sans chute), arrivée,
+-- « Recommencer », « Passer l'étape ».
 -- Le serveur décide de tout : le client n'envoie que « je veux recommencer ».
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
@@ -35,7 +36,32 @@ local function envoyerEtat(joueur: Player)
 		passages = course.passages,
 		reprise = course.reprise,
 		meilleurTemps = donnees.meilleurTemps,
+		aura = donnees.aura,
+		serie = course.serie,
 	})
+end
+
+--- Aura du joueur changée : liste des joueurs (leaderstats) et classement mondial (envoyé par lots).
+local function majAura(joueur: Player, donnees: Regles.Donnees)
+	local stats = joueur:FindFirstChild("leaderstats")
+	local valeur = stats and stats:FindFirstChild("Aura")
+	if valeur and valeur:IsA("IntValue") then
+		valeur.Value = donnees.aura
+	end
+	Classement.signalerAura(joueur, donnees.aura)
+end
+
+local function creerLeaderstats(joueur: Player, donnees: Regles.Donnees)
+	if joueur:FindFirstChild("leaderstats") then
+		return
+	end
+	local stats = Instance.new("Folder")
+	stats.Name = "leaderstats" -- nom imposé par Roblox : affiché dans la liste des joueurs
+	local aura = Instance.new("IntValue")
+	aura.Name = "Aura"
+	aura.Value = donnees.aura
+	aura.Parent = stats
+	stats.Parent = joueur
 end
 
 --- Pose le personnage sur son dernier checkpoint, tourné vers la suite du parcours (+X).
@@ -67,7 +93,10 @@ local function terminer(joueur: Player)
 		donnees.meilleurTemps = duree
 		Classement.soumettre(joueur, duree)
 	end
-	arrivee:FireClient(joueur, duree, classable, record)
+	local gain = Regles.gainArrivee(course, Reglages)
+	donnees.aura += gain
+	majAura(joueur, donnees)
+	arrivee:FireClient(joueur, duree, classable, record, gain)
 end
 
 local function joueurDepuis(touche: BasePart): Player?
@@ -90,9 +119,29 @@ local function surCheckpoint(numero: number, touche: BasePart)
 		return
 	end
 	donnees.etape = numero
+	local course = courses[joueur]
+	if course then
+		course.serie += 1
+		donnees.aura += Regles.gainCheckpoint(course.serie, Reglages)
+		majAura(joueur, donnees)
+	end
 	if numero == Reglages.NB_ETAPES then
 		terminer(joueur)
 	end
+	envoyerEtat(joueur)
+end
+
+--- Le personnage est mort (vide, jus de poubelle, Vilaine, pelouse…) : la série repart de zéro et l'aura baisse.
+local function surChute(joueur: Player)
+	local donnees = Donnees.obtenir(joueur)
+	local course = courses[joueur]
+	if not donnees or not course or donnees.etape >= Reglages.NB_ETAPES then
+		return
+	end
+	course.serie = 0
+	course.chutes += 1
+	donnees.aura = Regles.auraApresChute(donnees.aura, Reglages)
+	majAura(joueur, donnees)
 	envoyerEtat(joueur)
 end
 
@@ -107,6 +156,8 @@ local function surChargement(joueur: Player, donnees: Regles.Donnees)
 		end
 	end
 	courses[joueur] = course
+	creerLeaderstats(joueur, donnees)
+	Classement.signalerAura(joueur, donnees.aura)
 	placer(joueur)
 	envoyerEtat(joueur)
 end
@@ -135,6 +186,7 @@ function Parcours.passerEtape(joueur: Player): boolean
 	end
 	donnees.etape += 1
 	course.passages += 1
+	course.serie = 0 -- une étape achetée ne rapporte pas d'aura et casse la série
 	placer(joueur)
 	if donnees.etape == Reglages.NB_ETAPES then
 		terminer(joueur)
@@ -164,8 +216,15 @@ function Parcours.demarrer()
 	Donnees.surChargement(surChargement)
 
 	local function suivre(joueur: Player)
-		joueur.CharacterAdded:Connect(function()
+		joueur.CharacterAdded:Connect(function(personnage)
 			task.defer(placer, joueur)
+			local humanoide = personnage:WaitForChild("Humanoid", 10)
+			if humanoide and humanoide:IsA("Humanoid") then
+				-- Connexion détruite avec le personnage : pas de fuite.
+				humanoide.Died:Connect(function()
+					surChute(joueur)
+				end)
+			end
 		end)
 	end
 	Players.PlayerAdded:Connect(suivre)
@@ -173,6 +232,7 @@ function Parcours.demarrer()
 		suivre(joueur)
 	end
 	Players.PlayerRemoving:Connect(function(joueur)
+		Classement.envoyerAura(joueur) -- dernière aura connue, sans attendre le prochain lot
 		courses[joueur] = nil
 		derniereDemande[joueur] = nil
 	end)

@@ -78,6 +78,54 @@ return function()
 		end)
 	end)
 
+	describe("aura : plus on va loin sans tomber, plus on en gagne", function()
+		local bareme = {
+			AURA_BASE = 100,
+			AURA_SERIE_MAX = 10,
+			AURA_PERTE_CHUTE = 50,
+			AURA_ARRIVEE = 1000,
+			AURA_SANS_CHUTE = 5000,
+		}
+		it("le premier checkpoint d'une série rapporte la base", function()
+			expect(Regles.gainCheckpoint(1, bareme)).to.equal(100)
+		end)
+		it("chaque checkpoint enchaîné sans tomber rapporte plus que le précédent", function()
+			expect(Regles.gainCheckpoint(3, bareme)).to.equal(300)
+			expect(Regles.gainCheckpoint(4, bareme) > Regles.gainCheckpoint(3, bareme)).to.equal(true)
+		end)
+		it("le multiplicateur est plafonné", function()
+			expect(Regles.gainCheckpoint(14, bareme)).to.equal(1000)
+		end)
+		it("une chute coûte un peu d'aura, jamais sous zéro", function()
+			expect(Regles.auraApresChute(500, bareme)).to.equal(450)
+			expect(Regles.auraApresChute(20, bareme)).to.equal(0)
+		end)
+		it("un parcours entier sans tomber rapporte le gros bonus", function()
+			expect(Regles.gainArrivee(Regles.nouvelleCourse(0), bareme)).to.equal(6000)
+		end)
+		it("pas de gros bonus après une chute, un passage payant ou une reprise", function()
+			local tombee = Regles.nouvelleCourse(0)
+			tombee.chutes = 1
+			local payee = Regles.nouvelleCourse(0)
+			payee.passages = 1
+			expect(Regles.gainArrivee(tombee, bareme)).to.equal(1000)
+			expect(Regles.gainArrivee(payee, bareme)).to.equal(1000)
+			expect(Regles.gainArrivee(Regles.courseReprise(0), bareme)).to.equal(1000)
+		end)
+		it("affiche l'aura avec des espaces entre les milliers", function()
+			expect(Regles.formaterAura(0)).to.equal("0")
+			expect(Regles.formaterAura(950)).to.equal("950")
+			expect(Regles.formaterAura(12345)).to.equal("12 345")
+			expect(Regles.formaterAura(123456)).to.equal("123 456")
+		end)
+		it("garde l'aura sauvegardée et écarte une valeur abîmée", function()
+			expect(Regles.migrer({ aura = 4200 }, 15).aura).to.equal(4200)
+			expect(Regles.migrer({ aura = -3 }, 15).aura).to.equal(0)
+			expect(Regles.migrer({ aura = 0 / 0 }, 15).aura).to.equal(0)
+			expect(Regles.migrer({}, 15).aura).to.equal(0)
+		end)
+	end)
+
 	describe("un achat n'est jamais donné deux fois", function()
 		it("reconnaît un achat déjà traité", function()
 			local achats = {}

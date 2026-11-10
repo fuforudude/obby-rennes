@@ -298,9 +298,9 @@ return function(R)
 		)
 	end
 
-	local function tableauClassement(parent, x, dessus, z, face)
+	local function tableauClassement(parent, x, dessus, z, face, tag, intitule, couleurTitre)
 		local p = decor(bloc(parent, "TableauClassement", 14, 10, 1, x, dessus + 11, z, Color3.fromRGB(20, 20, 30)))
-		etiqueter(p, "TableauClassement")
+		etiqueter(p, tag or "TableauClassement")
 		local gui = Instance.new("SurfaceGui")
 		gui.Face = face
 		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
@@ -309,11 +309,11 @@ return function(R)
 		local titre = Instance.new("TextLabel")
 		titre.Name = "Titre"
 		titre.Size = UDim2.fromScale(1, 0.18)
-		titre.BackgroundColor3 = couleurs.vinci
+		titre.BackgroundColor3 = couleurTitre or couleurs.vinci
 		titre.TextColor3 = Color3.fromRGB(255, 255, 255)
 		titre.TextScaled = true
 		titre.Font = Enum.Font.GothamBlack
-		titre.Text = "Meilleurs temps"
+		titre.Text = intitule or "Meilleurs temps"
 		titre.Parent = gui
 		local liste = Instance.new("TextLabel")
 		liste.Name = "Liste"
@@ -423,7 +423,7 @@ return function(R)
 	---------------------------------------------------------------------------------------------------------------
 	-- La ville : sol, zone mortelle sous le parcours, immeubles.
 	local ville = dossier("Ville")
-	decor(bloc(ville, "Sol", 900, 2, 300, 380, SOL, 0, Color3.fromRGB(110, 175, 85), Enum.Material.Grass))
+	decor(bloc(ville, "Sol", 1000, 2, 300, 330, SOL, 0, Color3.fromRGB(110, 175, 85), Enum.Material.Grass))
 	decor(bloc(ville, "Rue", 900, 0.2, 40, 380, SOL + 0.1, 0, Color3.fromRGB(60, 62, 70), Enum.Material.Asphalt))
 	for _, cote in { -1, 1 } do
 		decor(
@@ -551,6 +551,7 @@ return function(R)
 		decor(bloc(coloc, "Titre", 1, 7, 30, -23, 21, 0, Color3.fromRGB(25, 25, 35), Enum.Material.SmoothPlastic))
 	texte(Enum.NormalId.Right, "OBBY RENNES · PARTIEL MAINTENU", accents.coloc).Parent = titre
 	tableauClassement(coloc, -4, 1, -14, Enum.NormalId.Back)
+	tableauClassement(coloc, -4, 1, 14, Enum.NormalId.Front, "TableauAura", "Plus grosse aura", accents.soif)
 
 	---------------------------------------------------------------------------------------------------------------
 	-- 1-2 · Fac bloquée
@@ -747,6 +748,7 @@ return function(R)
 		end
 	end
 	tableauClassement(vinci, 762, 30, -14, Enum.NormalId.Back)
+	tableauClassement(vinci, 762, 30, 14, Enum.NormalId.Front, "TableauAura", "Plus grosse aura", accents.soif)
 	drapeauBreton(vinci, 772, 52, -16)
 	local canon = decor(bloc(vinci, "Confettis", 14, 0.2, 14, 762, 45, 0, couleurs.or_))
 	canon.Transparency = 1
@@ -767,6 +769,308 @@ return function(R)
 		ColorSequenceKeypoint.new(1, accents.soif),
 	})
 	confettis.Parent = canon
+
+	---------------------------------------------------------------------------------------------------------------
+	-- Références : bâtiments de Rennes, culture étudiante, sarcasme sur la situation, mascottes brain rot maison.
+	-- Tout est décor, hors du chemin (Z au-delà de ±16), et ne prend aucun contour.
+	local refs = dossier("References")
+
+	local function boule(parent, nom, taille, x, y, z, couleur, materiau)
+		local b = decor(Instance.new("Part"))
+		b.Name = nom
+		b.Shape = Enum.PartType.Ball
+		b.Anchored = true
+		b.Size = Vector3.new(taille, taille, taille)
+		b.CFrame = CFrame.new(x, y, z)
+		b.Color = couleur
+		b.Material = materiau or Enum.Material.SmoothPlastic
+		b.Parent = parent
+		return b
+	end
+
+	local function cylindre(parent, nom, longueur, diametre, cf, couleur, materiau)
+		local c = decor(Instance.new("Part"))
+		c.Name = nom
+		c.Shape = Enum.PartType.Cylinder
+		c.Anchored = true
+		c.Size = Vector3.new(longueur, diametre, diametre)
+		c.CFrame = cf
+		c.Color = couleur
+		c.Material = materiau or Enum.Material.SmoothPlastic
+		c.Parent = parent
+		return c
+	end
+	local DEBOUT = CFrame.Angles(0, 0, math.rad(90)) -- un cylindre Roblox est couché sur X : on le redresse
+
+	-- Nom flottant au-dessus d'un objet, visible de loin.
+	local function etiquette(part, contenu: string, couleur, hauteur)
+		local gui = Instance.new("BillboardGui")
+		gui.Size = UDim2.fromOffset(320, 60)
+		gui.StudsOffset = Vector3.new(0, hauteur or 4, 0)
+		gui.MaxDistance = 250
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.fromScale(1, 1)
+		label.BackgroundTransparency = 1
+		label.TextColor3 = couleur or Color3.fromRGB(255, 255, 255)
+		label.TextStrokeTransparency = 0
+		label.TextScaled = true
+		label.Font = Enum.Font.GothamBlack
+		label.Text = contenu
+		label.Parent = gui
+		gui.Parent = part
+	end
+
+	-- Affiche publicitaire sur pied, au bord du chemin, tournée vers le parcours.
+	local function affiche(contenu: string, x, haut, cote, fond, encre)
+		local z = cote * 17
+		decor(
+			bloc(
+				refs,
+				"PiedAffiche",
+				0.6,
+				haut - SOL - 3,
+				0.6,
+				x,
+				haut - 3,
+				z,
+				Color3.fromRGB(50, 55, 65),
+				Enum.Material.Metal
+			)
+		)
+		local plaque = decor(bloc(refs, "Affiche", 12, 6, 0.4, x, haut + 3, z, fond, Enum.Material.SmoothPlastic))
+		texte(if cote < 0 then Enum.NormalId.Back else Enum.NormalId.Front, contenu, encre, fond).Parent = plaque
+		decor(
+			bloc(
+				refs,
+				"CadreAffiche",
+				12.6,
+				0.4,
+				0.6,
+				x,
+				haut + 3.2,
+				z,
+				Color3.fromRGB(30, 30, 35),
+				Enum.Material.Metal
+			)
+		)
+	end
+
+	-- Les affiches, du départ à l'arrivée : sarcasme étudiant et brain rot.
+	local noir, blanc = Color3.fromRGB(20, 20, 25), Color3.fromRGB(255, 255, 255)
+	affiche(
+		"STUDIO 9 m² · 690 €/mois\ncharges non comprises · vue sur poubelle",
+		20,
+		10,
+		1,
+		Color3.fromRGB(255, 240, 200),
+		noir
+	)
+	affiche("MOODLE EST EN MAINTENANCE\n(depuis ta naissance)", 60, 18, -1, Color3.fromRGB(250, 120, 40), blanc)
+	affiche("WIFI EDUROAM\nstatut : déconnecté", 110, 20, 1, Color3.fromRGB(40, 60, 140), blanc)
+	affiche("PROCHAINE RAME : 404\nNOT FOUND", 150, 20, -1, Color3.fromRGB(235, 50, 60), blanc)
+	affiche("+1000 AURA\nsi tu passes sans tomber", 215, 15, 1, Color3.fromRGB(255, 120, 220), noir)
+	affiche(
+		"PARCOURSUP\nrang 4 867 · en attente",
+		290,
+		16,
+		-1,
+		Color3.fromRGB(255, 255, 255),
+		Color3.fromRGB(30, 80, 170)
+	)
+	affiche("RU : PLUS DE FRITES\nil reste du chou-fleur", 340, 20, 1, Color3.fromRGB(120, 200, 60), noir)
+	affiche(
+		"TRANSMUSICALES\ncomplet · comme ton agenda",
+		420,
+		28,
+		-1,
+		Color3.fromRGB(20, 20, 30),
+		Color3.fromRGB(255, 70, 180)
+	)
+	affiche("SKIBIDI PARTIEL\n8 h · amphi B · pas de rattrapage", 490, 28, 1, Color3.fromRGB(255, 220, 40), noir)
+	affiche("IL NE PLEUT PAS À RENNES\nil bruine.", 545, 22, -1, Color3.fromRGB(120, 140, 160), blanc)
+	affiche("BAIGNADE INTERDITE\n(sauf si tu rates le saut)", 590, 22, 1, Color3.fromRGB(40, 150, 230), blanc)
+	affiche("KOUIGN-AMANN\n0 % de beurre doux, 100 % de bonheur", 640, 32, -1, Color3.fromRGB(230, 170, 70), noir)
+	affiche("POV : t'as révisé\nla veille à 3 h", 705, 30, 1, Color3.fromRGB(150, 90, 255), blanc)
+	affiche(
+		"BUDGET DE L'ÉCOLE\nimprimante : toujours en panne",
+		750,
+		36,
+		-1,
+		Color3.fromRGB(240, 240, 240),
+		Color3.fromRGB(200, 40, 40)
+	)
+
+	-- Galettino Saucissino : mascotte brain rot maison, une galette-saucisse géante à lunettes, près du cortège.
+	do
+		local x, z = 285, -38
+		cylindre(refs, "Jambe", 8, 2.2, CFrame.new(x - 3, SOL + 4, z) * DEBOUT, Color3.fromRGB(170, 70, 50))
+		cylindre(refs, "Jambe", 8, 2.2, CFrame.new(x + 3, SOL + 4, z) * DEBOUT, Color3.fromRGB(170, 70, 50))
+		decor(bloc(refs, "Galette", 16, 22, 2, x, SOL + 30, z - 2, Color3.fromRGB(205, 150, 75), Enum.Material.Sand))
+		cylindre(refs, "Saucisse", 22, 7, CFrame.new(x, SOL + 19, z + 1) * DEBOUT, Color3.fromRGB(185, 75, 55))
+		local tete = boule(refs, "Tete", 7, x, SOL + 30, z + 1, Color3.fromRGB(185, 75, 55))
+		decor(
+			bloc(refs, "Lunettes", 7.5, 1.6, 0.6, x, SOL + 32, z + 4.6, Color3.fromRGB(15, 15, 20), Enum.Material.Glass)
+		)
+		decor(bloc(refs, "Sourire", 3, 0.5, 0.4, x, SOL + 28.6, z + 4.4, Color3.fromRGB(40, 15, 10)))
+		etiquette(tete, "GALETTINO SAUCISSINO", Color3.fromRGB(255, 210, 60), 7)
+		affiche("GALETTE-SAUCISSE · 5 €\n(3 € avant l'inflation)", 300, 14, -1, Color3.fromRGB(205, 150, 75), noir)
+	end
+
+	-- Kouign Amannini : deuxième mascotte maison, un kouign-amann à couronne qui surveille la Vilaine.
+	do
+		local x, z = 600, -44
+		local corps = decor(Instance.new("Part"))
+		corps.Name = "KouignAmann"
+		corps.Shape = Enum.PartType.Ball
+		corps.Anchored = true
+		corps.Size = Vector3.new(16, 10, 16)
+		corps.CFrame = CFrame.new(x, SOL + 5, z)
+		corps.Color = Color3.fromRGB(215, 140, 55)
+		corps.Material = Enum.Material.Sand
+		corps.Parent = refs
+		for _, dx in { -3, 3 } do
+			boule(refs, "Oeil", 3, x + dx, SOL + 8, z + 6.5, Color3.fromRGB(255, 255, 255))
+			boule(refs, "Pupille", 1.4, x + dx, SOL + 8, z + 7.8, Color3.fromRGB(15, 15, 20))
+		end
+		for i = 0, 4 do
+			local angle = math.rad(i * 72)
+			decor(
+				bloc(
+					refs,
+					"Couronne",
+					1,
+					3,
+					1,
+					x + math.cos(angle) * 3,
+					SOL + 12.5,
+					z + math.sin(angle) * 3,
+					couleurs.or_,
+					Enum.Material.Neon
+				)
+			)
+		end
+		etiquette(corps, "KOUIGN AMANNINI", Color3.fromRGB(255, 200, 80), 9)
+	end
+
+	-- Hôtel de ville et son horloge : il est toujours l'heure du partiel.
+	do
+		local x, z = 330, -48
+		immeuble(refs, x, z, 44, 14, 24, Color3.fromRGB(235, 220, 185), true)
+		immeuble(refs, x, z, 10, 10, 44, Color3.fromRGB(225, 210, 175), true)
+		decor(bloc(refs, "Dome", 6, 6, 6, x, SOL + 50, z, Color3.fromRGB(80, 95, 120), Enum.Material.Slate))
+		local horloge = decor(bloc(refs, "Horloge", 6, 6, 0.4, x, SOL + 38, z + 5.2, Color3.fromRGB(255, 250, 235)))
+		texte(Enum.NormalId.Back, "8:00", Color3.fromRGB(30, 30, 40), Color3.fromRGB(255, 250, 235)).Parent = horloge
+		local fronton = decor(bloc(refs, "Fronton", 30, 3, 0.4, x, SOL + 20, z + 7.2, Color3.fromRGB(235, 220, 185)))
+		texte(Enum.NormalId.Back, "HÔTEL DE VILLE", Color3.fromRGB(90, 70, 40), Color3.fromRGB(235, 220, 185)).Parent =
+			fronton
+	end
+
+	-- Portes Mordelaises : deux tours rondes et une porte, l'ancienne entrée de la ville.
+	do
+		local x, z = 430, -46
+		for _, dx in { -9, 9 } do
+			cylindre(
+				refs,
+				"TourMordelaise",
+				26,
+				10,
+				CFrame.new(x + dx, SOL + 13, z) * DEBOUT,
+				Color3.fromRGB(150, 140, 125),
+				Enum.Material.Cobblestone
+			)
+			decor(
+				bloc(
+					refs,
+					"Creneau",
+					11,
+					2,
+					11,
+					x + dx,
+					SOL + 28,
+					z,
+					Color3.fromRGB(130, 120, 105),
+					Enum.Material.Cobblestone
+				)
+			)
+		end
+		local porte = decor(
+			bloc(refs, "Porte", 8, 18, 8, x, SOL + 18, z, Color3.fromRGB(160, 150, 135), Enum.Material.Cobblestone)
+		)
+		texte(Enum.NormalId.Back, "PORTES MORDELAISES", Color3.fromRGB(255, 255, 255), Color3.fromRGB(110, 100, 90)).Parent =
+			porte
+	end
+
+	-- Les Champs Libres : bâtiment incliné et planétarium en boule de verre, au bord de la Vilaine.
+	do
+		local x, z = 545, -50
+		local corps = decor(
+			bloc(refs, "ChampsLibres", 30, 18, 16, x, SOL + 18, z, Color3.fromRGB(70, 75, 90), Enum.Material.Glass)
+		)
+		corps.CFrame = corps.CFrame * CFrame.Angles(0, 0, math.rad(-8))
+		boule(refs, "Planetarium", 14, x + 18, SOL + 8, z + 2, Color3.fromRGB(150, 200, 240), Enum.Material.Glass)
+		local enseigne = decor(bloc(refs, "Enseigne", 20, 3, 0.4, x, SOL + 22, z + 8.4, Color3.fromRGB(20, 20, 30)))
+		texte(Enum.NormalId.Back, "LES CHAMPS LIBRES", Color3.fromRGB(255, 255, 255)).Parent = enseigne
+	end
+
+	-- Le crachin breton : un nuage qui bruine au-dessus de la Vilaine (sans gêner les sauts).
+	do
+		for i = 0, 4 do
+			boule(refs, "Nuage", 12 + (i % 2) * 4, 555 + i * 9, 58 + (i % 2) * 2, 2, Color3.fromRGB(205, 210, 220))
+		end
+		local source = decor(bloc(refs, "Bruine", 44, 0.2, 18, 573, 54, 2, Color3.fromRGB(200, 200, 210)))
+		source.Transparency = 1
+		source.CanCollide = false
+		local pluie = Instance.new("ParticleEmitter")
+		pluie.Rate = 120
+		pluie.Lifetime = NumberRange.new(1.5, 2)
+		pluie.Speed = NumberRange.new(28, 34)
+		pluie.EmissionDirection = Enum.NormalId.Bottom
+		pluie.Size = NumberSequence.new(0.12)
+		pluie.Transparency = NumberSequence.new(0.4)
+		pluie.Color = ColorSequence.new(Color3.fromRGB(190, 210, 235))
+		pluie.Parent = source
+	end
+
+	-- Un bus STAR en grève, garé dans la rue sous le cortège.
+	do
+		local x, z = 235, -14
+		decor(bloc(refs, "Bus", 24, 8, 7, x, SOL + 9, z, Color3.fromRGB(235, 235, 240), Enum.Material.SmoothPlastic))
+		decor(bloc(refs, "BandeBus", 24.2, 2, 7.2, x, SOL + 4, z, Color3.fromRGB(220, 40, 50)))
+		decor(bloc(refs, "VitresBus", 22, 2.5, 7.1, x, SOL + 7.5, z, Color3.fromRGB(40, 50, 70), Enum.Material.Glass))
+		for _, dx in { -8, 8 } do
+			cylindre(
+				refs,
+				"Roue",
+				1.5,
+				3,
+				CFrame.new(x + dx, SOL + 1.5, z) * CFrame.Angles(0, math.rad(90), 0),
+				Color3.fromRGB(25, 25, 25)
+			)
+		end
+		local girouette =
+			decor(bloc(refs, "Girouette", 0.4, 1.5, 6, x - 12.2, SOL + 8.6, z, Color3.fromRGB(10, 10, 10)))
+		texte(Enum.NormalId.Left, "EN GRÈVE", Color3.fromRGB(255, 170, 30), Color3.fromRGB(10, 10, 10)).Parent =
+			girouette
+	end
+
+	-- Roazhon Park, derrière le départ : tribunes rouges et noires autour d'une pelouse.
+	do
+		local x, z = -110, 0
+		decor(bloc(refs, "Pelouse", 50, 0.4, 34, x, SOL + 0.4, z, Color3.fromRGB(70, 170, 70), Enum.Material.Grass))
+		local tribunes = {
+			{ dx = 0, dz = -23, sx = 60, sz = 10 },
+			{ dx = 0, dz = 23, sx = 60, sz = 10 },
+			{ dx = -31, dz = 0, sx = 10, sz = 36 },
+			{ dx = 31, dz = 0, sx = 10, sz = 36 },
+		}
+		for i, t in tribunes do
+			local couleur = if i % 2 == 0 then Color3.fromRGB(20, 20, 20) else Color3.fromRGB(210, 30, 40)
+			decor(bloc(refs, "Tribune", t.sx, 16, t.sz, x + t.dx, SOL + 16, z + t.dz, couleur, Enum.Material.Concrete))
+		end
+		local nom = decor(bloc(refs, "NomStade", 0.4, 4, 30, x + 36.2, SOL + 13, z, Color3.fromRGB(210, 30, 40)))
+		texte(Enum.NormalId.Right, "ROAZHON PARK", Color3.fromRGB(255, 255, 255), Color3.fromRGB(210, 30, 40)).Parent =
+			nom
+	end
 
 	---------------------------------------------------------------------------------------------------------------
 	-- Lisibilité du chemin : contour de la couleur de la zone sur chaque pièce où l'on pose les pieds,

@@ -13,6 +13,22 @@ Ton : **satire du quotidien étudiant**, sans prendre parti. Pas de police, pas 
 5. À l'arrivée : son temps, son record, et le classement mondial des 10 meilleurs temps.
 6. Il revient pour battre son temps (bouton « Recommencer »).
 
+## L'aura, la mécanique centrale
+- Chaque checkpoint rapporte **100 × la série**, la série étant le nombre de checkpoints enchaînés sans tomber (multiplicateur plafonné à ×10).
+- **Une chute** remet la série à zéro et coûte 50 d'aura (jamais en dessous de 0).
+- **L'arrivée** rapporte 1 000, plus **5 000** pour un parcours entier sans tomber, sans étape payée et sans reprise.
+- Une étape passée en Robux ne rapporte rien et casse la série : **pas d'aura achetée**.
+- L'aura est **cumulée et sauvegardée** : on revient pour en gagner plus. Elle est comptée par le serveur (le client ne fait qu'afficher).
+- **Classement mondial « Plus grosse aura »** (panneaux au départ et à l'arrivée) et colonne **Aura** dans la liste des joueurs.
+- Ordre de grandeur : un parcours parfait vaut 100 × (1+2+…+10) + 100 × 10 × 5 + 6 000 = 16 500 d'aura. Les valeurs sont dans `src/partage/Reglages.luau`.
+
+## Les références
+Tout le parcours est truffé de références, à trois endroits :
+- **Les textes** : à chaque checkpoint, une anecdote vraie sur Rennes et une vanne (brain rot, sarcasme étudiant) ; une vanne à chaque chute (« Skill issue. », « Le jus de poubelle t'a ratio. »…).
+- **La ville** : hôtel de ville et son horloge bloquée sur 8:00, portes Mordelaises, Champs Libres, cathédrale Saint-Pierre, tours Les Horizons, Roazhon Park derrière le départ, bus STAR « EN GRÈVE », nuage de crachin au-dessus de la Vilaine.
+- **Les affiches** au bord du chemin : studio 9 m² à 690 €, Moodle en maintenance, eduroam déconnecté, Parcoursup en attente, RU sans frites, Transmusicales complètes, galette-saucisse à 5 €…
+- **Deux mascottes brain rot maison** (personnages originaux) : **Galettino Saucissino** (galette-saucisse géante à lunettes, près du cortège) et **Kouign Amannini** (kouign-amann couronné, au bord de la Vilaine).
+
 ## Les 15 étapes
 | Étape | Zone | Ce qu'on y fait |
 |---|---|---|
