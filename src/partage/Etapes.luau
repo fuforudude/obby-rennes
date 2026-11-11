@@ -23,20 +23,20 @@ local LISTE: { Etape } = {
 	},
 	{
 		numero = 2,
-		zone = "Fac bloquée",
+		zone = "L'amphi bloqué",
 		anecdote = "Un blocus se vote en assemblée générale. Rennes 2 est bloquée… mais ton partiel à Sup de Vinci, lui, est maintenu.",
 		blague = "AG à 10 h, vote à main levée, trois heures de débat sur l'ordre du jour. Démocratie : +1000 aura.",
 	},
 	{
 		numero = 3,
-		zone = "Métro en grève",
+		zone = "Le viaduc de la ligne b",
 		anecdote = "La ligne a du métro a ouvert en 2002 : Rennes a longtemps été présentée comme la plus petite ville du monde équipée d'un métro.",
 		blague = "Trafic interrompu. Prochaine rame : quand les poules auront un abonnement STAR.",
 	},
 	{
 		numero = 4,
-		zone = "Métro en grève",
-		anecdote = "La ligne b, ouverte en 2022, roule sans conducteur, comme la ligne a, et dessert Cesson-Viasilva et Saint-Jacques-Gaîté.",
+		zone = "La station",
+		anecdote = "La ligne b, ouverte en 2022, roule sans conducteur comme la ligne a ; une partie de son trajet passe sur un viaduc.",
 		blague = "Le métro roule sans conducteur, et il fait grève quand même. Sigma.",
 	},
 	{
@@ -59,9 +59,9 @@ local LISTE: { Etape } = {
 	},
 	{
 		numero = 8,
-		zone = "Barricades de poubelles",
-		anecdote = "Le marché des Lices, le samedi matin, est l'un des plus grands marchés de France. Les poubelles du samedi midi aussi.",
-		blague = "Tu es au sommet des poubelles. Littéralement ton prime.",
+		zone = "La tour",
+		anecdote = "Rennes a ses tours des années 1970 : les deux tours rondes des Horizons font partie des plus hauts immeubles d'habitation de la ville.",
+		blague = "25e étage, ascenseur en panne depuis 2019. Cardio : +1000 aura.",
 	},
 	{
 		numero = 9,
@@ -89,7 +89,7 @@ local LISTE: { Etape } = {
 	},
 	{
 		numero = 13,
-		zone = "Parlement de Bretagne",
+		zone = "Sur le toit du Parlement",
 		anecdote = "Le Parlement de Bretagne a brûlé en 1994 lors d'une manifestation de marins-pêcheurs ; restauré, il a rouvert en 1999.",
 		blague = "Le Parlement s'est relevé de 1994. Toi, relève-toi de ces colonnes.",
 	},
@@ -102,7 +102,7 @@ local LISTE: { Etape } = {
 	{
 		numero = 15,
 		zone = "Sup de Vinci",
-		anecdote = "Sup de Vinci, l'école du numérique. Tu es arrivé à l'heure : le partiel peut commencer.",
+		anecdote = "Sup de Vinci, campus de Rennes : la ligne d'arrivée. Tu es à l'heure, le partiel peut commencer.",
 		blague = "Arrivé à 7 h 59. Le partiel est reporté : c'était dans le mail de 23 h 47. +5000 aura quand même.",
 	},
 }

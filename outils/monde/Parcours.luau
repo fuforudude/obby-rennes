@@ -1,36 +1,40 @@
 -- Construction du parcours « Partiel maintenu » : les 15 étapes et le décor de Rennes.
 --
--- Renvoie une fonction qui reçoit R, les constructeurs Roblox (Instance, Vector3, Color3, CFrame, Enum, UDim2),
--- et rend le modèle construit. Elle tourne sans changement :
+-- Renvoie une fonction qui reçoit R, les constructeurs Roblox (Instance, Vector3, Vector2, Color3, CFrame, Enum,
+-- UDim2, NumberRange, NumberSequence, ColorSequence, ColorSequenceKeypoint), et rend le modèle construit :
 -- - dans Lune, par outils/monde/generer.luau, qui écrit monde/Parcours.rbxm ;
 -- - dans Studio, collée dans un execute_luau du MCP, pour un aperçu immédiat.
 --
--- Le parcours avance le long de l'axe X (le joueur va vers +X), centré sur Z = 0.
--- Repères de saut (personnage Roblox par défaut) : on monte d'au plus 3 studs, on saute au plus 6 studs de vide.
+-- Le tracé : un seul chemin, mais en trois dimensions. On part du balcon d'un immeuble, on descend par les balcons,
+-- on entre dans la fac par une fenêtre et on traverse l'amphi, on saute de rame en rame sur le viaduc, on traverse
+-- le cortège, on grimpe la barricade de poubelles puis on monte en spirale autour d'une tour, on y entre à un étage,
+-- on ressort de l'autre côté et on redescend, on passe de toit en toit rue de la Soif puis dans la rue, au ras de la
+-- Vilaine, on escalade le Parlement et on court sur son toit, on saute de cime en cime au Thabor, et on monte
+-- l'atrium de Sup de Vinci jusqu'à la salle de partiel. On avance globalement vers +X.
+-- Repères de saut (personnage par défaut) : on monte d'au plus 4 studs, on saute au plus 6 studs de vide.
 --
 -- Ce que le jeu attend (contrats avec src/serveur) :
 -- - tag « Checkpoint » + attribut « Numero » (0 à 15) : les checkpoints ; le 0 est la SpawnLocation du départ ;
 -- - tag « Mortel » : tue au toucher ;
 -- - tag « Fragile » : s'efface un instant après qu'on a marché dessus ;
--- - tag « Mobile » + attributs « Deplacement » (Vector3) et « Duree » (s) : va-et-vient (pièce ancrée dans le fichier,
---   le serveur la libère et la fait glisser par contraintes physiques pour que le joueur soit porté) ;
+-- - tag « Mobile » + attributs « Deplacement » (Vector3) et « Duree » (s) : va-et-vient ;
 -- - tag « Tournant » + attribut « Vitesse » (rad/s) : barre qui tourne autour de son centre et pousse les joueurs ;
--- - tag « TableauClassement » : panneau dont le serveur remplit le TextLabel « Liste » de son SurfaceGui.
+-- - tags « TableauClassement » / « TableauAura » : panneaux dont le serveur remplit le TextLabel « Liste ».
 
 return function(R)
 	local Instance, Vector3, Color3, CFrame, Enum, UDim2 = R.Instance, R.Vector3, R.Color3, R.CFrame, R.Enum, R.UDim2
 	local Vector2, NumberRange, NumberSequence, ColorSequence, ColorSequenceKeypoint =
 		R.Vector2, R.NumberRange, R.NumberSequence, R.ColorSequence, R.ColorSequenceKeypoint
 
-	local SOL = -10 -- dessus du sol de la ville (décor)
+	local SOL = -10 -- dessus du sol de la ville (décor) ; la zone mortelle est juste au-dessus, en -4
 
 	-- Direction artistique (règles de genre des obbys qui marchent, adaptées à Rennes) :
 	-- 1. Le chemin se lit d'un coup d'œil : ce qui se marche est saturé et cerné de la couleur de sa zone ;
-	--    le décor de fond est en teintes douces, il ne se confond jamais avec une plateforme.
-	-- 2. Une couleur par zone (arche du checkpoint, contours, drapeaux) : on sait où on est, on voit qu'on avance.
-	-- 3. Ce qui tue est toujours signalé de la même façon : cerné de rouge vif.
-	-- 4. Checkpoints très visibles : dalle lumineuse, grand numéro, arche avec le nom de la zone.
-	-- 5. Des repères de Rennes en fond (tours, cathédrale, drapeaux bretons, arbres) pour l'ambiance, sans surcharge.
+	--    le décor est en teintes douces et ne se confond jamais avec une plateforme.
+	-- 2. Une couleur par zone (arches, contours) : on sait où on est, on voit qu'on avance.
+	-- 3. Ce qui tue est toujours cerné de rouge vif.
+	-- 4. Checkpoints très visibles : dalle lumineuse, grand numéro, arche (ou nom flottant à l'intérieur).
+	-- 5. Des repères de Rennes en fond, et des bâtiments qu'on traverse pour de vrai.
 	local couleurs = {
 		bois = Color3.fromRGB(196, 132, 74),
 		chaise = Color3.fromRGB(64, 120, 235),
@@ -42,7 +46,6 @@ return function(R)
 		camion = Color3.fromRGB(255, 120, 40),
 		bac = Color3.fromRGB(40, 170, 90),
 		bacJaune = Color3.fromRGB(255, 210, 40),
-		carton = Color3.fromRGB(215, 160, 95),
 		jus = Color3.fromRGB(150, 210, 30),
 		facade = Color3.fromRGB(250, 236, 205),
 		colombage = Color3.fromRGB(95, 55, 35),
@@ -58,14 +61,14 @@ return function(R)
 		danger = Color3.fromRGB(255, 40, 40),
 		feuillage = Color3.fromRGB(70, 175, 75),
 		tronc = Color3.fromRGB(110, 75, 50),
+		beton = Color3.fromRGB(205, 205, 210),
 	}
-	-- Couleur de chaque zone, dans l'ordre du parcours.
 	local accents = {
 		coloc = Color3.fromRGB(255, 140, 60),
 		fac = Color3.fromRGB(160, 90, 255),
 		metro = Color3.fromRGB(255, 60, 80),
 		cortege = Color3.fromRGB(255, 200, 30),
-		poubelles = Color3.fromRGB(120, 230, 40),
+		tour = Color3.fromRGB(120, 230, 40),
 		soif = Color3.fromRGB(255, 80, 190),
 		vilaine = Color3.fromRGB(40, 190, 255),
 		parlement = Color3.fromRGB(255, 215, 90),
@@ -85,19 +88,11 @@ return function(R)
 		return d
 	end
 
+	---------------------------------------------------------------------------------------------------------------
+	-- Outils de construction.
+
 	-- Bloc ancré. `dessus` est la hauteur de sa face supérieure : on raisonne en « où pose-t-on les pieds ».
-	local function bloc(
-		parent,
-		nom: string,
-		sx: number,
-		sy: number,
-		sz: number,
-		x: number,
-		dessus: number,
-		z: number,
-		couleur,
-		materiau
-	)
+	local function bloc(parent, nom: string, sx, sy, sz, x, dessus, z, couleur, materiau)
 		local p = Instance.new("Part")
 		p.Name = nom
 		p.Anchored = true
@@ -111,20 +106,32 @@ return function(R)
 		return p
 	end
 
+	-- Bloc donné par ses bornes (x1..x2, y1..y2, z1..z2) : pratique pour les murs et les planchers.
+	local function boite(parent, nom: string, x1, x2, y1, y2, z1, z2, couleur, materiau)
+		return bloc(parent, nom, x2 - x1, y2 - y1, z2 - z1, (x1 + x2) / 2, y2, (z1 + z2) / 2, couleur, materiau)
+	end
+
 	-- Dalle sur laquelle on marche (1 stud d'épaisseur).
 	local function dalle(parent, nom, sx, sz, x, dessus, z, couleur, materiau)
 		return bloc(parent, nom, sx, 1, sz, x, dessus, z, couleur, materiau)
 	end
 
-	-- Pilier qui descend jusqu'au sol (colonnes, maisons, bacs empilés).
+	-- Pilier qui descend jusqu'au sol (colonnes, bacs empilés).
 	local function pilier(parent, nom, sx, sz, x, dessus, z, couleur, materiau)
 		return bloc(parent, nom, sx, dessus - SOL, sz, x, dessus, z, couleur, materiau)
 	end
 
-	-- Décor : ne gêne ni les collisions de jeu ni les calculs de toucher.
+	-- Décor : ne déclenche rien et ne prend pas de contour (il reste solide, sauf si on le dit).
 	local function decor(p)
 		p.CanTouch = false
 		p.CanQuery = false
+		return p
+	end
+
+	-- Décor de fond qu'on ne doit jamais pouvoir toucher : on le traverse et on tombe dans la zone mortelle.
+	local function fantome(p)
+		decor(p)
+		p.CanCollide = false
 		return p
 	end
 
@@ -146,13 +153,22 @@ return function(R)
 		return gui
 	end
 
-	-- Panneau sur un poteau, lisible par le joueur qui arrive (il regarde vers +X : on écrit sur la face -X).
-	local function panneau(parent, contenu: string, x, dessus, z, largeur)
-		largeur = largeur or 8
-		decor(bloc(parent, "Poteau", 0.6, 7, 0.6, x, dessus + 4, z, Color3.fromRGB(60, 60, 60), Enum.Material.Metal))
-		local plaque = decor(bloc(parent, "Panneau", 0.4, 3, largeur, x, dessus + 6, z, Color3.fromRGB(25, 25, 30)))
-		texte(Enum.NormalId.Left, contenu).Parent = plaque
-		return plaque
+	-- Nom flottant au-dessus d'un objet, visible de loin.
+	local function etiquette(part, contenu: string, couleur, hauteur)
+		local gui = Instance.new("BillboardGui")
+		gui.Size = UDim2.fromOffset(320, 60)
+		gui.StudsOffset = Vector3.new(0, hauteur or 4, 0)
+		gui.MaxDistance = 250
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.fromScale(1, 1)
+		label.BackgroundTransparency = 1
+		label.TextColor3 = couleur or Color3.fromRGB(255, 255, 255)
+		label.TextStrokeTransparency = 0
+		label.TextScaled = true
+		label.Font = Enum.Font.GothamBlack
+		label.Text = contenu
+		label.Parent = gui
+		gui.Parent = part
 	end
 
 	local function etiqueter(p, tag: string)
@@ -177,10 +193,12 @@ return function(R)
 
 	local function tournant(p, vitesse: number)
 		p:SetAttribute("Vitesse", vitesse)
+		p.CanQuery = false
 		return etiqueter(p, "Tournant")
 	end
 
-	local function checkpoint(parent, numero: number, x, dessus, z, nomZone: string, taille)
+	-- Checkpoint : dalle lumineuse et grand numéro ; arche aux couleurs de la zone dehors, nom flottant dedans.
+	local function checkpoint(parent, numero: number, x, dessus, z, nomZone: string, taille, interieur)
 		taille = taille or 12
 		local p
 		if numero == 0 then
@@ -200,14 +218,17 @@ return function(R)
 		p.Color = numero == 15 and couleurs.or_ or couleurs.checkpoint
 		p:SetAttribute("Numero", numero)
 		etiqueter(p, "Checkpoint")
-		-- Le numéro, posé à plat sur la dalle.
 		local marque =
 			decor(bloc(parent, `Marque{numero}`, 4, 0.05, 4, x, dessus + 0.05, z, p.Color, Enum.Material.Neon))
 		marque.CanCollide = false
 		texte(Enum.NormalId.Top, tostring(numero), Color3.fromRGB(20, 30, 40), Color3.fromRGB(255, 255, 255)).Parent =
 			marque
-		-- Arche aux couleurs de la zone, au-dessus de la dalle : le nom se lit en arrivant et en repartant.
 		local accent = accentDe[parent] or couleurs.checkpoint
+		local nom = if numero == 0 then nomZone else `{numero} · {nomZone}`
+		if interieur then
+			etiquette(marque, nom, accent, 5)
+			return p
+		end
 		local demi = taille / 2 + 0.6
 		for _, cote in { -1, 1 } do
 			decor(
@@ -216,28 +237,188 @@ return function(R)
 		end
 		local fronton =
 			decor(bloc(parent, "Arche", 1.2, 3, taille + 2.4, x, dessus + 14, z, Color3.fromRGB(25, 25, 35)))
-		local nom = if numero == 0 then nomZone else `{numero} · {nomZone}`
 		texte(Enum.NormalId.Left, nom, accent).Parent = fronton
 		texte(Enum.NormalId.Right, nom, accent).Parent = fronton
-		decor(bloc(parent, "LiseréArche", 1.3, 0.4, taille + 2.4, x, dessus + 11.2, z, accent, Enum.Material.Neon))
+		decor(bloc(parent, "LisereArche", 1.3, 0.4, taille + 2.4, x, dessus + 11.2, z, accent, Enum.Material.Neon))
 		return p
 	end
 
-	-- Contour d'une pièce (SelectionBox : aucune pièce en plus, juste un trait autour).
-	local function contour(p, couleur, epaisseur)
-		local boite = Instance.new("SelectionBox")
-		boite.Name = "Contour"
-		boite.Adornee = p
-		boite.Color3 = couleur
-		boite.LineThickness = epaisseur or 0.06
-		boite.SurfaceTransparency = 1
-		boite.Parent = p
-		return boite
+	-- Panneau de classement : `face` dit vers où il regarde ; `mural` = accroché à un mur (pas de pieds).
+	local function tableau(parent, x, dessus, z, face, tag, intitule, couleurTitre, mural)
+		local deCote = face == Enum.NormalId.Left or face == Enum.NormalId.Right
+		local sx, sz = if deCote then 1 else 14, if deCote then 14 else 1
+		local p = decor(bloc(parent, tag, sx, 10, sz, x, dessus + 11, z, Color3.fromRGB(20, 20, 30)))
+		etiqueter(p, tag)
+		local gui = Instance.new("SurfaceGui")
+		gui.Face = face
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		gui.PixelsPerStud = 40
+		gui.Parent = p
+		local titre = Instance.new("TextLabel")
+		titre.Name = "Titre"
+		titre.Size = UDim2.fromScale(1, 0.18)
+		titre.BackgroundColor3 = couleurTitre
+		titre.TextColor3 = Color3.fromRGB(255, 255, 255)
+		titre.TextScaled = true
+		titre.Font = Enum.Font.GothamBlack
+		titre.Text = intitule
+		titre.Parent = gui
+		local liste = Instance.new("TextLabel")
+		liste.Name = "Liste"
+		liste.Position = UDim2.fromScale(0.04, 0.2)
+		liste.Size = UDim2.fromScale(0.92, 0.78)
+		liste.BackgroundTransparency = 1
+		liste.TextColor3 = Color3.fromRGB(240, 240, 240)
+		liste.TextScaled = true
+		liste.TextXAlignment = Enum.TextXAlignment.Left
+		liste.TextYAlignment = Enum.TextYAlignment.Top
+		liste.Font = Enum.Font.Code
+		liste.Text = "Chargement…"
+		liste.Parent = gui
+		if not mural then
+			for _, d in { -5, 5 } do
+				local px, pz = if deCote then x else x + d, if deCote then z + d else z
+				decor(
+					bloc(parent, "PiedTableau", 1, dessus + 6 - SOL, 1, px, dessus + 6, pz, Color3.fromRGB(60, 60, 60))
+				)
+			end
+		end
+		return p
 	end
 
-	local function arbre(parent, x, z, taille)
-		taille = taille or 1
+	-- Bâtiment creux qu'on traverse : quatre murs, un toit, et des ouvertures (porte, fenêtre) par face.
+	-- ouvertures[face] = { centre, largeur, bas, haut } ; face « -X », « +X », « -Z » ou « +Z ».
+	local function batiment(parent, nom, x1, x2, z1, z2, haut, couleur, materiau, ouvertures)
+		local function mur(ax1, ax2, az1, az2, o, leLongDeZ)
+			if not o then
+				decor(boite(parent, nom .. "Mur", ax1, ax2, SOL, haut, az1, az2, couleur, materiau))
+				return
+			end
+			decor(boite(parent, nom .. "Mur", ax1, ax2, SOL, o.bas, az1, az2, couleur, materiau))
+			decor(boite(parent, nom .. "Mur", ax1, ax2, o.haut, haut, az1, az2, couleur, materiau))
+			local g, d = o.centre - o.largeur / 2, o.centre + o.largeur / 2
+			if leLongDeZ then
+				decor(boite(parent, nom .. "Mur", ax1, ax2, o.bas, o.haut, az1, g, couleur, materiau))
+				decor(boite(parent, nom .. "Mur", ax1, ax2, o.bas, o.haut, d, az2, couleur, materiau))
+			else
+				decor(boite(parent, nom .. "Mur", ax1, g, o.bas, o.haut, az1, az2, couleur, materiau))
+				decor(boite(parent, nom .. "Mur", d, ax2, o.bas, o.haut, az1, az2, couleur, materiau))
+			end
+			-- Encadrement néon : l'ouverture se voit de loin, c'est là qu'on va.
+			local cadre = Color3.fromRGB(255, 255, 255)
+			if leLongDeZ then
+				fantome(
+					boite(
+						parent,
+						"Encadrement",
+						ax1 - 0.1,
+						ax2 + 0.1,
+						o.haut,
+						o.haut + 0.4,
+						g,
+						d,
+						cadre,
+						Enum.Material.Neon
+					)
+				)
+			else
+				fantome(
+					boite(
+						parent,
+						"Encadrement",
+						g,
+						d,
+						o.haut,
+						o.haut + 0.4,
+						az1 - 0.1,
+						az2 + 0.1,
+						cadre,
+						Enum.Material.Neon
+					)
+				)
+			end
+		end
+		mur(x1, x1 + 1, z1, z2, ouvertures["-X"], true)
+		mur(x2 - 1, x2, z1, z2, ouvertures["+X"], true)
+		mur(x1 + 1, x2 - 1, z1, z1 + 1, ouvertures["-Z"], false)
+		mur(x1 + 1, x2 - 1, z2 - 1, z2, ouvertures["+Z"], false)
 		decor(
+			boite(
+				parent,
+				nom .. "Toit",
+				x1 - 0.5,
+				x2 + 0.5,
+				haut - 1,
+				haut,
+				z1 - 0.5,
+				z2 + 0.5,
+				Color3.fromRGB(80, 85, 100),
+				Enum.Material.Slate
+			)
+		)
+		-- Bandes de fenêtres sur les grandes faces (décor, sans collision).
+		for y = SOL + 6, haut - 4, 6 do
+			for _, zf in { z1 - 0.15, z2 + 0.15 } do
+				local f = fantome(
+					boite(
+						parent,
+						"Fenetres",
+						x1 + 2,
+						x2 - 2,
+						y,
+						y + 2,
+						zf - 0.1,
+						zf + 0.1,
+						Color3.fromRGB(150, 200, 235),
+						Enum.Material.Glass
+					)
+				)
+				f.CastShadow = false
+			end
+		end
+	end
+
+	local function contour(p, couleur, epaisseur)
+		local boiteSel = Instance.new("SelectionBox")
+		boiteSel.Name = "Contour"
+		boiteSel.Adornee = p
+		boiteSel.Color3 = couleur
+		boiteSel.LineThickness = epaisseur or 0.06
+		boiteSel.SurfaceTransparency = 1
+		boiteSel.Parent = p
+	end
+
+	local function boule(parent, nom, taille, x, y, z, couleur, materiau)
+		local b = Instance.new("Part")
+		b.Name = nom
+		b.Shape = Enum.PartType.Ball
+		b.Anchored = true
+		b.Size = Vector3.new(taille, taille, taille)
+		b.CFrame = CFrame.new(x, y, z)
+		b.Color = couleur
+		b.Material = materiau or Enum.Material.SmoothPlastic
+		b.Parent = parent
+		return fantome(b)
+	end
+
+	local DEBOUT = CFrame.Angles(0, 0, math.rad(90)) -- un cylindre Roblox est couché sur X : on le redresse
+	local function cylindre(parent, nom, longueur, diametre, cf, couleur, materiau)
+		local c = Instance.new("Part")
+		c.Name = nom
+		c.Shape = Enum.PartType.Cylinder
+		c.Anchored = true
+		c.Size = Vector3.new(longueur, diametre, diametre)
+		c.CFrame = cf
+		c.Color = couleur
+		c.Material = materiau or Enum.Material.SmoothPlastic
+		c.Parent = parent
+		return fantome(c)
+	end
+
+	local function arbre(parent, x, z, taille, base)
+		taille = taille or 1
+		base = base or SOL
+		fantome(
 			bloc(
 				parent,
 				"Tronc",
@@ -245,27 +426,20 @@ return function(R)
 				6 * taille,
 				1.2 * taille,
 				x,
-				SOL + 6 * taille,
+				base + 6 * taille,
 				z,
 				couleurs.tronc,
 				Enum.Material.Wood
 			)
 		)
-		local feuilles = decor(Instance.new("Part"))
-		feuilles.Name = "Feuillage"
-		feuilles.Shape = Enum.PartType.Ball
-		feuilles.Anchored = true
-		feuilles.Size = Vector3.new(7, 7, 7) * taille
-		feuilles.CFrame = CFrame.new(x, SOL + 9 * taille, z)
-		feuilles.Color = couleurs.feuillage
-		feuilles.Material = Enum.Material.Grass
-		feuilles.CastShadow = true
-		feuilles.Parent = parent
+		boule(parent, "Feuillage", 7 * taille, x, base + 9 * taille, z, couleurs.feuillage, Enum.Material.Grass)
 	end
 
 	local function lampadaire(parent, x, z)
-		decor(bloc(parent, "Lampadaire", 0.5, 12, 0.5, x, SOL + 12, z, Color3.fromRGB(45, 50, 60), Enum.Material.Metal))
-		local tete = decor(
+		fantome(
+			bloc(parent, "Lampadaire", 0.5, 12, 0.5, x, SOL + 12, z, Color3.fromRGB(45, 50, 60), Enum.Material.Metal)
+		)
+		local tete = fantome(
 			bloc(parent, "Lampe", 1.6, 0.8, 1.6, x, SOL + 12.6, z, Color3.fromRGB(255, 230, 160), Enum.Material.Neon)
 		)
 		local lumiere = Instance.new("PointLight")
@@ -277,12 +451,16 @@ return function(R)
 
 	-- Gwenn-ha-du simplifié : bandes noires et blanches et un carré d'hermines (blanc).
 	local function drapeauBreton(parent, x, dessus, z)
-		decor(bloc(parent, "Mat", 0.4, 14, 0.4, x, dessus + 14, z, Color3.fromRGB(220, 220, 220), Enum.Material.Metal))
+		fantome(
+			bloc(parent, "Mat", 0.4, 14, 0.4, x, dessus + 14, z, Color3.fromRGB(220, 220, 220), Enum.Material.Metal)
+		)
 		for i = 0, 8 do
 			local couleur = if i % 2 == 0 then Color3.fromRGB(20, 20, 20) else Color3.fromRGB(250, 250, 250)
-			decor(bloc(parent, "Bande", 0.15, 0.5, 7, x, dessus + 14 - i * 0.5, z + 3.7, couleur, Enum.Material.Fabric))
+			fantome(
+				bloc(parent, "Bande", 0.15, 0.5, 7, x, dessus + 14 - i * 0.5, z + 3.7, couleur, Enum.Material.Fabric)
+			)
 		end
-		decor(
+		fantome(
 			bloc(
 				parent,
 				"Hermines",
@@ -298,47 +476,13 @@ return function(R)
 		)
 	end
 
-	local function tableauClassement(parent, x, dessus, z, face, tag, intitule, couleurTitre)
-		local p = decor(bloc(parent, "TableauClassement", 14, 10, 1, x, dessus + 11, z, Color3.fromRGB(20, 20, 30)))
-		etiqueter(p, tag or "TableauClassement")
-		local gui = Instance.new("SurfaceGui")
-		gui.Face = face
-		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-		gui.PixelsPerStud = 40
-		gui.Parent = p
-		local titre = Instance.new("TextLabel")
-		titre.Name = "Titre"
-		titre.Size = UDim2.fromScale(1, 0.18)
-		titre.BackgroundColor3 = couleurTitre or couleurs.vinci
-		titre.TextColor3 = Color3.fromRGB(255, 255, 255)
-		titre.TextScaled = true
-		titre.Font = Enum.Font.GothamBlack
-		titre.Text = intitule or "Meilleurs temps"
-		titre.Parent = gui
-		local liste = Instance.new("TextLabel")
-		liste.Name = "Liste"
-		liste.Position = UDim2.fromScale(0.04, 0.2)
-		liste.Size = UDim2.fromScale(0.92, 0.78)
-		liste.BackgroundTransparency = 1
-		liste.TextColor3 = Color3.fromRGB(240, 240, 240)
-		liste.TextScaled = true
-		liste.TextXAlignment = Enum.TextXAlignment.Left
-		liste.TextYAlignment = Enum.TextYAlignment.Top
-		liste.Font = Enum.Font.Code
-		liste.Text = "Chargement…"
-		liste.Parent = gui
-		decor(bloc(parent, "PiedTableau", 1, dessus + 6 - SOL, 1, x - 5, dessus + 6, z, Color3.fromRGB(60, 60, 60)))
-		decor(bloc(parent, "PiedTableau", 1, dessus + 6 - SOL, 1, x + 5, dessus + 6, z, Color3.fromRGB(60, 60, 60)))
-		return p
-	end
-
-	-- Maison à colombages : façade claire, poutres sombres sur la face avant (-Z), toit plat où l'on marche.
+	-- Maison à colombages : façade claire, poutres sombres sur la face -Z, toit plat où l'on marche.
 	local function maison(parent, nom, x, z, largeur, dessus, estDecor)
-		local corps = pilier(parent, nom, largeur, largeur, x, dessus, z, couleurs.facade, Enum.Material.Plaster)
-		corps.CanQuery = false
+		local corps =
+			decor(pilier(parent, nom, largeur, largeur, x, dessus - 0.5, z, couleurs.facade, Enum.Material.Plaster))
 		local hauteur = dessus - SOL
 		for i = -1, 1 do
-			decor(
+			fantome(
 				bloc(
 					parent,
 					"Poutre",
@@ -354,7 +498,7 @@ return function(R)
 			)
 		end
 		for h = SOL + 4, dessus - 1, 4 do
-			decor(
+			fantome(
 				bloc(
 					parent,
 					"Poutre",
@@ -369,24 +513,22 @@ return function(R)
 				)
 			)
 		end
-		local bordure =
+		local toit =
 			dalle(parent, "Toit", largeur + 0.4, largeur + 0.4, x, dessus, z, couleurs.toit, Enum.Material.Slate)
-		bordure.CanTouch = false
-		corps.CanTouch = false
 		if estDecor then
-			decor(bordure)
+			fantome(toit)
+			corps.CanCollide = false
 		end
-		return bordure
+		return toit
 	end
 
-	-- Immeuble de décor, loin du chemin.
 	local function immeuble(parent, x, z, sx, sz, hauteur, couleur, sansFenetres)
 		local corps =
-			decor(bloc(parent, "Immeuble", sx, hauteur, sz, x, SOL + hauteur, z, couleur, Enum.Material.Concrete))
+			fantome(bloc(parent, "Immeuble", sx, hauteur, sz, x, SOL + hauteur, z, couleur, Enum.Material.Concrete))
 		if not sansFenetres then
 			local face = if z > 0 then z - sz / 2 - 0.1 else z + sz / 2 + 0.1
 			for h = SOL + 6, SOL + hauteur - 3, 6 do
-				local f = decor(
+				local f = fantome(
 					bloc(
 						parent,
 						"Fenetres",
@@ -402,7 +544,7 @@ return function(R)
 				)
 				f.CastShadow = false
 			end
-			decor(
+			fantome(
 				bloc(
 					parent,
 					"Corniche",
@@ -421,19 +563,20 @@ return function(R)
 	end
 
 	---------------------------------------------------------------------------------------------------------------
-	-- La ville : sol, zone mortelle sous le parcours, immeubles.
+	-- La ville : sol, zone mortelle, rue, arbres, lampadaires, immeubles pastel, repères rennais en fond.
+	-- Tout ce décor est « fantôme » : un joueur qui tombe le traverse et finit dans la zone mortelle.
 	local ville = dossier("Ville")
-	decor(bloc(ville, "Sol", 1000, 2, 300, 330, SOL, 0, Color3.fromRGB(110, 175, 85), Enum.Material.Grass))
-	decor(bloc(ville, "Rue", 900, 0.2, 40, 380, SOL + 0.1, 0, Color3.fromRGB(60, 62, 70), Enum.Material.Asphalt))
+	decor(bloc(ville, "Sol", 1150, 2, 320, 345, SOL, 0, Color3.fromRGB(110, 175, 85), Enum.Material.Grass))
+	fantome(bloc(ville, "Rue", 1150, 0.2, 40, 345, SOL + 0.1, 0, Color3.fromRGB(60, 62, 70), Enum.Material.Asphalt))
 	for _, cote in { -1, 1 } do
-		decor(
+		fantome(
 			bloc(
 				ville,
 				"Trottoir",
-				900,
+				1150,
 				0.6,
 				10,
-				380,
+				345,
 				SOL + 0.6,
 				cote * 25,
 				Color3.fromRGB(200, 195, 185),
@@ -441,318 +584,437 @@ return function(R)
 			)
 		)
 	end
-	for x = -40, 820, 16 do
-		local trait = decor(
-			bloc(
-				ville,
-				"Marquage",
-				7,
-				0.05,
-				0.6,
-				x,
-				SOL + 0.25,
-				0,
-				Color3.fromRGB(250, 250, 250),
-				Enum.Material.SmoothPlastic
-			)
-		)
+	for x = -60, 900, 16 do
+		local trait = fantome(bloc(ville, "Marquage", 7, 0.05, 0.6, x, SOL + 0.25, 0, Color3.fromRGB(250, 250, 250)))
 		trait.CastShadow = false
 	end
-	for i = 0, 26 do
-		local x = -30 + i * 32
+	local vide = mortel(bloc(ville, "Vide", 1150, 2, 320, 345, -4, 0, Color3.fromRGB(0, 0, 0)))
+	vide.Transparency = 1
+	vide.CanCollide = false
+	vide.CanQuery = false
+	for i = 0, 29 do
+		local x = -50 + i * 32
 		lampadaire(ville, x, 21)
 		lampadaire(ville, x + 16, -21)
 		arbre(ville, x + 8, 34, 0.9 + (i % 3) * 0.15)
 		arbre(ville, x + 24, -34, 1 + (i % 2) * 0.2)
 	end
-	local vide = mortel(bloc(ville, "Vide", 900, 2, 300, 380, -4, 0, Color3.fromRGB(0, 0, 0)))
-	vide.Transparency = 1
-	vide.CanCollide = false
-	vide.CanQuery = false
-	-- Teintes douces : le fond ne doit jamais ressembler à une plateforme.
 	local teintes = {
 		Color3.fromRGB(240, 215, 190),
 		Color3.fromRGB(200, 215, 230),
 		Color3.fromRGB(235, 200, 200),
 		Color3.fromRGB(215, 230, 205),
 	}
-	for i = 0, 15 do
-		local x = -20 + i * 52
-		immeuble(ville, x, 70 + (i % 3) * 8, 30, 24, 30 + (i % 4) * 12, teintes[i % 4 + 1])
-		immeuble(ville, x + 20, -75 - (i % 2) * 10, 26, 22, 26 + ((i + 1) % 4) * 14, teintes[(i + 2) % 4 + 1])
+	for i = 0, 17 do
+		local x = -40 + i * 52
+		immeuble(ville, x, 80 + (i % 3) * 8, 30, 24, 30 + (i % 4) * 12, teintes[i % 4 + 1])
+		immeuble(ville, x + 20, -85 - (i % 2) * 10, 26, 22, 26 + ((i + 1) % 4) * 14, teintes[(i + 2) % 4 + 1])
 	end
-
-	-- Repères de Rennes, en fond. Les tours Les Horizons : deux tours rondes, l'une plus haute que l'autre.
-	for _, tour in { { x = 120, h = 110 }, { x = 150, h = 85 } } do
-		local t = decor(Instance.new("Part"))
-		t.Name = "TourLesHorizons"
-		t.Shape = Enum.PartType.Cylinder
-		t.Anchored = true
-		t.Size = Vector3.new(tour.h, 22, 22)
-		t.CFrame = CFrame.new(tour.x, SOL + tour.h / 2, -125) * CFrame.Angles(0, 0, math.rad(90))
-		t.Color = Color3.fromRGB(235, 235, 240)
-		t.Material = Enum.Material.Concrete
-		t.Parent = ville
-		for h = SOL + 8, SOL + tour.h - 4, 7 do
-			local bague = decor(Instance.new("Part"))
-			bague.Name = "Balcons"
-			bague.Shape = Enum.PartType.Cylinder
-			bague.Anchored = true
-			bague.Size = Vector3.new(1, 23, 23)
-			bague.CFrame = CFrame.new(tour.x, h, -125) * CFrame.Angles(0, 0, math.rad(90))
-			bague.Color = Color3.fromRGB(120, 130, 150)
-			bague.Material = Enum.Material.Glass
+	-- Les tours Les Horizons, en fond : deux tours rondes, l'une plus haute que l'autre.
+	for _, t in { { x = 120, h = 110 }, { x = 150, h = 85 } } do
+		cylindre(
+			ville,
+			"TourLesHorizons",
+			t.h,
+			22,
+			CFrame.new(t.x, SOL + t.h / 2, -135) * DEBOUT,
+			Color3.fromRGB(235, 235, 240),
+			Enum.Material.Concrete
+		)
+		for h = SOL + 8, SOL + t.h - 4, 7 do
+			local bague = cylindre(
+				ville,
+				"Balcons",
+				1,
+				23,
+				CFrame.new(t.x, h, -135) * DEBOUT,
+				Color3.fromRGB(120, 130, 150),
+				Enum.Material.Glass
+			)
 			bague.CastShadow = false
-			bague.Parent = ville
 		end
 	end
-	-- La cathédrale Saint-Pierre : façade claire et deux tours carrées, près de la rue de la Soif.
-	immeuble(ville, 470, -110, 40, 24, 45, Color3.fromRGB(225, 210, 180), true)
+	-- La cathédrale Saint-Pierre : façade claire et deux tours carrées.
+	immeuble(ville, 480, -120, 40, 24, 45, Color3.fromRGB(225, 210, 180), true)
 	for _, dx in { -14, 14 } do
-		immeuble(ville, 470 + dx, -105, 12, 12, 70, Color3.fromRGB(215, 200, 170), true)
-		decor(
+		immeuble(ville, 480 + dx, -115, 12, 12, 70, Color3.fromRGB(215, 200, 170), true)
+		fantome(
 			bloc(
 				ville,
 				"Lanterne",
 				8,
 				6,
 				8,
-				470 + dx,
+				480 + dx,
 				SOL + 76,
-				-105,
+				-115,
 				Color3.fromRGB(110, 120, 140),
 				Enum.Material.Slate
 			)
 		)
 	end
-	local rosace = decor(
-		bloc(ville, "Rosace", 0.4, 10, 10, 470, SOL + 32, -97.6, Color3.fromRGB(80, 120, 200), Enum.Material.Glass)
+	local rosace = fantome(
+		bloc(ville, "Rosace", 0.4, 10, 10, 480, SOL + 32, -107.6, Color3.fromRGB(80, 120, 200), Enum.Material.Glass)
 	)
 	rosace.Orientation = Vector3.new(0, 90, 0)
-	drapeauBreton(ville, -26, 25, 14)
 
 	---------------------------------------------------------------------------------------------------------------
-	-- 0 · La coloc à Villejean
+	-- 0 · La coloc à Villejean : départ sur le balcon du 5e, descente par les balcons et l'étendoir à linge.
 	local coloc = dossier("0_Coloc", accents.coloc)
-	checkpoint(coloc, 0, 0, 1, 0, "La coloc à Villejean", 14)
-	pilier(coloc, "Plancher", 30, 30, -8, 0.9, 0, couleurs.bois, Enum.Material.WoodPlanks).CanTouch = false
-	decor(bloc(coloc, "Matelas", 6, 1.5, 9, -16, 2.4, 8, Color3.fromRGB(200, 70, 80), Enum.Material.Fabric))
-	decor(bloc(coloc, "Bureau", 6, 3, 3, -16, 4, -9, couleurs.bois, Enum.Material.Wood))
-	decor(bloc(coloc, "PizzaDHier", 2, 0.3, 2, -15, 4.3, -9, Color3.fromRGB(230, 170, 80), Enum.Material.SmoothPlastic))
-	local mur = decor(bloc(coloc, "Mur", 1, 12, 30, -23, 13, 0, Color3.fromRGB(230, 225, 215), Enum.Material.Plaster))
-	texte(
-		Enum.NormalId.Right,
-		"PARTIEL À 8H\nSUP DE VINCI\n(Rennes 2 est bloquée, pas Sup de Vinci)",
-		Color3.fromRGB(200, 30, 30),
-		Color3.fromRGB(255, 250, 230)
-	).Parent =
-		mur
-	local titre =
-		decor(bloc(coloc, "Titre", 1, 7, 30, -23, 21, 0, Color3.fromRGB(25, 25, 35), Enum.Material.SmoothPlastic))
+	decor(
+		boite(coloc, "ImmeubleColoc", -40, -12, SOL, 52, -20, 20, Color3.fromRGB(240, 220, 200), Enum.Material.Concrete)
+	)
+	for y = SOL + 6, 48, 6 do
+		if y < 36 or y > 46 then
+			fantome(
+				boite(
+					coloc,
+					"Fenetres",
+					-11.9,
+					-11.7,
+					y,
+					y + 2,
+					-18,
+					18,
+					Color3.fromRGB(150, 200, 235),
+					Enum.Material.Glass
+				)
+			)
+		end
+	end
+	checkpoint(coloc, 0, -5, 40, 0, "La coloc à Villejean", 14)
+	local titre = decor(boite(coloc, "Titre", -13, -12, 52, 58, -14, 14, Color3.fromRGB(25, 25, 35)))
 	texte(Enum.NormalId.Right, "OBBY RENNES · PARTIEL MAINTENU", accents.coloc).Parent = titre
-	tableauClassement(coloc, -4, 1, -14, Enum.NormalId.Back)
-	tableauClassement(coloc, -4, 1, 14, Enum.NormalId.Front, "TableauAura", "Plus grosse aura", accents.soif)
+	tableau(coloc, -11.5, 40, -13.5, Enum.NormalId.Right, "TableauClassement", "Meilleurs temps", couleurs.vinci, true)
+	tableau(coloc, -11.5, 40, 13.5, Enum.NormalId.Right, "TableauAura", "Plus grosse aura", accents.soif, true)
+	drapeauBreton(coloc, -14, 52, -18)
+	dalle(coloc, "Balcon", 4, 4, 7, 36, 3, couleurs.beton, Enum.Material.Concrete)
+	dalle(coloc, "Balcon", 4, 4, 14, 32, -3, couleurs.beton, Enum.Material.Concrete)
+	mobile(dalle(coloc, "EtendoirALinge", 4, 4, 22, 28, 0, couleurs.bois, Enum.Material.Wood), Vector3.new(0, 0, 8), 3)
+	dalle(coloc, "Balcon", 4, 4, 30, 24, 6, couleurs.beton, Enum.Material.Concrete)
+	dalle(coloc, "Balcon", 4, 4, 37, 20, 0, couleurs.beton, Enum.Material.Concrete)
+	dalle(coloc, "Balcon", 4, 4, 44, 16, -6, couleurs.beton, Enum.Material.Concrete)
 
 	---------------------------------------------------------------------------------------------------------------
-	-- 1-2 · Fac bloquée
+	-- 1-2 · Fac bloquée : on grimpe l'escalier de chaises jusqu'à la fenêtre, on traverse l'amphi par les
+	-- rangées (le sol est couvert de café renversé), et on ressort par la fenêtre d'en face.
 	local fac = dossier("1_FacBloquee", accents.fac)
-	dalle(fac, "Table", 6, 4, 14, 2, 3, couleurs.bois, Enum.Material.Wood)
-	dalle(fac, "Table", 6, 4, 23, 3, -3, couleurs.bois, Enum.Material.Wood)
-	dalle(fac, "Table", 6, 4, 32, 4, 3, couleurs.bois, Enum.Material.Wood)
-	checkpoint(fac, 1, 44, 4, 0, "Fac bloquée")
-	dalle(fac, "Chaises", 4, 4, 56, 7, 0, couleurs.chaise)
-	fragile(dalle(fac, "PileDeCopies", 4, 4, 63, 10, 2, couleurs.papier))
-	dalle(fac, "Chaises", 4, 4, 70, 13, -1, couleurs.chaise)
-	checkpoint(fac, 2, 82, 13, 0, "Fac bloquée (le blocus)")
-	-- Décor : la barricade de chaises et la banderole de l'AG.
-	for i = 0, 5 do
-		decor(bloc(fac, "ChaiseEmpilee", 3, 3, 3, 50 + i * 4, 1 + (i % 3) * 3, 12, couleurs.chaise))
-	end
-	decor(bloc(fac, "Mat", 0.5, 20, 0.5, 30, 18, -12, Color3.fromRGB(80, 80, 80)))
-	decor(bloc(fac, "Mat", 0.5, 20, 0.5, 60, 18, -12, Color3.fromRGB(80, 80, 80)))
+	checkpoint(fac, 1, 54, 10, 0, "Fac bloquée")
+	dalle(fac, "Chaises", 4, 4, 64, 13, -3, couleurs.chaise)
+	dalle(fac, "Chaises", 4, 4, 69.5, 16, 3, couleurs.chaise)
+	fragile(dalle(fac, "PileDeCopies", 4, 4, 75, 19, -3, couleurs.papier))
+	dalle(fac, "Chaises", 4, 4, 80.5, 22, 2, couleurs.chaise)
+	batiment(fac, "Fac", 85, 125, -18, 18, 42, Color3.fromRGB(215, 200, 235), Enum.Material.Concrete, {
+		["-X"] = { centre = 0, largeur = 8, bas = 24, haut = 34 },
+		["+X"] = { centre = 0, largeur = 8, bas = 31, haut = 40 },
+	})
 	local banderoleAG =
-		decor(bloc(fac, "BanderoleAG", 30, 4, 0.3, 45, 17, -12, couleurs.banderole, Enum.Material.Fabric))
+		decor(boite(fac, "BanderoleAG", 84.6, 84.9, 35, 39, -14, 14, couleurs.banderole, Enum.Material.Fabric))
 	texte(
-		Enum.NormalId.Back,
+		Enum.NormalId.Left,
 		"FAC BLOQUÉE · AG À 10H · PARTIELS REPORTÉS (pas les tiens)",
 		Color3.fromRGB(180, 20, 20),
 		couleurs.banderole
 	).Parent =
 		banderoleAG
+	mortel(boite(fac, "CafeRenverse", 86, 124, 21, 22, -17, 17, Color3.fromRGB(110, 70, 40), Enum.Material.Slate))
+	dalle(fac, "Estrade", 6, 12, 89, 24, 0, couleurs.bois, Enum.Material.WoodPlanks)
+	dalle(fac, "Rangee", 3, 20, 96, 25, 0, couleurs.bois, Enum.Material.Wood)
+	dalle(fac, "Rangee", 3, 20, 101.5, 27, 0, couleurs.bois, Enum.Material.Wood)
+	dalle(fac, "Rangee", 3, 20, 107, 29, 0, couleurs.bois, Enum.Material.Wood)
+	dalle(fac, "Rangee", 3, 20, 112.5, 31, 0, couleurs.bois, Enum.Material.Wood)
+	checkpoint(fac, 2, 119, 31, 0, "L'amphi bloqué", 8, true)
+	local tableauNoir = decor(boite(fac, "TableauNoir", 86, 86.3, 27, 32, -14, -7, Color3.fromRGB(30, 60, 40)))
+	texte(
+		Enum.NormalId.Right,
+		"PARTIEL MAINTENU\n(on a dit)",
+		Color3.fromRGB(240, 240, 230),
+		Color3.fromRGB(30, 60, 40)
+	).Parent =
+		tableauNoir
 
 	---------------------------------------------------------------------------------------------------------------
-	-- 3-4 · Métro en grève
-	local metro = dossier("2_MetroEnGreve", accents.metro)
-	local function rame(nom, longueur, x, avecVitres)
-		local r = bloc(metro, nom, longueur, 7, 6, x, 13, 0, couleurs.metro, Enum.Material.Metal)
-		if avecVitres then
-			-- Les vitres sont une pièce à part : seulement sur les rames immobiles, sinon elles resteraient sur place.
-			decor(
-				bloc(metro, "Vitres", longueur - 2, 2, 6.1, x, 11, 0, Color3.fromRGB(30, 40, 60), Enum.Material.Glass)
-			)
-		end
-		return r
+	-- 3-4 · Le viaduc de la ligne b : de rame en rame au-dessus de la ville, puis on redescend vers la station.
+	local metro = dossier("2_Metro", accents.metro)
+	dalle(metro, "Rebord", 4, 6, 128, 31, 0, couleurs.beton, Enum.Material.Concrete)
+	local function rame(nom, longueur, x)
+		return bloc(metro, nom, longueur, 7, 6, x, 34, 0, couleurs.metro, Enum.Material.Metal)
 	end
-	rame("Rame", 18, 100, true)
-	rame("Rame", 18, 124, true)
-	mobile(rame("RameQuiRepartQuandMeme", 10, 144, false), Vector3.new(0, 0, 10), 3)
-	checkpoint(metro, 3, 161, 13, 0, "Métro en grève")
-	dalle(metro, "EscalatorALArret", 4, 6, 172, 11, 0, couleurs.quai, Enum.Material.DiamondPlate)
-	dalle(metro, "EscalatorALArret", 4, 6, 179, 9, 0, couleurs.quai, Enum.Material.DiamondPlate)
-	dalle(metro, "EscalatorALArret", 4, 6, 186, 7, 0, couleurs.quai, Enum.Material.DiamondPlate)
-	checkpoint(metro, 4, 200, 6, 0, "Station République")
-	-- Le quai est loin du chemin (Z = -22) : il ne doit pas servir de raccourci ni rattraper les chutes.
-	decor(bloc(metro, "Quai", 100, 1, 8, 130, 6, -22, couleurs.quai, Enum.Material.Concrete))
-	panneau(metro, "LIGNE A · TRAFIC INTERROMPU\nprochaine rame : un jour", 92, 6, -22, 12)
+	for _, x in { 142, 166 } do
+		rame("Rame", 18, x)
+		fantome(bloc(metro, "Vitres", 16, 2, 6.1, x, 32, 0, Color3.fromRGB(30, 40, 60), Enum.Material.Glass))
+		decor(bloc(metro, "PileDuViaduc", 3, 27 - SOL, 3, x, 27, 0, couleurs.beton, Enum.Material.Concrete))
+	end
+	mobile(rame("RameQuiRepartQuandMeme", 10, 185), Vector3.new(0, 0, 10), 3)
+	checkpoint(metro, 3, 202, 34, 0, "Le viaduc de la ligne b")
+	decor(bloc(metro, "PileDuViaduc", 4, 33 - SOL, 4, 202, 33, 0, couleurs.beton, Enum.Material.Concrete))
+	dalle(metro, "Escalator", 4, 6, 213, 30, 0, couleurs.quai, Enum.Material.DiamondPlate)
+	dalle(metro, "Escalator", 4, 6, 219, 26, 0, couleurs.quai, Enum.Material.DiamondPlate)
+	fragile(dalle(metro, "EscalatorEnPanne", 4, 6, 225, 22, 0, couleurs.papier))
+	dalle(metro, "Escalator", 4, 6, 231, 18, 0, couleurs.quai, Enum.Material.DiamondPlate)
+	checkpoint(metro, 4, 243, 14, 0, "La station")
+	local girouette = decor(bloc(metro, "PanneauStation", 0.4, 3, 12, 196.5, 44, -9, Color3.fromRGB(20, 20, 25)))
+	texte(Enum.NormalId.Left, "LIGNE B · TRAFIC INTERROMPU", Color3.fromRGB(255, 170, 30)).Parent = girouette
 
 	---------------------------------------------------------------------------------------------------------------
-	-- 5-6 · Cortège place de la République
+	-- 5-6 · Le cortège, place de la République : pancartes, banderoles qui bougent, camion sono.
 	local cortege = dossier("3_Cortege", accents.cortege)
 	local function banderole(x, dessus, slogan, deplacement, duree)
 		local b = dalle(cortege, "Banderole", 4, 12, x, dessus, 0, couleurs.banderole, Enum.Material.Fabric)
 		texte(Enum.NormalId.Top, slogan, Color3.fromRGB(190, 30, 30), couleurs.banderole).Parent = b
 		return mobile(b, deplacement, duree)
 	end
-	dalle(cortege, "Pancarte", 2, 2, 211, 7, 0, couleurs.pancarte)
-	banderole(220, 7, "DES PRISES DANS LES AMPHIS", Vector3.new(0, 0, 8), 4)
-	dalle(cortege, "Pancarte", 2, 2, 228, 8, 0, couleurs.pancarte)
-	banderole(236, 8, "NON AUX PARTIELS À 8H", Vector3.new(0, 0, -8), 3)
-	dalle(cortege, "Pancarte", 2, 2, 244, 9, 0, couleurs.pancarte)
-	checkpoint(cortege, 5, 256, 9, 0, "Place de la République")
+	dalle(cortege, "Pancarte", 2, 2, 254, 15, 0, couleurs.pancarte)
+	banderole(262, 15, "DES PRISES DANS LES AMPHIS", Vector3.new(0, 0, 8), 4)
+	dalle(cortege, "Pancarte", 2, 2, 270, 17, 0, couleurs.pancarte)
+	banderole(278, 17, "NON AUX PARTIELS À 8H", Vector3.new(0, 0, -8), 3)
+	dalle(cortege, "Pancarte", 2, 2, 286, 19, 0, couleurs.pancarte)
+	checkpoint(cortege, 5, 298, 19, 0, "Place de la République")
 	local sono = mobile(
-		dalle(cortege, "CamionSono", 8, 8, 272, 9, 0, couleurs.camion, Enum.Material.Metal),
+		bloc(cortege, "CamionSono", 8, 2, 8, 314, 19, 0, couleurs.camion, Enum.Material.Metal),
 		Vector3.new(12, 0, 0),
 		4
 	)
-	sono.Size = Vector3.new(8, 2, 8)
-	sono.CFrame = CFrame.new(272, 8, 0)
-	checkpoint(cortege, 6, 300, 9, 0, "Le cortège")
-	-- Décor : le palais du Commerce et des pancartes plantées.
-	local palais = immeuble(cortege, 270, 45, 80, 20, 28, couleurs.pierre)
+	etiquette(sono, "♪ SONO ♪", couleurs.pancarte, 3)
+	checkpoint(cortege, 6, 342, 19, 0, "Le cortège")
+	local palais = immeuble(cortege, 300, 48, 70, 20, 28, couleurs.pierre, true)
 	texte(Enum.NormalId.Front, "PALAIS DU COMMERCE", Color3.fromRGB(60, 50, 40), couleurs.pierre).Parent = palais
-	local slogans = { "RENDEZ-NOUS LA PAUSE CAFÉ", "WIFI GRATUIT PARTOUT", "UN MICRO-ONDES PAR ÉTUDIANT" }
-	for i, slogan in slogans do
-		local x = 205 + i * 25
-		decor(bloc(cortege, "Manche", 0.4, 18, 0.4, x, 8, -16, couleurs.bois, Enum.Material.Wood))
-		local plaque = decor(bloc(cortege, "PancarteDecor", 0.3, 4, 8, x, 12, -16, couleurs.pancarte))
-		texte(Enum.NormalId.Left, slogan, Color3.fromRGB(30, 30, 30), couleurs.pancarte).Parent = plaque
+
+	---------------------------------------------------------------------------------------------------------------
+	-- 7-8 · La barricade de poubelles, puis la tour : une spirale de balcons autour, on entre au 20e par la
+	-- fenêtre, on traverse l'appart (le sol est couvert de Lego, le ventilo de plafond tourne), on ressort de
+	-- l'autre côté et on redescend par les échafaudages.
+	local tour = dossier("4_LaTour", accents.tour)
+	mortel(boite(tour, "JusDePoubelle", 349, 372, 13, 14, -10, 10, couleurs.jus, Enum.Material.Mud))
+	pilier(tour, "Bac", 4, 4, 353, 21, 0, couleurs.bac)
+	fragile(dalle(tour, "Carton", 4, 4, 360.5, 22, 2, couleurs.papier))
+	pilier(tour, "Bac", 4, 4, 367, 23, -1, couleurs.bacJaune)
+	checkpoint(tour, 7, 374, 24, 0, "Barricades de poubelles", 8, true)
+	local CX = 395 -- centre de la tour (murs de 381 à 409 en X, de -14 à 14 en Z)
+	batiment(tour, "Tour", CX - 14, CX + 14, -14, 14, 78, Color3.fromRGB(235, 225, 210), Enum.Material.Concrete, {
+		["-X"] = { centre = 0, largeur = 8, bas = 64, haut = 74 },
+		["+X"] = { centre = 0, largeur = 8, bas = 66, haut = 76 },
+	})
+	-- La spirale : balcons de 5 × 5 qui montent de 2,5 à chaque saut, une fois et quart autour de la tour.
+	local spirale = {
+		{ 376, -11 },
+		{ 378, -19 },
+		{ 386, -20 },
+		{ 395, -20 },
+		{ 404, -20 },
+		{ 412, -19 },
+		{ 414, -11 },
+		{ 414, -2 },
+		{ 414, 7 },
+		{ 413, 15 },
+		{ 406, 20 },
+		{ 397, 20 },
+		{ 388, 20 },
+		{ 379, 19 },
+		{ 376, 11 },
+		{ 376, 2 },
+	}
+	for i, pos in spirale do
+		local b = dalle(tour, "Balcon", 5, 5, pos[1], 24 + 2.5 * i, pos[2], couleurs.beton, Enum.Material.Concrete)
+		if i == 5 or i == 12 then
+			fragile(b)
+		end
+		fantome(
+			bloc(
+				tour,
+				"Rambarde",
+				0.3,
+				1.2,
+				0.3,
+				pos[1],
+				24 + 2.5 * i + 1.2,
+				pos[2],
+				Color3.fromRGB(60, 65, 75),
+				Enum.Material.Metal
+			)
+		)
 	end
-
-	---------------------------------------------------------------------------------------------------------------
-	-- 7-8 · Barricades de poubelles
-	local poubelles = dossier("4_Barricades", accents.poubelles)
-	local jus = mortel(dalle(poubelles, "JusDePoubelle", 34, 20, 330, 6, 0, couleurs.jus, Enum.Material.Mud))
-	jus.CanQuery = false
-	pilier(poubelles, "Bac", 4, 4, 311, 10, 0, couleurs.bac)
-	fragile(dalle(poubelles, "Carton", 4, 4, 318, 10, 2, couleurs.papier))
-	pilier(poubelles, "Bac", 4, 4, 325, 12, -2, couleurs.bacJaune)
-	fragile(dalle(poubelles, "Carton", 4, 4, 332, 12, 1, couleurs.papier))
-	pilier(poubelles, "Bac", 4, 4, 339, 14, 0, couleurs.bac)
-	checkpoint(poubelles, 7, 352, 14, 0, "Barricades de poubelles")
-	decor(bloc(poubelles, "GrandeBarricade", 6, 23 - SOL, 24, 382, 22, 0, couleurs.bac))
-	dalle(poubelles, "SacPoubelle", 4, 4, 364, 17, -4, Color3.fromRGB(30, 30, 30))
-	dalle(poubelles, "SacPoubelle", 4, 4, 369, 20, 3, Color3.fromRGB(30, 30, 30))
-	dalle(poubelles, "SacPoubelle", 4, 4, 374, 23, -2, Color3.fromRGB(30, 30, 30))
-	dalle(poubelles, "HautDeLaBarricade", 8, 8, 382, 23, 0, couleurs.bacJaune)
-	checkpoint(poubelles, 8, 398, 20, 0, "Le sommet des poubelles")
-	panneau(poubelles, "COLLECTE DES DÉCHETS : EN GRÈVE AUSSI", 346, 14, 10, 12)
-
-	---------------------------------------------------------------------------------------------------------------
-	-- 9-10 · Rue de la Soif (rue Saint-Michel)
-	local soif = dossier("5_RueDeLaSoif", accents.soif)
-	maison(soif, "Maison", 412, 0, 8, 20)
-	maison(soif, "Maison", 424, 0, 8, 22)
-	pilier(soif, "Cheminee", 2, 2, 433, 24, 0, Color3.fromRGB(150, 70, 50), Enum.Material.Brick)
-	maison(soif, "Maison", 442, 0, 8, 22)
-	checkpoint(soif, 9, 456, 22, 0, "Rue de la Soif")
-	dalle(soif, "Passerelle", 30, 10, 480, 22, 0, couleurs.toit, Enum.Material.Slate)
-	local enseigne = tournant(
-		bloc(soif, "EnseigneDeBar", 1.2, 2, 22, 480, 25, 0, Color3.fromRGB(220, 60, 140), Enum.Material.Neon),
-		1.6
+	-- L'appart du 20e.
+	mortel(
+		boite(
+			tour,
+			"SolEnLego",
+			CX - 13,
+			CX + 13,
+			62,
+			63,
+			-13,
+			13,
+			Color3.fromRGB(230, 60, 60),
+			Enum.Material.SmoothPlastic
+		)
 	)
-	enseigne.CanQuery = false
-	checkpoint(soif, 10, 507, 22, 0, "Le dernier bar avant le partiel")
-	for i = 0, 5 do
-		maison(soif, "MaisonDecor", 412 + i * 18, 24, 12, 14 + (i % 3) * 4, true)
+	dalle(tour, "Paillasson", 4, 8, CX - 11, 64, 0, Color3.fromRGB(150, 100, 60), Enum.Material.Fabric)
+	fragile(dalle(tour, "CartonDeDemenagement", 4, 4, CX - 5, 65, 0, couleurs.papier))
+	dalle(tour, "Canape", 6, 6, CX + 2, 66, -4, Color3.fromRGB(80, 110, 200), Enum.Material.Fabric)
+	tournant(
+		bloc(tour, "VentiloDePlafond", 1.2, 2, 8, CX + 2, 69, 0, Color3.fromRGB(240, 240, 240), Enum.Material.Neon),
+		1.4
+	)
+	checkpoint(tour, 8, CX + 9.5, 66, 0, "La tour", 6, true)
+	local motDuVoisin = decor(boite(tour, "MotDuVoisin", CX - 13, CX - 12.8, 66, 69, 6, 11, couleurs.papier))
+	texte(
+		Enum.NormalId.Right,
+		"MERCI DE NE PLUS\nFAIRE DE PARCOURS\nDANS L'APPART",
+		Color3.fromRGB(30, 30, 30),
+		couleurs.papier
+	).Parent =
+		motDuVoisin
+	-- La descente par les échafaudages.
+	dalle(tour, "Rebord", 4, 6, CX + 17, 66, 0, couleurs.beton, Enum.Material.Concrete)
+	dalle(tour, "Echafaudage", 4, 4, CX + 26, 58, 0, Color3.fromRGB(240, 160, 40), Enum.Material.Metal)
+	dalle(tour, "Echafaudage", 4, 4, CX + 35, 50, 4, Color3.fromRGB(240, 160, 40), Enum.Material.Metal)
+	dalle(tour, "Echafaudage", 4, 4, CX + 44, 42, -4, Color3.fromRGB(240, 160, 40), Enum.Material.Metal)
+	dalle(tour, "Echafaudage", 4, 4, CX + 53, 34, 0, Color3.fromRGB(240, 160, 40), Enum.Material.Metal)
+	drapeauBreton(tour, CX + 12, 78, -12)
+
+	---------------------------------------------------------------------------------------------------------------
+	-- 9-10 · Rue de la Soif : de toit en toit, puis on descend dans la rue par les auvents des bars.
+	local soif = dossier("5_RueDeLaSoif", accents.soif)
+	maison(soif, "Maison", 458, 0, 8, 31)
+	pilier(soif, "Cheminee", 2, 2, 466, 33, 0, Color3.fromRGB(150, 70, 50), Enum.Material.Brick)
+	maison(soif, "Maison", 475, 0, 8, 30)
+	maison(soif, "Maison", 488, 0, 12, 27)
+	checkpoint(soif, 9, 488, 28, 0, "Rue de la Soif")
+	dalle(soif, "Auvent", 4, 6, 499, 24, 0, Color3.fromRGB(200, 40, 60), Enum.Material.Fabric)
+	dalle(soif, "Auvent", 4, 6, 505, 19, 0, Color3.fromRGB(40, 120, 200), Enum.Material.Fabric)
+	dalle(soif, "Auvent", 4, 6, 511, 14, 0, Color3.fromRGB(240, 180, 40), Enum.Material.Fabric)
+	dalle(soif, "Terrasse", 30, 10, 532, 10, 0, couleurs.bois, Enum.Material.WoodPlanks)
+	tournant(bloc(soif, "EnseigneDeBar", 1.2, 2, 22, 532, 13, 0, Color3.fromRGB(220, 60, 140), Enum.Material.Neon), 1.6)
+	checkpoint(soif, 10, 559, 10, 0, "Le dernier bar avant le partiel")
+	for i = 0, 6 do
+		maison(soif, "MaisonDecor", 455 + i * 16, 26, 12, 16 + (i % 3) * 5, true)
 	end
 
 	---------------------------------------------------------------------------------------------------------------
-	-- 11-12 · La Vilaine
+	-- 11-12 · La Vilaine : au ras de l'eau (mortelle), péniche à la dérive, puis on remonte par les bouées.
 	local vilaine = dossier("6_LaVilaine", accents.vilaine)
-	local eau = mortel(dalle(vilaine, "LaVilaine", 106, 70, 569, 14, 0, couleurs.eau, Enum.Material.Glass))
+	local eau = mortel(boite(vilaine, "LaVilaine", 566, 680, 1, 2, -35, 35, couleurs.eau, Enum.Material.Glass))
 	eau.Transparency = 0.25
-	eau.CanQuery = false
-	dalle(vilaine, "Quai", 4, 6, 519, 19, 0, couleurs.pierre, Enum.Material.Cobblestone)
-	dalle(vilaine, "Quai", 4, 6, 526, 16, 0, couleurs.pierre, Enum.Material.Cobblestone)
-	dalle(vilaine, "Ponton", 4, 8, 534, 16, 0, couleurs.ponton, Enum.Material.WoodPlanks)
+	dalle(vilaine, "Quai", 4, 6, 570, 7, 0, couleurs.pierre, Enum.Material.Cobblestone)
+	dalle(vilaine, "Ponton", 4, 8, 577, 5, 0, couleurs.ponton, Enum.Material.WoodPlanks)
 	mobile(
-		dalle(vilaine, "PenicheALaDerive", 10, 6, 545, 16, 0, Color3.fromRGB(30, 80, 50), Enum.Material.Wood),
+		dalle(vilaine, "PenicheALaDerive", 10, 6, 588, 5, 0, Color3.fromRGB(30, 80, 50), Enum.Material.Wood),
 		Vector3.new(0, 0, 10),
 		5
 	)
-	dalle(vilaine, "Ponton", 4, 8, 556, 16, 0, couleurs.ponton, Enum.Material.WoodPlanks)
-	checkpoint(vilaine, 11, 568, 16, 0, "La Vilaine")
-	dalle(vilaine, "Bouee", 3, 3, 580, 16, 0, Color3.fromRGB(240, 90, 40))
-	fragile(dalle(vilaine, "BoueeCrevee", 3, 3, 587, 17, 2, couleurs.papier))
-	dalle(vilaine, "Bouee", 3, 3, 594, 18, -1, Color3.fromRGB(240, 90, 40))
-	fragile(dalle(vilaine, "BoueeCrevee", 3, 3, 601, 18, 1, couleurs.papier))
-	checkpoint(vilaine, 12, 614, 18, 0, "Les quais")
-
-	---------------------------------------------------------------------------------------------------------------
-	-- 13 · Parlement de Bretagne
-	local parlement = dossier("7_Parlement", accents.parlement)
-	pilier(parlement, "Colonne", 4, 4, 626, 20, 0, couleurs.pierre, Enum.Material.Marble)
-	pilier(parlement, "Colonne", 3, 3, 633, 22, 0, couleurs.pierre, Enum.Material.Marble)
-	pilier(parlement, "Colonne", 3, 3, 640, 24, 0, couleurs.pierre, Enum.Material.Marble)
-	pilier(parlement, "Colonne", 2, 2, 647, 26, 0, couleurs.pierre, Enum.Material.Marble)
-	pilier(parlement, "Colonne", 2, 2, 654, 27, 0, couleurs.pierre, Enum.Material.Marble)
-	checkpoint(parlement, 13, 666, 28, 0, "Parlement de Bretagne")
-	local facadeParlement = immeuble(parlement, 650, 40, 70, 16, 40, couleurs.pierre)
-	texte(Enum.NormalId.Front, "PARLEMENT DE BRETAGNE", Color3.fromRGB(150, 120, 40), couleurs.pierre).Parent =
-		facadeParlement
-	decor(bloc(parlement, "Toit", 70, 8, 16, 650, 38, 40, Color3.fromRGB(50, 60, 80), Enum.Material.Slate))
-	drapeauBreton(parlement, 625, 38, 36)
-	drapeauBreton(parlement, 675, 38, 36)
-
-	---------------------------------------------------------------------------------------------------------------
-	-- 14 · Le Thabor
-	local thabor = dossier("8_Thabor", accents.thabor)
-	local pelouse = mortel(dalle(thabor, "PelouseInterdite", 60, 40, 705, 20, 0, couleurs.pelouse, Enum.Material.Grass))
-	pelouse.CanQuery = false
-	bloc(thabor, "Haie", 4, 3, 8, 680, 25, 0, couleurs.haie, Enum.Material.Grass)
-	bloc(thabor, "Haie", 4, 3, 8, 688, 23, 4, couleurs.haie, Enum.Material.Grass)
-	bloc(thabor, "Haie", 4, 3, 8, 696, 23, -4, couleurs.haie, Enum.Material.Grass)
-	bloc(thabor, "Haie", 4, 3, 8, 704, 23, 4, couleurs.haie, Enum.Material.Grass)
-	bloc(thabor, "Haie", 4, 3, 8, 712, 24, 0, couleurs.haie, Enum.Material.Grass)
-	checkpoint(thabor, 14, 726, 24, 0, "Le Thabor")
-	panneau(thabor, "PELOUSE INTERDITE\n(vraiment)", 678, 20, 12, 8)
-	for i = 0, 6 do
-		arbre(thabor, 678 + i * 9, 26 + (i % 2) * 4, 1.4)
-		arbre(thabor, 682 + i * 9, -26 - (i % 2) * 4, 1.3)
+	dalle(vilaine, "Ponton", 4, 8, 599, 5, 0, couleurs.ponton, Enum.Material.WoodPlanks)
+	checkpoint(vilaine, 11, 611, 5, 0, "La Vilaine")
+	dalle(vilaine, "Bouee", 4, 4, 622, 8, 0, Color3.fromRGB(240, 90, 40))
+	fragile(dalle(vilaine, "BoueeCrevee", 4, 4, 629, 11, 2, couleurs.papier))
+	dalle(vilaine, "Bouee", 4, 4, 636, 14, -1, Color3.fromRGB(240, 90, 40))
+	checkpoint(vilaine, 12, 647, 17, 0, "Les quais")
+	for _, dz in { -4, 4 } do
+		decor(bloc(vilaine, "PileDuPont", 3, 15, 3, 647, 16, dz, couleurs.pierre, Enum.Material.Cobblestone))
 	end
 
 	---------------------------------------------------------------------------------------------------------------
-	-- 15 · Sup de Vinci, salle de partiel
+	-- 13 · Le Parlement de Bretagne : colonnes, corniches de la façade, puis le toit d'ardoise (glissant, donc
+	-- mortel) qu'on traverse de lucarne en lucarne.
+	local parlement = dossier("7_Parlement", accents.parlement)
+	pilier(parlement, "Colonne", 4, 4, 657, 20, 0, couleurs.pierre, Enum.Material.Marble)
+	pilier(parlement, "Colonne", 3, 3, 664, 23, 0, couleurs.pierre, Enum.Material.Marble)
+	pilier(parlement, "Colonne", 3, 3, 671, 26, 0, couleurs.pierre, Enum.Material.Marble)
+	pilier(parlement, "Colonne", 2, 2, 677, 29, 0, couleurs.pierre, Enum.Material.Marble)
+	decor(boite(parlement, "Parlement", 685, 745, SOL, 40, -15, 15, couleurs.pierre, Enum.Material.Marble))
+	local frontonParlement = decor(boite(parlement, "Fronton", 684.6, 685, 18, 28, -12, 12, couleurs.pierre))
+	texte(Enum.NormalId.Left, "PARLEMENT DE BRETAGNE", Color3.fromRGB(150, 120, 40), couleurs.pierre).Parent =
+		frontonParlement
+	dalle(parlement, "Corniche", 4, 4, 683, 32, 0, couleurs.or_, Enum.Material.Marble)
+	dalle(parlement, "Corniche", 4, 4, 683, 35, 6, couleurs.or_, Enum.Material.Marble)
+	dalle(parlement, "Corniche", 4, 4, 683, 38, 12, couleurs.or_, Enum.Material.Marble)
+	mortel(
+		boite(
+			parlement,
+			"ArdoiseGlissante",
+			685,
+			745,
+			40,
+			40.6,
+			-15,
+			15,
+			Color3.fromRGB(50, 60, 80),
+			Enum.Material.Slate
+		)
+	)
+	-- On monte la façade en diagonale (corniches de Z = 0 à Z = 12), puis on revient vers l'axe de lucarne en lucarne.
+	local lucarnes = { { 689, 8 }, { 697, 0 }, { 705, 0 }, { 723, 0 }, { 731, 0 }, { 739, 0 } }
+	for _, l in lucarnes do
+		bloc(parlement, "Lucarne", 4, 2, 4, l[1], 42, l[2], couleurs.pierre, Enum.Material.Marble)
+	end
+	decor(bloc(parlement, "Campanile", 8, 2, 8, 715, 41, 0, couleurs.pierre, Enum.Material.Marble))
+	checkpoint(parlement, 13, 715, 42, 0, "Sur le toit du Parlement", 8)
+	drapeauBreton(parlement, 743, 40, -14)
+	drapeauBreton(parlement, 743, 40, 6)
+
+	---------------------------------------------------------------------------------------------------------------
+	-- 14 · Le Thabor : de cime en cime au-dessus de la pelouse interdite (mortelle), puis les haies.
+	local thabor = dossier("8_Thabor", accents.thabor)
+	mortel(boite(thabor, "PelouseInterdite", 748, 818, 11, 12, -30, 30, couleurs.pelouse, Enum.Material.Grass))
+	local cimes = { { 750, 36, 0 }, { 758, 30, 4 }, { 766, 24, -4 }, { 774, 18, 3 } }
+	for _, c in cimes do
+		bloc(thabor, "Cime", 6, 3, 6, c[1], c[2], c[3], couleurs.feuillage, Enum.Material.Grass)
+		decor(bloc(thabor, "Tronc", 1.5, c[2] - 3 - SOL, 1.5, c[1], c[2] - 3, c[3], couleurs.tronc, Enum.Material.Wood))
+	end
+	bloc(thabor, "Haie", 4, 3, 8, 782, 16, -3, couleurs.haie, Enum.Material.Grass)
+	bloc(thabor, "Haie", 4, 3, 8, 790, 17, 4, couleurs.haie, Enum.Material.Grass)
+	bloc(thabor, "Haie", 4, 3, 8, 798, 18, 0, couleurs.haie, Enum.Material.Grass)
+	checkpoint(thabor, 14, 810, 18, 0, "Le Thabor")
+	local pancarte = fantome(bloc(thabor, "PancartePelouse", 0.4, 3, 8, 760, 18, 14, Color3.fromRGB(25, 25, 30)))
+	texte(Enum.NormalId.Left, "PELOUSE INTERDITE\n(vraiment)", Color3.fromRGB(255, 255, 255)).Parent = pancarte
+	for i = 0, 5 do
+		arbre(thabor, 752 + i * 11, 24 + (i % 2) * 4, 1.4, 12)
+		arbre(thabor, 756 + i * 11, -24 - (i % 2) * 4, 1.3, 12)
+	end
+
+	---------------------------------------------------------------------------------------------------------------
+	-- 15 · Sup de Vinci : on entre par la porte, on monte l'atrium de palier en palier (le hall en travaux est
+	-- mortel), et on arrive dans la salle de partiel, en mezzanine.
 	local vinci = dossier("9_SupDeVinci", accents.vinci)
-	dalle(vinci, "Marche", 4, 10, 737, 26, 0, couleurs.pierre, Enum.Material.Concrete)
-	dalle(vinci, "Marche", 4, 10, 743, 28, 0, couleurs.pierre, Enum.Material.Concrete)
-	dalle(vinci, "Marche", 4, 10, 749, 30, 0, couleurs.pierre, Enum.Material.Concrete)
-	checkpoint(vinci, 15, 762, 30, 0, "Sup de Vinci · salle de partiel", 16)
-	-- Le bâtiment ferme le parcours : un mur de verre derrière l'arrivée, le nom de l'école sur sa façade.
-	decor(pilier(vinci, "Batiment", 30, 40, 785, 52, 0, couleurs.vinci, Enum.Material.Glass))
-	local fronton = decor(bloc(vinci, "Fronton", 0.4, 8, 26, 769.8, 48, 0, couleurs.vinci, Enum.Material.SmoothPlastic))
-	texte(Enum.NormalId.Left, "SUP DE VINCI", Color3.fromRGB(255, 255, 255), couleurs.vinci).Parent = fronton
-	for i = 0, 1 do
-		for _, z in { -5, 5 } do
-			decor(bloc(vinci, "TableDExamen", 3, 3, 2, 760 + i * 6, 33, z, couleurs.bois, Enum.Material.Wood))
+	dalle(vinci, "Marche", 4, 4, 820, 18, 0, couleurs.pierre, Enum.Material.Concrete)
+	batiment(vinci, "SupDeVinci", 825, 865, -16, 16, 56, Color3.fromRGB(70, 120, 200), Enum.Material.Glass, {
+		["-X"] = { centre = 0, largeur = 8, bas = 18, haut = 30 },
+	})
+	local frontonVinci = decor(boite(vinci, "Fronton", 824.6, 825, 34, 42, -13, 13, couleurs.vinci))
+	texte(Enum.NormalId.Left, "SUP DE VINCI", Color3.fromRGB(255, 255, 255), couleurs.vinci).Parent = frontonVinci
+	mortel(
+		boite(
+			vinci,
+			"HallEnTravaux",
+			826,
+			864,
+			15,
+			16,
+			-15,
+			15,
+			Color3.fromRGB(240, 170, 40),
+			Enum.Material.DiamondPlate
+		)
+	)
+	dalle(vinci, "Accueil", 6, 8, 829, 18, 0, couleurs.beton, Enum.Material.Concrete)
+	local paliers = { { 837, -10 }, { 845, -11 }, { 853, -11 }, { 860, -5 }, { 860, 4 }, { 853, 11 }, { 845, 11 } }
+	for i, pos in paliers do
+		local p = dalle(vinci, "Palier", 5, 5, pos[1], 18 + 3 * i, pos[2], couleurs.beton, Enum.Material.Concrete)
+		if i == 3 then
+			fragile(p)
 		end
 	end
-	tableauClassement(vinci, 762, 30, -14, Enum.NormalId.Back)
-	tableauClassement(vinci, 762, 30, 14, Enum.NormalId.Front, "TableauAura", "Plus grosse aura", accents.soif)
-	drapeauBreton(vinci, 772, 52, -16)
-	local canon = decor(bloc(vinci, "Confettis", 14, 0.2, 14, 762, 45, 0, couleurs.or_))
+	checkpoint(vinci, 15, 834, 42, 8, "Sup de Vinci · salle de partiel", 12, true)
+	for _, x in { 831, 837 } do
+		for _, z in { 5, 11 } do
+			decor(bloc(vinci, "TableDExamen", 3, 3, 2, x, 45, z, couleurs.bois, Enum.Material.Wood))
+		end
+	end
+	tableau(vinci, 836, 42, 14.5, Enum.NormalId.Front, "TableauClassement", "Meilleurs temps", couleurs.vinci, true)
+	tableau(vinci, 851, 42, 14.5, Enum.NormalId.Front, "TableauAura", "Plus grosse aura", accents.soif, true)
+	drapeauBreton(vinci, 862, 56, -15)
+	local canon = fantome(bloc(vinci, "Confettis", 12, 0.2, 12, 834, 52, 8, couleurs.or_))
 	canon.Transparency = 1
-	canon.CanCollide = false
 	local confettis = Instance.new("ParticleEmitter")
 	confettis.Rate = 25
 	confettis.Lifetime = NumberRange.new(3, 5)
@@ -771,59 +1033,14 @@ return function(R)
 	confettis.Parent = canon
 
 	---------------------------------------------------------------------------------------------------------------
-	-- Références : bâtiments de Rennes, culture étudiante, sarcasme sur la situation, mascottes brain rot maison.
-	-- Tout est décor, hors du chemin (Z au-delà de ±16), et ne prend aucun contour.
+	-- Références : bâtiments de Rennes, sarcasme sur la vie étudiante, mascottes brain rot maison.
+	-- Tout est fantôme (on ne peut pas s'y poser) et hors du chemin.
 	local refs = dossier("References")
 
-	local function boule(parent, nom, taille, x, y, z, couleur, materiau)
-		local b = decor(Instance.new("Part"))
-		b.Name = nom
-		b.Shape = Enum.PartType.Ball
-		b.Anchored = true
-		b.Size = Vector3.new(taille, taille, taille)
-		b.CFrame = CFrame.new(x, y, z)
-		b.Color = couleur
-		b.Material = materiau or Enum.Material.SmoothPlastic
-		b.Parent = parent
-		return b
-	end
-
-	local function cylindre(parent, nom, longueur, diametre, cf, couleur, materiau)
-		local c = decor(Instance.new("Part"))
-		c.Name = nom
-		c.Shape = Enum.PartType.Cylinder
-		c.Anchored = true
-		c.Size = Vector3.new(longueur, diametre, diametre)
-		c.CFrame = cf
-		c.Color = couleur
-		c.Material = materiau or Enum.Material.SmoothPlastic
-		c.Parent = parent
-		return c
-	end
-	local DEBOUT = CFrame.Angles(0, 0, math.rad(90)) -- un cylindre Roblox est couché sur X : on le redresse
-
-	-- Nom flottant au-dessus d'un objet, visible de loin.
-	local function etiquette(part, contenu: string, couleur, hauteur)
-		local gui = Instance.new("BillboardGui")
-		gui.Size = UDim2.fromOffset(320, 60)
-		gui.StudsOffset = Vector3.new(0, hauteur or 4, 0)
-		gui.MaxDistance = 250
-		local label = Instance.new("TextLabel")
-		label.Size = UDim2.fromScale(1, 1)
-		label.BackgroundTransparency = 1
-		label.TextColor3 = couleur or Color3.fromRGB(255, 255, 255)
-		label.TextStrokeTransparency = 0
-		label.TextScaled = true
-		label.Font = Enum.Font.GothamBlack
-		label.Text = contenu
-		label.Parent = gui
-		gui.Parent = part
-	end
-
-	-- Affiche publicitaire sur pied, au bord du chemin, tournée vers le parcours.
+	-- Affiche sur pied au bord du chemin (Z = ±17), tournée vers le parcours.
 	local function affiche(contenu: string, x, haut, cote, fond, encre)
 		local z = cote * 17
-		decor(
+		fantome(
 			bloc(
 				refs,
 				"PiedAffiche",
@@ -837,9 +1054,9 @@ return function(R)
 				Enum.Material.Metal
 			)
 		)
-		local plaque = decor(bloc(refs, "Affiche", 12, 6, 0.4, x, haut + 3, z, fond, Enum.Material.SmoothPlastic))
+		local plaque = fantome(bloc(refs, "Affiche", 12, 6, 0.4, x, haut + 3, z, fond))
 		texte(if cote < 0 then Enum.NormalId.Back else Enum.NormalId.Front, contenu, encre, fond).Parent = plaque
-		decor(
+		fantome(
 			bloc(
 				refs,
 				"CadreAffiche",
@@ -854,47 +1071,54 @@ return function(R)
 			)
 		)
 	end
-
-	-- Les affiches, du départ à l'arrivée : sarcasme étudiant et brain rot.
 	local noir, blanc = Color3.fromRGB(20, 20, 25), Color3.fromRGB(255, 255, 255)
 	affiche(
 		"STUDIO 9 m² · 690 €/mois\ncharges non comprises · vue sur poubelle",
 		20,
-		10,
+		38,
 		1,
 		Color3.fromRGB(255, 240, 200),
 		noir
 	)
-	affiche("MOODLE EST EN MAINTENANCE\n(depuis ta naissance)", 60, 18, -1, Color3.fromRGB(250, 120, 40), blanc)
-	affiche("WIFI EDUROAM\nstatut : déconnecté", 110, 20, 1, Color3.fromRGB(40, 60, 140), blanc)
-	affiche("PROCHAINE RAME : 404\nNOT FOUND", 150, 20, -1, Color3.fromRGB(235, 50, 60), blanc)
-	affiche("+1000 AURA\nsi tu passes sans tomber", 215, 15, 1, Color3.fromRGB(255, 120, 220), noir)
 	affiche(
-		"PARCOURSUP\nrang 4 867 · en attente",
-		290,
-		16,
+		"COLOC CHERCHE 4e COLOC\ndoit aimer les pâtes et les grèves",
+		45,
+		22,
 		-1,
-		Color3.fromRGB(255, 255, 255),
-		Color3.fromRGB(30, 80, 170)
+		Color3.fromRGB(250, 120, 40),
+		blanc
 	)
-	affiche("RU : PLUS DE FRITES\nil reste du chou-fleur", 340, 20, 1, Color3.fromRGB(120, 200, 60), noir)
+	affiche("PROCHAINE RAME :\nquand les poules auront un pass STAR", 150, 40, -1, Color3.fromRGB(235, 50, 60), blanc)
+	affiche("+1000 AURA\nsi tu passes sans tomber", 172, 40, 1, Color3.fromRGB(255, 120, 220), noir)
+	affiche("PARCOURSUP\nrang 4 867 · en attente", 268, 22, 1, blanc, Color3.fromRGB(30, 80, 170))
+	affiche("RU : PLUS DE FRITES\nil reste du chou-fleur", 300, 25, -1, Color3.fromRGB(120, 200, 60), noir)
+	affiche("GALETTE-SAUCISSE · 5 €\n(3 € avant l'inflation)", 330, 24, -1, Color3.fromRGB(205, 150, 75), noir)
+	affiche(
+		"GRÈVE DES ÉBOUEURS : J+12\nl'odeur, elle, ne fait pas grève",
+		358,
+		27,
+		1,
+		Color3.fromRGB(40, 170, 90),
+		blanc
+	)
+	affiche("ASCENSEUR EN PANNE\ndepuis 2019", 440, 44, -1, Color3.fromRGB(240, 160, 40), noir)
 	affiche(
 		"TRANSMUSICALES\ncomplet · comme ton agenda",
-		420,
-		28,
+		478,
+		36,
 		-1,
 		Color3.fromRGB(20, 20, 30),
 		Color3.fromRGB(255, 70, 180)
 	)
-	affiche("SKIBIDI PARTIEL\n8 h · amphi B · pas de rattrapage", 490, 28, 1, Color3.fromRGB(255, 220, 40), noir)
-	affiche("IL NE PLEUT PAS À RENNES\nil bruine.", 545, 22, -1, Color3.fromRGB(120, 140, 160), blanc)
-	affiche("BAIGNADE INTERDITE\n(sauf si tu rates le saut)", 590, 22, 1, Color3.fromRGB(40, 150, 230), blanc)
-	affiche("KOUIGN-AMANN\n0 % de beurre doux, 100 % de bonheur", 640, 32, -1, Color3.fromRGB(230, 170, 70), noir)
-	affiche("POV : t'as révisé\nla veille à 3 h", 705, 30, 1, Color3.fromRGB(150, 90, 255), blanc)
+	affiche("SKIBIDI PARTIEL\n8 h · amphi B · pas de rattrapage", 520, 16, 1, Color3.fromRGB(255, 220, 40), noir)
+	affiche("IL NE PLEUT PAS À RENNES\nil bruine.", 575, 12, -1, Color3.fromRGB(120, 140, 160), blanc)
+	affiche("BAIGNADE INTERDITE\n(sauf si tu rates le saut)", 605, 12, 1, Color3.fromRGB(40, 150, 230), blanc)
+	affiche("KOUIGN-AMANN\n0 % de beurre doux, 100 % de bonheur", 660, 26, -1, Color3.fromRGB(230, 170, 70), noir)
+	affiche("POV : t'as révisé\nla veille à 3 h", 770, 30, 1, Color3.fromRGB(150, 90, 255), blanc)
 	affiche(
-		"BUDGET DE L'ÉCOLE\nimprimante : toujours en panne",
-		750,
-		36,
+		"LOYER, BOURSE, INFLATION\nle vrai boss final",
+		818,
+		26,
 		-1,
 		Color3.fromRGB(240, 240, 240),
 		Color3.fromRGB(200, 40, 40)
@@ -902,39 +1126,31 @@ return function(R)
 
 	-- Galettino Saucissino : mascotte brain rot maison, une galette-saucisse géante à lunettes, près du cortège.
 	do
-		local x, z = 285, -38
+		local x, z = 318, -42
 		cylindre(refs, "Jambe", 8, 2.2, CFrame.new(x - 3, SOL + 4, z) * DEBOUT, Color3.fromRGB(170, 70, 50))
 		cylindre(refs, "Jambe", 8, 2.2, CFrame.new(x + 3, SOL + 4, z) * DEBOUT, Color3.fromRGB(170, 70, 50))
-		decor(bloc(refs, "Galette", 16, 22, 2, x, SOL + 30, z - 2, Color3.fromRGB(205, 150, 75), Enum.Material.Sand))
+		fantome(bloc(refs, "Galette", 16, 22, 2, x, SOL + 30, z - 2, Color3.fromRGB(205, 150, 75), Enum.Material.Sand))
 		cylindre(refs, "Saucisse", 22, 7, CFrame.new(x, SOL + 19, z + 1) * DEBOUT, Color3.fromRGB(185, 75, 55))
 		local tete = boule(refs, "Tete", 7, x, SOL + 30, z + 1, Color3.fromRGB(185, 75, 55))
-		decor(
+		fantome(
 			bloc(refs, "Lunettes", 7.5, 1.6, 0.6, x, SOL + 32, z + 4.6, Color3.fromRGB(15, 15, 20), Enum.Material.Glass)
 		)
-		decor(bloc(refs, "Sourire", 3, 0.5, 0.4, x, SOL + 28.6, z + 4.4, Color3.fromRGB(40, 15, 10)))
+		fantome(bloc(refs, "Sourire", 3, 0.5, 0.4, x, SOL + 28.6, z + 4.4, Color3.fromRGB(40, 15, 10)))
 		etiquette(tete, "GALETTINO SAUCISSINO", Color3.fromRGB(255, 210, 60), 7)
-		affiche("GALETTE-SAUCISSE · 5 €\n(3 € avant l'inflation)", 300, 14, -1, Color3.fromRGB(205, 150, 75), noir)
 	end
 
 	-- Kouign Amannini : deuxième mascotte maison, un kouign-amann à couronne qui surveille la Vilaine.
 	do
-		local x, z = 600, -44
-		local corps = decor(Instance.new("Part"))
-		corps.Name = "KouignAmann"
-		corps.Shape = Enum.PartType.Ball
-		corps.Anchored = true
+		local x, z = 640, -46
+		local corps = boule(refs, "KouignAmann", 16, x, SOL + 5, z, Color3.fromRGB(215, 140, 55), Enum.Material.Sand)
 		corps.Size = Vector3.new(16, 10, 16)
-		corps.CFrame = CFrame.new(x, SOL + 5, z)
-		corps.Color = Color3.fromRGB(215, 140, 55)
-		corps.Material = Enum.Material.Sand
-		corps.Parent = refs
 		for _, dx in { -3, 3 } do
 			boule(refs, "Oeil", 3, x + dx, SOL + 8, z + 6.5, Color3.fromRGB(255, 255, 255))
 			boule(refs, "Pupille", 1.4, x + dx, SOL + 8, z + 7.8, Color3.fromRGB(15, 15, 20))
 		end
 		for i = 0, 4 do
 			local angle = math.rad(i * 72)
-			decor(
+			fantome(
 				bloc(
 					refs,
 					"Couronne",
@@ -954,20 +1170,20 @@ return function(R)
 
 	-- Hôtel de ville et son horloge : il est toujours l'heure du partiel.
 	do
-		local x, z = 330, -48
+		local x, z = 270, -50
 		immeuble(refs, x, z, 44, 14, 24, Color3.fromRGB(235, 220, 185), true)
 		immeuble(refs, x, z, 10, 10, 44, Color3.fromRGB(225, 210, 175), true)
-		decor(bloc(refs, "Dome", 6, 6, 6, x, SOL + 50, z, Color3.fromRGB(80, 95, 120), Enum.Material.Slate))
-		local horloge = decor(bloc(refs, "Horloge", 6, 6, 0.4, x, SOL + 38, z + 5.2, Color3.fromRGB(255, 250, 235)))
+		fantome(bloc(refs, "Dome", 6, 6, 6, x, SOL + 50, z, Color3.fromRGB(80, 95, 120), Enum.Material.Slate))
+		local horloge = fantome(bloc(refs, "Horloge", 6, 6, 0.4, x, SOL + 38, z + 5.2, Color3.fromRGB(255, 250, 235)))
 		texte(Enum.NormalId.Back, "8:00", Color3.fromRGB(30, 30, 40), Color3.fromRGB(255, 250, 235)).Parent = horloge
-		local fronton = decor(bloc(refs, "Fronton", 30, 3, 0.4, x, SOL + 20, z + 7.2, Color3.fromRGB(235, 220, 185)))
+		local fronton = fantome(bloc(refs, "Fronton", 30, 3, 0.4, x, SOL + 20, z + 7.2, Color3.fromRGB(235, 220, 185)))
 		texte(Enum.NormalId.Back, "HÔTEL DE VILLE", Color3.fromRGB(90, 70, 40), Color3.fromRGB(235, 220, 185)).Parent =
 			fronton
 	end
 
 	-- Portes Mordelaises : deux tours rondes et une porte, l'ancienne entrée de la ville.
 	do
-		local x, z = 430, -46
+		local x, z = 470, -48
 		for _, dx in { -9, 9 } do
 			cylindre(
 				refs,
@@ -978,7 +1194,7 @@ return function(R)
 				Color3.fromRGB(150, 140, 125),
 				Enum.Material.Cobblestone
 			)
-			decor(
+			fantome(
 				bloc(
 					refs,
 					"Creneau",
@@ -993,7 +1209,7 @@ return function(R)
 				)
 			)
 		end
-		local porte = decor(
+		local porte = fantome(
 			bloc(refs, "Porte", 8, 18, 8, x, SOL + 18, z, Color3.fromRGB(160, 150, 135), Enum.Material.Cobblestone)
 		)
 		texte(Enum.NormalId.Back, "PORTES MORDELAISES", Color3.fromRGB(255, 255, 255), Color3.fromRGB(110, 100, 90)).Parent =
@@ -1002,24 +1218,23 @@ return function(R)
 
 	-- Les Champs Libres : bâtiment incliné et planétarium en boule de verre, au bord de la Vilaine.
 	do
-		local x, z = 545, -50
-		local corps = decor(
+		local x, z = 600, -54
+		local corps = fantome(
 			bloc(refs, "ChampsLibres", 30, 18, 16, x, SOL + 18, z, Color3.fromRGB(70, 75, 90), Enum.Material.Glass)
 		)
 		corps.CFrame = corps.CFrame * CFrame.Angles(0, 0, math.rad(-8))
 		boule(refs, "Planetarium", 14, x + 18, SOL + 8, z + 2, Color3.fromRGB(150, 200, 240), Enum.Material.Glass)
-		local enseigne = decor(bloc(refs, "Enseigne", 20, 3, 0.4, x, SOL + 22, z + 8.4, Color3.fromRGB(20, 20, 30)))
+		local enseigne = fantome(bloc(refs, "Enseigne", 20, 3, 0.4, x, SOL + 22, z + 8.4, Color3.fromRGB(20, 20, 30)))
 		texte(Enum.NormalId.Back, "LES CHAMPS LIBRES", Color3.fromRGB(255, 255, 255)).Parent = enseigne
 	end
 
-	-- Le crachin breton : un nuage qui bruine au-dessus de la Vilaine (sans gêner les sauts).
+	-- Le crachin breton : un nuage qui bruine au-dessus de la Vilaine.
 	do
 		for i = 0, 4 do
-			boule(refs, "Nuage", 12 + (i % 2) * 4, 555 + i * 9, 58 + (i % 2) * 2, 2, Color3.fromRGB(205, 210, 220))
+			boule(refs, "Nuage", 12 + (i % 2) * 4, 575 + i * 9, 58 + (i % 2) * 2, 2, Color3.fromRGB(205, 210, 220))
 		end
-		local source = decor(bloc(refs, "Bruine", 44, 0.2, 18, 573, 54, 2, Color3.fromRGB(200, 200, 210)))
+		local source = fantome(bloc(refs, "Bruine", 44, 0.2, 18, 593, 54, 2, Color3.fromRGB(200, 200, 210)))
 		source.Transparency = 1
-		source.CanCollide = false
 		local pluie = Instance.new("ParticleEmitter")
 		pluie.Rate = 120
 		pluie.Lifetime = NumberRange.new(1.5, 2)
@@ -1031,12 +1246,12 @@ return function(R)
 		pluie.Parent = source
 	end
 
-	-- Un bus STAR en grève, garé dans la rue sous le cortège.
+	-- Un bus STAR en grève, garé dans la rue.
 	do
-		local x, z = 235, -14
-		decor(bloc(refs, "Bus", 24, 8, 7, x, SOL + 9, z, Color3.fromRGB(235, 235, 240), Enum.Material.SmoothPlastic))
-		decor(bloc(refs, "BandeBus", 24.2, 2, 7.2, x, SOL + 4, z, Color3.fromRGB(220, 40, 50)))
-		decor(bloc(refs, "VitresBus", 22, 2.5, 7.1, x, SOL + 7.5, z, Color3.fromRGB(40, 50, 70), Enum.Material.Glass))
+		local x, z = 230, -28
+		fantome(bloc(refs, "Bus", 24, 8, 7, x, SOL + 9, z, Color3.fromRGB(235, 235, 240)))
+		fantome(bloc(refs, "BandeBus", 24.2, 2, 7.2, x, SOL + 4, z, Color3.fromRGB(220, 40, 50)))
+		fantome(bloc(refs, "VitresBus", 22, 2.5, 7.1, x, SOL + 7.5, z, Color3.fromRGB(40, 50, 70), Enum.Material.Glass))
 		for _, dx in { -8, 8 } do
 			cylindre(
 				refs,
@@ -1047,16 +1262,16 @@ return function(R)
 				Color3.fromRGB(25, 25, 25)
 			)
 		end
-		local girouette =
-			decor(bloc(refs, "Girouette", 0.4, 1.5, 6, x - 12.2, SOL + 8.6, z, Color3.fromRGB(10, 10, 10)))
+		local girouetteBus =
+			fantome(bloc(refs, "Girouette", 0.4, 1.5, 6, x - 12.2, SOL + 8.6, z, Color3.fromRGB(10, 10, 10)))
 		texte(Enum.NormalId.Left, "EN GRÈVE", Color3.fromRGB(255, 170, 30), Color3.fromRGB(10, 10, 10)).Parent =
-			girouette
+			girouetteBus
 	end
 
 	-- Roazhon Park, derrière le départ : tribunes rouges et noires autour d'une pelouse.
 	do
-		local x, z = -110, 0
-		decor(bloc(refs, "Pelouse", 50, 0.4, 34, x, SOL + 0.4, z, Color3.fromRGB(70, 170, 70), Enum.Material.Grass))
+		local x, z = -115, 0
+		fantome(bloc(refs, "Pelouse", 50, 0.4, 34, x, SOL + 0.4, z, Color3.fromRGB(70, 170, 70), Enum.Material.Grass))
 		local tribunes = {
 			{ dx = 0, dz = -23, sx = 60, sz = 10 },
 			{ dx = 0, dz = 23, sx = 60, sz = 10 },
@@ -1065,9 +1280,11 @@ return function(R)
 		}
 		for i, t in tribunes do
 			local couleur = if i % 2 == 0 then Color3.fromRGB(20, 20, 20) else Color3.fromRGB(210, 30, 40)
-			decor(bloc(refs, "Tribune", t.sx, 16, t.sz, x + t.dx, SOL + 16, z + t.dz, couleur, Enum.Material.Concrete))
+			fantome(
+				bloc(refs, "Tribune", t.sx, 16, t.sz, x + t.dx, SOL + 16, z + t.dz, couleur, Enum.Material.Concrete)
+			)
 		end
-		local nom = decor(bloc(refs, "NomStade", 0.4, 4, 30, x + 36.2, SOL + 13, z, Color3.fromRGB(210, 30, 40)))
+		local nom = fantome(bloc(refs, "NomStade", 0.4, 4, 30, x + 36.2, SOL + 13, z, Color3.fromRGB(210, 30, 40)))
 		texte(Enum.NormalId.Right, "ROAZHON PARK", Color3.fromRGB(255, 255, 255), Color3.fromRGB(210, 30, 40)).Parent =
 			nom
 	end

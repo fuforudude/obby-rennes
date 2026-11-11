@@ -13,7 +13,7 @@ local CHUTES = {
 	"C'est pas la chute qui compte, c'est la remontée.",
 	"Le crachin breton t'a fait glisser. C'est ça, l'excuse.",
 	"Galettino Saucissino a vu ça. Il ne dira rien. Peut-être.",
-	"Moodle a planté, toi aussi.",
+	"Même le crachin tombe avec plus de style.",
 	"Pas de rattrapage pour ce saut. Ah si, en fait.",
 }
 

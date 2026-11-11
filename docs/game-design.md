@@ -26,29 +26,32 @@ Ton : **satire du quotidien étudiant**, sans prendre parti. Pas de police, pas 
 Tout le parcours est truffé de références, à trois endroits :
 - **Les textes** : à chaque checkpoint, une anecdote vraie sur Rennes et une vanne (brain rot, sarcasme étudiant) ; une vanne à chaque chute (« Skill issue. », « Le jus de poubelle t'a ratio. »…).
 - **La ville** : hôtel de ville et son horloge bloquée sur 8:00, portes Mordelaises, Champs Libres, cathédrale Saint-Pierre, tours Les Horizons, Roazhon Park derrière le départ, bus STAR « EN GRÈVE », nuage de crachin au-dessus de la Vilaine.
-- **Les affiches** au bord du chemin : studio 9 m² à 690 €, Moodle en maintenance, eduroam déconnecté, Parcoursup en attente, RU sans frites, Transmusicales complètes, galette-saucisse à 5 €…
+- **Les affiches** au bord du chemin : studio 9 m² à 690 €, coloc qui cherche un 4e « qui aime les pâtes et les grèves », Parcoursup en attente, RU sans frites, grève des éboueurs J+12, ascenseur en panne depuis 2019, Transmusicales complètes, galette-saucisse à 5 €, « loyer, bourse, inflation : le vrai boss final »… (peu de références à l'informatique, à la demande)
 - **Deux mascottes brain rot maison** (personnages originaux) : **Galettino Saucissino** (galette-saucisse géante à lunettes, près du cortège) et **Kouign Amannini** (kouign-amann couronné, au bord de la Vilaine).
 
-## Les 15 étapes
-| Étape | Zone | Ce qu'on y fait |
-|---|---|---|
-| 0 | La coloc à Villejean | Départ, chrono lancé |
-| 1-2 | Fac bloquée | Tables, chaises empilées, piles de copies qui s'effondrent |
-| 3-4 | Métro en grève | Sauter de rame en rame, une rame qui bouge quand même, l'escalator à l'arrêt |
-| 5-6 | Cortège place de la République | Banderoles qui bougent, pancartes, le camion sono qui te porte |
-| 7-8 | Barricades de poubelles | Bacs et cartons au-dessus du jus de poubelle (mortel), grande barricade à escalader |
-| 9-10 | Rue de la Soif | Sauts de toit en toit sur les maisons à colombages, enseigne de bar qui tourne |
-| 11-12 | La Vilaine | Pontons, péniche qui dérive, bouées ; l'eau est mortelle |
-| 13 | Parlement de Bretagne | Colonnes de plus en plus étroites |
-| 14 | Le Thabor | Haies au-dessus de la pelouse interdite (mortelle) |
-| 15 | Sup de Vinci | Arrivée en salle de partiel |
+## Le tracé et les 15 étapes
+Un seul chemin, jamais de choix de route, mais en trois dimensions : des hauts et des bas, et des bâtiments qu'on traverse pour de vrai (on entre par une ouverture encadrée de néon, on ressort de l'autre côté). Altitude de 5 (au ras de la Vilaine) à 66 (le 20e étage de la tour).
+
+| Étape | Zone | Ce qu'on y fait | Altitude |
+|---|---|---|---|
+| 0 | La coloc à Villejean | Départ sur le balcon du 5e, descente de balcon en balcon, étendoir à linge qui bouge | 40 → 16 |
+| 1-2 | Fac bloquée / l'amphi | Escalier de chaises jusqu'à la fenêtre, traversée de l'amphi par les rangées (sol couvert de café renversé), sortie par la fenêtre d'en face | 10 → 31 |
+| 3-4 | Viaduc de la ligne b / la station | De rame en rame au-dessus de la ville, une rame qui repart quand même, descente par les escalators (dont un en panne) | 34 → 14 |
+| 5-6 | Le cortège, place de la République | Pancartes, banderoles qui bougent, camion sono qui te porte | 15 → 19 |
+| 7-8 | Barricade de poubelles / la tour | Bacs au-dessus du jus de poubelle, puis **spirale de balcons autour d'une tour**, entrée au 20e par la fenêtre, traversée de l'appart (sol en Lego, ventilo de plafond), sortie de l'autre côté, descente par les échafaudages | 21 → 66 → 34 |
+| 9-10 | Rue de la Soif | De toit en toit sur les maisons à colombages, descente dans la rue par les auvents, enseigne de bar qui tourne | 33 → 10 |
+| 11-12 | La Vilaine / les quais | Au ras de l'eau (mortelle) : pontons, péniche à la dérive, puis remontée par les bouées | 7 → 17 |
+| 13 | Sur le toit du Parlement | Colonnes, corniches de la façade, puis le toit d'ardoise (glissant, donc mortel) de lucarne en lucarne | 20 → 42 |
+| 14 | Le Thabor | De cime en cime au-dessus de la pelouse interdite (mortelle), puis les haies | 36 → 18 |
+| 15 | Sup de Vinci | Entrée par la porte, montée de l'atrium de palier en palier (hall en travaux mortel), arrivée dans la salle de partiel en mezzanine | 18 → 42 |
 
 ## Direction artistique
 Reprise des règles de genre des obbys qui marchent, adaptées à Rennes (sans copier un jeu précis) :
 - **Le chemin se lit d'un coup d'œil** : tout ce qui se marche est saturé et cerné de la couleur de sa zone ; le décor de fond est en teintes douces.
 - **Une couleur par zone** (arche du checkpoint, contours) : on sait où on est et on voit qu'on avance.
 - **Ce qui tue est toujours cerné de rouge vif** (jus de poubelle, Vilaine, pelouse interdite).
-- **Checkpoints très visibles** : dalle lumineuse, grand numéro, arche néon avec le nom de la zone.
+- **Checkpoints très visibles** : dalle lumineuse, grand numéro, arche néon avec le nom de la zone (nom flottant quand on est à l'intérieur d'un bâtiment).
+- **Un seul chemin lisible même en 3D** : les ouvertures par où l'on entre et sort des bâtiments sont encadrées de néon blanc ; le décor de fond est « fantôme » (on le traverse en tombant, on ne peut jamais s'y poser).
 - **Rennes en fond** : rues, arbres, lampadaires, immeubles avec fenêtres, tours Les Horizons, cathédrale Saint-Pierre, drapeaux bretons, palais du Commerce, Parlement.
 - **Éclairage doux d'après-midi** : ombres claires, couleurs légèrement relevées, halo discret sur le néon, brume qui détache le fond (`Lighting` dans `default.project.json`). Confettis à l'arrivée.
 
