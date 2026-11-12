@@ -932,7 +932,7 @@ return function(R)
 		boite(
 			parlement,
 			"ArdoiseGlissante",
-			688,
+			690,
 			745,
 			40,
 			40.6,
@@ -942,9 +942,9 @@ return function(R)
 			Enum.Material.Slate
 		)
 	)
-	-- Gouttière de pierre le long du bord de la façade : on y atterrit depuis la dernière corniche, bien au-dessus
-	-- de l'ardoise (qui ne commence qu'à X = 688), pour ne jamais frôler une pièce mortelle en sautant.
-	boite(parlement, "Gouttiere", 684.5, 688, 40, 41.5, -15, 15, couleurs.pierre, Enum.Material.Marble)
+	-- Gouttière de pierre le long du bord de la façade, de X = 685 jusqu'à la première lucarne (X = 690) : on y
+	-- atterrit depuis la dernière corniche, bien au-dessus de l'ardoise (qui ne commence qu'à X = 690).
+	boite(parlement, "Gouttiere", 685, 690, 40, 41.5, -15, 15, couleurs.pierre, Enum.Material.Marble)
 	-- On monte la façade en diagonale (corniches de Z = 0 à Z = 12), puis on revient vers l'axe de lucarne en lucarne.
 	local lucarnes = { { 692, 8 }, { 697, 0 }, { 705, 0 }, { 723, 0 }, { 731, 0 }, { 739, 0 } }
 	for _, l in lucarnes do
