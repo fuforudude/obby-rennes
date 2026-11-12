@@ -1,0 +1,74 @@
+name: Publier
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Une publication en cours n'est jamais annulée : la suivante attend son tour.
+concurrency:
+  group: publication
+  cancel-in-progress: false
+
+jobs:
+  verifier:
+    uses: ./.github/workflows/verifier.yml
+
+  construire:
+    needs: verifier
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Installer les outils (Rokit)
+        uses: ./.github/actions/outils
+      - run: wally install
+      - name: Construction Rojo
+        run: |
+          mkdir -p build
+          rojo build default.project.json -o build/jeu.rbxl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jeu-rbxl
+          path: build/jeu.rbxl
+          if-no-files-found: error
+
+  publier-test:
+    needs: construire
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/download-artifact@v4
+        with:
+          name: jeu-rbxl
+          path: build
+      - name: Publier sur l'expérience de test
+        run: node outils/publier.mjs test build/jeu.rbxl
+        env:
+          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}
+
+  publier-prod:
+    needs: publier-test
+    # L'environnement protégé demande l'approbation de l'étudiant avant de démarrer ce job.
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/download-artifact@v4
+        with:
+          name: jeu-rbxl
+          path: build
+      - name: Publier en production
+        run: node outils/publier.mjs prod build/jeu.rbxl
+        env:
+          ROBLOX_API_KEY: ${{ secrets.ROBLOX_API_KEY }}

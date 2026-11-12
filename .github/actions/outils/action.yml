@@ -1,0 +1,44 @@
+name: Outils du projet
+description: Installe Rokit (version épinglée) puis les outils figés par rokit.toml, avec cache.
+
+inputs:
+  version-rokit:
+    description: Version de Rokit à installer
+    default: "1.2.0"
+  token:
+    description: Jeton GitHub (lecture seule) pour éviter la limite de requêtes anonymes à l'installation des outils
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    # On met en cache les binaires, pas ~/.rokit entier : l'authentification (jeton) s'écrit dans ~/.rokit.
+    - name: Cache des outils
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.rokit/bin
+          ~/.rokit/tool-storage
+        key: rokit-${{ runner.os }}-${{ inputs.version-rokit }}-${{ hashFiles('rokit.toml') }}
+
+    - name: Installer Rokit et les outils de rokit.toml
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        VERSION_ROKIT: ${{ inputs.version-rokit }}
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        dossier="$(mktemp -d)"
+        curl -fsSL "https://github.com/rojo-rbx/rokit/releases/download/v${VERSION_ROKIT}/rokit-${VERSION_ROKIT}-linux-x86_64.zip" -o "$dossier/rokit.zip"
+        unzip -q "$dossier/rokit.zip" -d "$dossier"
+        chmod +x "$dossier/rokit"
+        "$dossier/rokit" self-install
+        export PATH="$HOME/.rokit/bin:$PATH"
+        rokit authenticate github --token "$GITHUB_TOKEN"
+        rokit install --no-trust-check
+
+    - name: Ajouter les outils au PATH
+      shell: bash
+      run: echo "$HOME/.rokit/bin" >> "$GITHUB_PATH"
