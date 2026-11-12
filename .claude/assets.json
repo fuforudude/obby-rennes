@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "assets": {
+    "miniature-obby-rennes": {
+      "type": "illustration",
+      "source": "assets/miniatures/miniature.svg",
+      "exports": [
+        "assets/miniatures/miniature.png"
+      ],
+      "generateur": "outils/assets/generer_miniatures.py",
+      "brief": "docs/assets/miniatures.md",
+      "empreintes": {
+        "assets/miniatures/miniature.svg": "b122ab7a56f44504",
+        "assets/miniatures/miniature.png": "bfb9ffab8c555f13",
+        "outils/assets/generer_miniatures.py": "898398709a28d5a5"
+      },
+      "historique": [
+        {
+          "date": "2026-11-12 14:36",
+          "auteur": "claude",
+          "action": "création",
+          "note": "Première version de la miniature 1920x1080"
+        }
+      ]
+    },
+    "icone-obby-rennes": {
+      "type": "icone",
+      "source": "assets/miniatures/icone.svg",
+      "exports": [
+        "assets/miniatures/icone.png"
+      ],
+      "generateur": "outils/assets/generer_miniatures.py",
+      "brief": "docs/assets/miniatures.md",
+      "empreintes": {
+        "assets/miniatures/icone.svg": "ba144014d2ce1d51",
+        "assets/miniatures/icone.png": "447be4d63cd58078",
+        "outils/assets/generer_miniatures.py": "898398709a28d5a5"
+      },
+      "historique": [
+        {
+          "date": "2026-11-12 14:36",
+          "auteur": "claude",
+          "action": "création",
+          "note": "Première version de l'icône 512x512"
+        }
+      ]
+    }
+  }
+}
