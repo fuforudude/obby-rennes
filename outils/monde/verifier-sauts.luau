@@ -1,7 +1,8 @@
 -- Usage : lune run outils/monde/verifier-sauts.luau (après lune run outils/monde/generer.luau).
 -- Vérifie le tracé : depuis le départ, peut-on atteindre chaque checkpoint en sautant de plateforme en plateforme ?
 -- Saut possible si : montée <= 4,5 ; vide horizontal (entre bords) <= 6,5 (+ 1 par tranche de 4 de descente, max 9).
--- Signale aussi les plafonds trop bas (moins de 5,5 studs au-dessus d'une plateforme, sur la même emprise).
+-- Signale aussi les plafonds trop bas (moins de 5,5 studs au-dessus d'une plateforme, sur la même emprise)
+-- et les pièces mortelles collées à une plateforme de départ de saut (voir « mortels trop proches »).
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
@@ -11,6 +12,7 @@ local modele = roblox.deserializeModel(fs.readFile("monde/Parcours.rbxm"))[1]
 type Plateforme = { nom: string, x1: number, x2: number, z1: number, z2: number, haut: number, cp: number? }
 local plateformes: { Plateforme } = {}
 local solides = {}
+local mortels: { Plateforme } = {}
 
 local function emprise(p, dx, dz)
 	local s, pos = p.Size, p.CFrame.Position
@@ -27,6 +29,17 @@ for _, d in modele:GetDescendants() do
 	local estZone = d.Parent and d.Parent.Name:match("^%d_") ~= nil
 	if not estZone then
 		continue
+	end
+	if d:HasTag("Mortel") and d.Name ~= "Vide" then
+		local x1, x2, z1, z2 = emprise(d, 0, 0)
+		table.insert(mortels, {
+			nom = d.Parent.Name .. "/" .. d.Name,
+			x1 = x1,
+			x2 = x2,
+			z1 = z1,
+			z2 = z2,
+			haut = d.CFrame.Position.Y + d.Size.Y / 2,
+		})
 	end
 	if d.CanCollide and not d:HasTag("Mortel") and d.Transparency < 1 then
 		table.insert(solides, d)
@@ -124,8 +137,46 @@ for _, p in plateformes do
 end
 print(`plafonds trop bas : {bas}`)
 
--- Un checkpoint inatteignable bloque la CI ; les plafonds bas restent un avertissement
+-- Mortels trop proches : pour chaque saut possible a -> b, une pièce mortelle à moins de 1,5 stud (à l'horizontale)
+-- de la plateforme de départ, dont le dessus est entre celui du départ et celui de l'arrivée + 3, frôle le
+-- personnage pendant le saut. La grande zone « Vide » est exclue (elle est toujours sous le parcours).
+local proches = 0
+local vus = {}
+for i, a in plateformes do
+	for j, b in plateformes do
+		if i == j or not sautPossible(a, b) then
+			continue
+		end
+		for _, m in mortels do
+			if m.haut >= a.haut and m.haut <= b.haut + 3 and vide(a, m) < 1.5 then
+				local cle = a.nom .. "|" .. m.nom
+				if vus[cle] then
+					continue
+				end
+				vus[cle] = true
+				proches += 1
+				print(
+					string.format(
+						"  mortel trop proche : %s (x %.0f..%.0f, haut %.1f) à %.1f de %s (haut %.1f), saut vers %s (haut %.1f)",
+						m.nom,
+						m.x1,
+						m.x2,
+						m.haut,
+						vide(a, m),
+						a.nom,
+						a.haut,
+						b.nom,
+						b.haut
+					)
+				)
+			end
+		end
+	end
+end
+print(`mortels trop proches : {proches}`)
+
+-- Un checkpoint inatteignable ou un mortel trop proche bloque la CI ; les plafonds bas restent un avertissement
 -- (deux sont voulus : les barres tournantes).
-if #manquants > 0 then
+if #manquants > 0 or proches > 0 then
 	process.exit(1)
 end
