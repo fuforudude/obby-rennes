@@ -3,6 +3,7 @@
 -- Saut possible si : montée <= 4,5 ; vide horizontal (entre bords) <= 6,5 (+ 1 par tranche de 4 de descente, max 9).
 -- Signale aussi les plafonds trop bas (moins de 5,5 studs au-dessus d'une plateforme, sur la même emprise).
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 
 local modele = roblox.deserializeModel(fs.readFile("monde/Parcours.rbxm"))[1]
@@ -122,3 +123,9 @@ for _, p in plateformes do
 	end
 end
 print(`plafonds trop bas : {bas}`)
+
+-- Un checkpoint inatteignable bloque la CI ; les plafonds bas restent un avertissement
+-- (deux sont voulus : les barres tournantes).
+if #manquants > 0 then
+	process.exit(1)
+end
