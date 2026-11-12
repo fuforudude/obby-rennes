@@ -1,15 +1,27 @@
--- Usage : lune run outils/monde/verifier-sauts.luau (après lune run outils/monde/generer.luau).
+-- Usage : lune run outils/monde/verifier-sauts.luau [fichier.rbxm] (défaut monde/Parcours.rbxm ; après lune run outils/monde/generer.luau).
 -- Vérifie le tracé : depuis le départ, peut-on atteindre chaque checkpoint en sautant de plateforme en plateforme ?
 -- Saut possible si : montée <= 4,5 ; vide horizontal (entre bords) <= 6,5 (+ 1 par tranche de 4 de descente, max 9).
--- Signale aussi les plafonds trop bas (moins de 5,5 studs au-dessus d'une plateforme, sur la même emprise).
+-- Signale aussi les plafonds trop bas (moins de 5,5 studs au-dessus d'une plateforme, sur la même emprise)
+-- et les pièces mortelles collées à une plateforme de départ de saut (voir « mortels trop proches »).
 local fs = require("@lune/fs")
+local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 
-local modele = roblox.deserializeModel(fs.readFile("monde/Parcours.rbxm"))[1]
+local modele = roblox.deserializeModel(fs.readFile(process.args[1] or "monde/Parcours.rbxm"))[1]
 
-type Plateforme = { nom: string, x1: number, x2: number, z1: number, z2: number, haut: number, cp: number? }
+type Plateforme = {
+	nom: string,
+	x1: number,
+	x2: number,
+	z1: number,
+	z2: number,
+	haut: number,
+	bas: number?,
+	cp: number?,
+}
 local plateformes: { Plateforme } = {}
 local solides = {}
+local mortels: { Plateforme } = {}
 
 local function emprise(p, dx, dz)
 	local s, pos = p.Size, p.CFrame.Position
@@ -26,6 +38,18 @@ for _, d in modele:GetDescendants() do
 	local estZone = d.Parent and d.Parent.Name:match("^%d_") ~= nil
 	if not estZone then
 		continue
+	end
+	if d:HasTag("Mortel") then
+		local x1, x2, z1, z2 = emprise(d, 0, 0)
+		table.insert(mortels, {
+			nom = d.Parent.Name .. "/" .. d.Name,
+			x1 = x1,
+			x2 = x2,
+			z1 = z1,
+			z2 = z2,
+			haut = d.CFrame.Position.Y + d.Size.Y / 2,
+			bas = d.CFrame.Position.Y - d.Size.Y / 2,
+		})
 	end
 	if d.CanCollide and not d:HasTag("Mortel") and d.Transparency < 1 then
 		table.insert(solides, d)
@@ -122,3 +146,54 @@ for _, p in plateformes do
 	end
 end
 print(`plafonds trop bas : {bas}`)
+
+-- Mortels trop proches : pour chaque saut possible a -> b, une pièce mortelle m à moins de 1,5 stud (à
+-- l'horizontale) de a ou de b est signalée si elle occupe la hauteur où passe le corps :
+-- m.bas < max(a.haut, b.haut) + 5 et m.haut >= min(a.haut, b.haut). Un sol mortel sous la plateforme voisine
+-- (m.haut <= haut de cette plateforme) n'est pas un piège : il n'est pas signalé pour elle.
+local proches = 0
+local vus = {}
+for i, a in plateformes do
+	for j, b in plateformes do
+		if i == j or not sautPossible(a, b) then
+			continue
+		end
+		for k, m in mortels do
+			if m.bas >= math.max(a.haut, b.haut) + 5 or m.haut < math.min(a.haut, b.haut) then
+				continue
+			end
+			for _, cote in { { i, a }, { j, b } } do
+				local idx, p = cote[1], cote[2]
+				local cle = idx .. "|" .. k
+				if vus[cle] or vide(p, m) >= 1.5 or m.haut <= p.haut then
+					continue
+				end
+				vus[cle] = true
+				proches += 1
+				print(
+					string.format(
+						"  mortel trop proche : %s (x %.0f..%.0f, bas %.1f, haut %.1f) à %.1f de %s (x %.0f, haut %.1f), saut %s -> %s",
+						m.nom,
+						m.x1,
+						m.x2,
+						m.bas,
+						m.haut,
+						vide(p, m),
+						p.nom,
+						(p.x1 + p.x2) / 2,
+						p.haut,
+						a.nom,
+						b.nom
+					)
+				)
+			end
+		end
+	end
+end
+print(`mortels trop proches : {proches}`)
+
+-- Un checkpoint inatteignable ou un mortel trop proche bloque la CI ; les plafonds bas restent un avertissement
+-- (deux sont voulus : les barres tournantes).
+if #manquants > 0 or proches > 0 then
+	process.exit(1)
+end

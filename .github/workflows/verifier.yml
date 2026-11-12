@@ -1,0 +1,53 @@
+name: Vérifier
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  # Ce nom est celui du check exigé par la protection de la branche main. Aucun secret ici.
+  verifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installer les outils (Rokit)
+        uses: ./.github/actions/outils
+
+      - name: Installer les dépendances Wally
+        run: wally install
+
+      - name: Format (StyLua)
+        run: stylua --check src tests outils
+
+      # La bibliothèque standard « roblox » de Selene n'est pas dans le dépôt : on la génère explicitement.
+      - name: Bibliothèque standard Roblox pour Selene
+        run: selene generate-roblox-std
+
+      - name: Lint (Selene)
+        run: selene src
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Tests de l'outil de publication (Node)
+        run: node --test outils/publier.test.mjs
+
+      - name: Tests des règles (Lune)
+        run: lune run outils/tests/lancer-specs.luau
+
+      - name: Génération de la carte et vérification des sauts
+        run: |
+          lune run outils/monde/generer.luau
+          lune run outils/monde/verifier-sauts.luau
+
+      - name: Construction Rojo
+        run: |
+          mkdir -p build
+          rojo build default.project.json -o build/jeu.rbxl
