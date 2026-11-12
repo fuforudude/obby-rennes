@@ -2,7 +2,7 @@
   "projet": "default.project.json",
   "projetTests": "test.project.json",
   "places": {
-    "test": { "universeId": 0, "placeId": 0 },
-    "prod": { "universeId": 0, "placeId": 0 }
+    "test": { "universeId": 10776165862, "placeId": 138768421101062 },
+    "prod": { "universeId": 10775970497, "placeId": 99295082553038 }
   }
 }
