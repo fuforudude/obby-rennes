@@ -1,7 +1,7 @@
 -- Lance les specs de tests/partage dans Lune, sans Roblox : un mini TestEZ (describe / it / expect)
 -- et un faux `game` fournissent ce que les specs attendent.
 -- Usage (depuis la racine) : lune run outils/tests/lancer-specs.luau
--- Code de sortie : 0 si tout passe, 1 au moindre échec.
+-- Code de sortie : 0 si tout passe, 1 au moindre échec ou si aucun test n'a tourné.
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
 local process = require("@lune/process")
@@ -41,12 +41,12 @@ local function expect(valeur)
 		end
 	end
 	local function ok()
-		if not valeur then
+		if valeur == nil then
 			error("valeur attendue, obtenu nil", 3)
 		end
 	end
 	local function nonOk()
-		if valeur then
+		if valeur ~= nil then
 			error(`nil attendu, obtenu {tostring(valeur)}`, 3)
 		end
 	end
@@ -71,7 +71,15 @@ local function it(nom, corps)
 end
 
 -- Chaque spec est chargée avec son propre environnement, puis exécutée.
+local fichiers = {}
 for _, fichier in fs.readDir("tests/partage") do
+	if string.match(fichier, "%.spec%.luau$") then
+		table.insert(fichiers, fichier)
+	end
+end
+table.sort(fichiers)
+
+for _, fichier in fichiers do
 	local chemin = "tests/partage/" .. fichier
 	local env = setmetatable({
 		game = faux,
@@ -84,6 +92,11 @@ for _, fichier in fs.readDir("tests/partage") do
 	table.insert(pile, fichier)
 	spec()
 	table.remove(pile)
+end
+
+if reussis + #echecs == 0 then
+	print("Aucun test n'a tourné")
+	process.exit(1)
 end
 
 print(`{reussis} réussis, {#echecs} échecs`)

@@ -7,15 +7,30 @@ import { fileURLToPath } from "node:url";
 
 /** Renvoie { universeId, placeId } de la cible, ou lève une erreur claire. */
 export function lireCible(config, cible) {
-  const place = config?.places?.[cible];
+  const place = ["test", "prod"].includes(cible) ? config?.places?.[cible] : undefined;
   if (!place) {
     throw new Error(`Cible inconnue : ${cible} (attendu : test ou prod)`);
   }
   const { universeId, placeId } = place;
-  if (!universeId || !placeId) {
+  const valide = (id) => Number.isSafeInteger(id) && id > 0;
+  if (!valide(universeId) || !valide(placeId)) {
     throw new Error(`Identifiants de l'expérience ${cible} absents de .claude/roblox.json`);
   }
   return { universeId, placeId };
+}
+
+/** Extrait le numéro de version de la réponse de l'API, ou lève une erreur claire. */
+export function lireVersion(corps) {
+  let donnees;
+  try {
+    donnees = JSON.parse(corps);
+  } catch {
+    throw new Error(`Réponse inattendue de l'API Roblox (JSON invalide) : ${corps}`);
+  }
+  if (!Number.isSafeInteger(donnees?.versionNumber)) {
+    throw new Error(`Réponse inattendue de l'API Roblox (pas de versionNumber entier) : ${corps}`);
+  }
+  return donnees.versionNumber;
 }
 
 /** Ligne affichée (et ajoutée au résumé GitHub) après une publication réussie. */
@@ -37,16 +52,21 @@ async function principal(argv, env) {
   }
 
   const url = `https://apis.roblox.com/universes/v1/${universeId}/places/${placeId}/versions?versionType=Published`;
-  const reponse = await fetch(url, {
-    method: "POST",
-    headers: { "x-api-key": cle, "Content-Type": "application/octet-stream" },
-    body: readFileSync(fichier),
-  });
+  let reponse;
+  try {
+    reponse = await fetch(url, {
+      method: "POST",
+      headers: { "x-api-key": cle, "Content-Type": "application/octet-stream" },
+      body: readFileSync(fichier),
+    });
+  } catch (erreur) {
+    throw new Error(`Échec réseau : ${erreur.message}${erreur.cause?.message ? ` (${erreur.cause.message})` : ""}`);
+  }
   const corps = await reponse.text();
   if (!reponse.ok) {
     throw new Error(`Échec de la publication : HTTP ${reponse.status} ${corps}`);
   }
-  const { versionNumber } = JSON.parse(corps);
+  const versionNumber = lireVersion(corps);
 
   const commit = env.GITHUB_SHA ?? execSync("git rev-parse --short HEAD").toString().trim();
   const message = messageSucces(cible, versionNumber, commit);

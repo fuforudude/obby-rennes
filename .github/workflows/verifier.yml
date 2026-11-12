@@ -32,6 +32,13 @@ jobs:
       - name: Lint (Selene)
         run: selene src
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Tests de l'outil de publication (Node)
+        run: node --test outils/publier.test.mjs
+
       - name: Tests des règles (Lune)
         run: lune run outils/tests/lancer-specs.luau
 

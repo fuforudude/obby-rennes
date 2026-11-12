@@ -7,10 +7,8 @@ on:
 permissions:
   contents: read
 
-# Une publication en cours n'est jamais annulée : la suivante attend son tour.
-concurrency:
-  group: publication
-  cancel-in-progress: false
+# Une publication en cours n'est jamais annulée. Chaque cible a son propre groupe : une production
+# en attente d'approbation ne bloque pas les publications de test suivantes.
 
 jobs:
   verifier:
@@ -22,9 +20,14 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Installer les outils (Rokit)
         uses: ./.github/actions/outils
       - run: wally install
+      # La carte publiée est la carte vérifiée : on la régénère avant de construire.
+      - name: Génération de la carte
+        run: lune run outils/monde/generer.luau
       - name: Construction Rojo
         run: |
           mkdir -p build
@@ -37,13 +40,20 @@ jobs:
 
   publier-test:
     needs: construire
+    # Environnement « test » : il porte la clé Open Cloud de l'expérience de test.
+    environment: test
+    concurrency:
+      group: publier-test
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - uses: actions/download-artifact@v4
         with:
           name: jeu-rbxl
@@ -57,13 +67,18 @@ jobs:
     needs: publier-test
     # L'environnement protégé demande l'approbation de l'étudiant avant de démarrer ce job.
     environment: production
+    concurrency:
+      group: publier-prod
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - uses: actions/download-artifact@v4
         with:
           name: jeu-rbxl
