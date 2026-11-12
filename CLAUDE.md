@@ -14,3 +14,11 @@ Obby Roblox pour étudiants : traverser Rennes (fac bloquée, métro en grève, 
 - Règles pures et testées : `src/partage/Regles.luau`. Étapes et anecdotes : `src/partage/Etapes.luau`. Réglages (dont l'identifiant du produit « Passer l'étape ») : `src/partage/Reglages.luau`.
 - Données des joueurs : `src/serveur/Donnees.luau` (ProfileStore, ADR 0001). Classement : `src/serveur/Classement.luau`. Achats : `src/serveur/Boutique.luau`.
 - Anecdotes sur Rennes : uniquement des faits vérifiables ; pas de logo officiel de Sup de Vinci sans accord de l'école.
+
+## CI et publication
+- `.github/workflows/verifier.yml` : check `verifier` sur chaque PR vers `main` (et appelé par `publier.yml`). Sans secret. Installe les outils de `rokit.toml` (action locale `.github/actions/outils`), puis `wally install`, `stylua --check src tests outils`, `selene src`, tests Lune (`outils/tests/lancer-specs.luau`), génération de la carte et vérification des sauts, `rojo build`.
+- `.github/workflows/publier.yml` : à chaque push sur `main` (donc après fusion) : `verifier`, puis `construire` (artefact `jeu-rbxl`), puis `publier-test` (expérience de test, automatique), puis `publier-prod` (environnement GitHub `production`, derrière approbation). Le même fichier `jeu.rbxl` va en test puis en production.
+- La publication se fait par la CI après fusion sur `main` : plus de publication manuelle depuis Studio. Le secret `ROBLOX_API_KEY` vient des secrets GitHub, les identifiants des places de `.claude/roblox.json` (s'ils valent 0, le job s'arrête avec un message).
+- Approuver la production : onglet Actions du dépôt, ouvrir l'exécution « Publier », « Review deployments », cocher `production`, « Approve and deploy ». Sans approbation, rien n'est publié en production.
+- Version publiée : résumé de l'exécution (numéro de version Roblox et commit), pour `publier-test` et `publier-prod`.
+- Équivalent local du check : `lourd roblox verifier`, puis `lune run outils/tests/lancer-specs.luau`, `lune run outils/monde/generer.luau` et `lune run outils/monde/verifier-sauts.luau`.
