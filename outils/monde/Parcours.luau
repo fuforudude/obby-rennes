@@ -135,37 +135,194 @@ return function(R)
 		return p
 	end
 
+	-- Texte des SurfaceGui : TOUJOURS une taille fixe calculée, jamais TextScaled (en jeu, TextScaled rend un texte
+	-- minuscule sur ces panneaux ; la taille fixe est la seule qui a été vue lisible). Les deux constructions
+	-- (Parcours.luau et Evenements.luau) portent le même bloc ; outils/monde/verifier-evenements.luau le compare, s'en
+	-- sert pour contrôler les textes écrits à l'exécution et refuse tout TextScaled ou TextSize < 12 sur une SurfaceGui.
+	-- DEBUT TEXTE_PUR
+	local TAILLE_MIN, TAILLE_MAX = 12, 100 -- TextSize : Roblox le borne à 100
+	local REMPLISSAGE_LARGEUR = 0.95 -- marge d'erreur sur la largeur estimée des caractères
+
+	-- Par police : largeur moyenne (en fraction de la taille) d'une minuscule, d'une majuscule, d'un chiffre, d'une
+	-- espace et d'un autre signe ; puis hauteur d'une ligne (en fraction de la taille). Estimations prudentes ; la
+	-- police Code est à chasse fixe (0,6).
+	local METRIQUES = {
+		Gotham = { 0.54, 0.70, 0.62, 0.27, 0.42, 1.2 },
+		GothamBold = { 0.57, 0.73, 0.64, 0.27, 0.44, 1.2 },
+		GothamBlack = { 0.61, 0.78, 0.68, 0.28, 0.46, 1.2 },
+		Code = { 0.6, 0.6, 0.6, 0.6, 0.6, 1.1 },
+	}
+
+	local function largeurCaractere(c: number, m): number
+		if (c >= 97 and c <= 122) or (c >= 0xDF and c <= 0xFF) then
+			return m[1]
+		elseif (c >= 65 and c <= 90) or (c >= 0xC0 and c <= 0xDE) then
+			return m[2]
+		elseif c >= 48 and c <= 57 then
+			return m[3]
+		elseif c == 32 then
+			return m[4]
+		end
+		return m[5]
+	end
+
+	-- Le texte en paragraphes (séparés par \n), chacun une liste de largeurs de mots (en fraction de la taille).
+	local function decouperTexte(contenu: string, m)
+		local paragraphes = {}
+		for ligne in string.gmatch(contenu .. "\n", "([^\n]*)\n") do
+			local mots = {}
+			for mot in string.gmatch(ligne, "%S+") do
+				local w = 0
+				for _, c in utf8.codes(mot) do
+					w += largeurCaractere(c, m)
+				end
+				table.insert(mots, w)
+			end
+			table.insert(paragraphes, mots)
+		end
+		return paragraphes
+	end
+
+	-- Nombre de lignes après retour à la ligne glouton, `capacite` étant la largeur de ligne en fraction de la taille.
+	local function compterLignes(paragraphes, espace: number, capacite: number): number
+		local n = 0
+		for _, mots in paragraphes do
+			n += 1
+			local courante = 0
+			for i, w in mots do
+				if i > 1 and courante + espace + w <= capacite then
+					courante += espace + w
+				else
+					if i > 1 then
+						n += 1
+					end
+					if w > capacite then -- mot plus long qu'une ligne : coupé
+						local en_plus = math.ceil(w / capacite) - 1
+						n += en_plus
+						courante = w - en_plus * capacite
+					else
+						courante = w
+					end
+				end
+			end
+		end
+		return n
+	end
+
+	-- La plus grande taille entière (12 à `plafond`, 100 par défaut) pour laquelle `contenu` tient dans largeur ×
+	-- hauteur pixels, à la ligne ; rend la taille et le nombre de lignes. 12 si rien ne tient.
+	local function ajusterTexte(contenu: string, police: string, largeur: number, hauteur: number, plafond: number?)
+		local m = METRIQUES[police] or METRIQUES.GothamBold
+		local paragraphes = decouperTexte(contenu, m)
+		local utile = largeur * REMPLISSAGE_LARGEUR
+		local function lignesA(s: number): number
+			return compterLignes(paragraphes, m[4], utile / s)
+		end
+		local function tient(s: number): boolean
+			return lignesA(s) * m[6] * s <= hauteur
+		end
+		local bas, haut = TAILLE_MIN, math.max(TAILLE_MIN, math.floor(plafond or TAILLE_MAX))
+		while bas < haut and tient(bas) do
+			local milieu = (bas + haut + 1) // 2
+			if tient(milieu) then
+				bas = milieu
+			else
+				haut = milieu - 1
+			end
+		end
+		return bas, lignesA(bas)
+	end
+
+	-- La seule règle de taille de texte : fixe, à la ligne, texte brut, entier entre 12 et 100.
+	local function reglerTexte(label, largeur: number, hauteur: number, contenu: string, plafond: number?)
+		local taille, lignes = ajusterTexte(contenu, label.Font.Name, largeur, hauteur, plafond)
+		label.TextScaled = false
+		label.TextWrapped = true
+		label.RichText = false
+		label.TextSize = taille
+		return taille, lignes
+	end
+	-- FIN TEXTE_PUR
+
 	-- Densité des SurfaceGui. Le plancher est de 40 px/stud pour toute face dont la plus petite dimension fait moins
-	-- de 15 studs (panneaux, tableaux, enseignes courantes) : baisser la densité ne grossit pas le texte (TextScaled et
-	-- les tailles fixes suivent le cadre, pas la toile), elle le rend seulement flou. Seules les très grandes enseignes
-	-- (15 studs et plus) gardent une toile d'environ 600 px sur leur plus petite dimension (jamais moins de 8 px/stud),
-	-- pour ne pas gaspiller de mémoire de texture.
+	-- de 15 studs (panneaux, tableaux, enseignes courantes). Seules les très grandes enseignes (15 studs et plus)
+	-- gardent une toile d'environ 600 px sur leur plus petite dimension (jamais moins de 8 px/stud), pour ne pas
+	-- gaspiller de mémoire de texture. Une enseigne d'un seul texte dont la taille calculée dépasserait 100 px (la
+	-- limite de TextSize) voit sa densité baissée d'autant : le texte garde 100 px mais couvre plus de studs.
 	local DENSITE = 40
+	local DENSITE_MIN = 8
 	local GRANDE_FACE = 15
 	local TOILE_GRANDE = 600
-	local function densiteDe(part, face)
+
+	-- Largeur et hauteur, en studs, de la face d'une pièce qui porte un SurfaceGui.
+	local function dimensionsFace(part, face)
 		local s = part.Size
-		local l, h
 		if face == Enum.NormalId.Left or face == Enum.NormalId.Right then
-			l, h = s.Z, s.Y
+			return s.Z, s.Y
 		elseif face == Enum.NormalId.Top or face == Enum.NormalId.Bottom then
-			l, h = s.X, s.Z
-		else
-			l, h = s.X, s.Y
+			return s.X, s.Z
 		end
+		return s.X, s.Y
+	end
+
+	local function densiteDe(part, face)
+		local l, h = dimensionsFace(part, face)
 		local petite = math.min(l, h)
 		if petite < GRANDE_FACE then
 			return DENSITE
 		end
-		return math.clamp(TOILE_GRANDE / petite, 8, DENSITE)
+		return math.clamp(TOILE_GRANDE / petite, DENSITE_MIN, DENSITE)
 	end
 
-	-- À appeler en fin de construction : règle la densité de chaque SurfaceGui d'après la face qui la porte.
+	-- Le texte le plus long que le code ou le client peut écrire dans un label dont le texte est vide à la
+	-- construction : l'attribut « TexteLePlusLong » du label porte ce texte et sert à dimensionner la taille fixe.
+	local function texteDeCalcul(label): string
+		return label:GetAttribute("TexteLePlusLong") or label.Text
+	end
+
+	-- Largeur et hauteur utiles (pixels) d'un TextLabel posé sur une toile de largeur × hauteur pixels.
+	local function dimensionsLabel(label, largeur: number, hauteur: number)
+		local s = label.Size
+		local w = s.X.Scale * largeur + s.X.Offset
+		local h = s.Y.Scale * hauteur + s.Y.Offset
+		local marge = label:FindFirstChildOfClass("UIPadding")
+		if marge then
+			w -= marge.PaddingLeft.Offset + marge.PaddingRight.Offset + (marge.PaddingLeft.Scale + marge.PaddingRight.Scale) * w
+			h -= marge.PaddingTop.Offset + marge.PaddingBottom.Offset + (marge.PaddingTop.Scale + marge.PaddingBottom.Scale) * h
+		end
+		return w, h
+	end
+
+	-- À appeler en fin de construction : règle la densité de chaque SurfaceGui d'après la face qui la porte, puis la
+	-- taille fixe de chacun de ses TextLabel (attribut TexteLePlusLong, sinon son texte).
 	local function calibrerSurfaces(racine)
-		for _, d in racine:GetDescendants() do
-			if d:IsA("SurfaceGui") and d.Parent and d.Parent:IsA("BasePart") then
-				d.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-				d.PixelsPerStud = densiteDe(d.Parent, d.Face)
+		for _, gui in racine:GetDescendants() do
+			if not (gui:IsA("SurfaceGui") and gui.Parent and gui.Parent:IsA("BasePart")) then
+				continue
+			end
+			local l, h = dimensionsFace(gui.Parent, gui.Face)
+			local densite = densiteDe(gui.Parent, gui.Face)
+			local labels = {}
+			for _, d in gui:GetDescendants() do
+				if d:IsA("TextLabel") then
+					table.insert(labels, d)
+				end
+			end
+			if #labels == 1 then
+				local seul = labels[1]
+				local s = seul.Size
+				if s.X.Scale == 1 and s.Y.Scale == 1 and s.X.Offset == 0 and s.Y.Offset == 0 then
+					local brut = ajusterTexte(texteDeCalcul(seul), seul.Font.Name, l * densite, h * densite, 100000)
+					if brut > TAILLE_MAX then
+						densite = math.clamp(densite * TAILLE_MAX / brut, DENSITE_MIN, densite)
+					end
+				end
+			end
+			gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+			gui.PixelsPerStud = densite
+			for _, label in labels do
+				local w, hauteur = dimensionsLabel(label, l * densite, h * densite)
+				reglerTexte(label, w, hauteur, texteDeCalcul(label))
 			end
 		end
 	end
@@ -180,7 +337,7 @@ return function(R)
 		label.BackgroundColor3 = couleurFond or Color3.fromRGB(25, 25, 30)
 		label.BackgroundTransparency = couleurFond and 0 or 0.1
 		label.TextColor3 = couleurTexte or Color3.fromRGB(255, 255, 255)
-		label.TextScaled = true
+		label.TextWrapped = true -- taille fixe réglée par calibrerSurfaces (reglerTexte)
 		label.Font = Enum.Font.GothamBold
 		label.Text = contenu
 		label.Parent = gui
@@ -263,17 +420,17 @@ return function(R)
 			etiquette(marque, nom, accent, 5)
 			return p
 		end
-		local demi = taille / 2 + 0.6
+		-- Arche discrète : piliers fins en plastique de la couleur de la zone, seul le liseré sous le fronton est en
+		-- néon ; passage de 8 studs (le fronton garde 3 studs de haut et sa largeur : taille de texte inchangée).
+		local demi = taille / 2 + 0.9
 		for _, cote in { -1, 1 } do
-			decor(
-				bloc(parent, "PilierArche", 1.2, 11, 1.2, x, dessus + 11, z + cote * demi, accent, Enum.Material.Neon)
-			)
+			decor(bloc(parent, "PilierArche", 0.6, 8, 0.6, x, dessus + 8, z + cote * demi, accent))
 		end
 		local fronton =
-			decor(bloc(parent, "Arche", 1.2, 3, taille + 2.4, x, dessus + 14, z, Color3.fromRGB(25, 25, 35)))
+			decor(bloc(parent, "Arche", 0.8, 3, taille + 2.4, x, dessus + 11, z, Color3.fromRGB(25, 25, 35)))
 		texte(Enum.NormalId.Left, nom, accent).Parent = fronton
 		texte(Enum.NormalId.Right, nom, accent).Parent = fronton
-		decor(bloc(parent, "LisereArche", 1.3, 0.4, taille + 2.4, x, dessus + 11.2, z, accent, Enum.Material.Neon))
+		decor(bloc(parent, "LisereArche", 0.9, 0.3, taille + 2.4, x, dessus + 8.15, z, accent, Enum.Material.Neon))
 		return p
 	end
 
@@ -292,7 +449,6 @@ return function(R)
 		titre.Size = UDim2.fromScale(1, 0.18)
 		titre.BackgroundColor3 = couleurTitre
 		titre.TextColor3 = Color3.fromRGB(255, 255, 255)
-		titre.TextScaled = true
 		titre.Font = Enum.Font.GothamBlack
 		titre.Text = intitule
 		titre.Parent = gui
@@ -302,12 +458,14 @@ return function(R)
 		liste.Size = UDim2.fromScale(0.92, 0.78)
 		liste.BackgroundTransparency = 1
 		liste.TextColor3 = Color3.fromRGB(240, 240, 240)
-		-- Taille fixe : 10 lignes en police Code tiennent dans le label (hauteur en pixels / 11 ; 0,78 × 10 studs à
-		-- 40 px/stud = 312 px, soit 28 px). Le client règle l'alignement : centré pour un message, en haut à gauche
-		-- pour la liste.
-		liste.TextScaled = false
-		liste.TextWrapped = true
-		liste.TextSize = math.floor(0.78 * 10 * DENSITE / 11)
+		-- Taille fixe calculée (calibrerSurfaces) pour le pire cas écrit par src/serveur/Classement.luau : 10 lignes
+		-- « %2d. %-14s valeur » (valeur de 10 caractères au plus), en police Code. Le client règle l'alignement :
+		-- centré pour un message, en haut à gauche pour la liste.
+		local lignes = {}
+		for rang = 1, 10 do
+			table.insert(lignes, string.format("%2d. %-14s %s", rang, "WWWWWWWWWWWWWW", "12 345 678"))
+		end
+		liste:SetAttribute("TexteLePlusLong", table.concat(lignes, "\n"))
 		liste.TextXAlignment = Enum.TextXAlignment.Left
 		liste.TextYAlignment = Enum.TextYAlignment.Top
 		liste.Font = Enum.Font.Code

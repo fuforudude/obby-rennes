@@ -15,6 +15,9 @@
 --   centré sur la dalle, de son dessus à dessus + 5) : aucun événement (boîte balayée élargie des marges de contact)
 --   ni aucun balancier (sur toute son amplitude) ne doit y entrer. C'est un défaut : le personnage réapparaît
 --   là, un danger qui y passe le pousserait ou le tuerait à la réapparition.
+-- - Textes de SurfaceGui (les deux cartes) : aucun TextScaled, TextSize de 12 à 100, texte qui tient dans son label (pire cas
+--   des panneaux : les 16 étapes de src/partage/Etapes.luau ; des tableaux : 10 lignes de classement) ; bloc TEXTE_PUR
+--   identique dans Parcours.luau et Evenements.luau.
 -- - PanneauAnecdote : Numero 0 à 15, une fois chacun, un TextLabel « Titre » et un TextLabel « Corps », près de son checkpoint, sans toucher de
 --   pièce solide de la carte.
 -- Horaires : ceux de src/partage/Horaires.luau (chargé s'il existe, sinon même formule recopiée ci-dessous) ;
@@ -793,6 +796,151 @@ for _, g in evenementsModele:GetDescendants() do
 end
 print(`{nbFeux} « ! », {nbSegments} lignes de vue testées contre {#occulteurs} pièces opaques`)
 assert(nbFeux > 0, "aucun « ! » de préavis trouvé")
+
+---------------------------------------------------------------------------------------------------------------
+-- Textes des SurfaceGui : jamais TextScaled (en jeu, il rend un texte minuscule sur ces panneaux), tous à taille
+-- fixe de 12 à 100 px, à la ligne, et dont le texte tient dans son label. La règle de taille est celle du bloc
+-- TEXTE_PUR de Parcours.luau et d'Evenements.luau (identique dans les deux, chargé ici). Les textes écrits à
+-- l'exécution sont essayés dans leur pire cas : Titre et Corps des panneaux d'anecdotes avec chacune des 16 étapes de
+-- src/partage/Etapes.luau, Liste des tableaux avec 10 lignes « %2d. %-14s valeur » (src/serveur/Classement.luau).
+print("\n== Textes des SurfaceGui (taille fixe) ==")
+local function blocTextePur(chemin: string): string
+	local source = fs.readFile(chemin):gsub("\r\n", "\n")
+	local debut = source:find("-- DEBUT TEXTE_PUR\n", 1, true)
+	local fin = source:find("\t-- FIN TEXTE_PUR", 1, true)
+	assert(debut and fin and fin > debut, `{chemin} : bloc TEXTE_PUR absent`)
+	return source:sub(debut, fin - 1)
+end
+local blocParcours = blocTextePur("outils/monde/Parcours.luau")
+if blocParcours ~= blocTextePur("outils/monde/Evenements.luau") then
+	defaut("le bloc TEXTE_PUR de Parcours.luau et celui d'Evenements.luau ne sont plus identiques")
+end
+local ajusterTexte, METRIQUES, TAILLE_MIN, TAILLE_MAX =
+	luau.load(blocParcours .. "\nreturn ajusterTexte, METRIQUES, TAILLE_MIN, TAILLE_MAX", { debugName = "TEXTE_PUR" })()
+
+local Etapes = luau.load(fs.readFile("src/partage/Etapes.luau"), { debugName = "Etapes" })()
+local zonesEtapes, corpsEtapes = {}, {}
+for n = 0, Etapes.nombre() - 1 do
+	local e = Etapes.obtenir(n)
+	table.insert(zonesEtapes, e.zone)
+	table.insert(corpsEtapes, `{e.anecdote}\n\n{e.blague}`)
+end
+local lignesClassement = {}
+for rang = 1, Reglages.TAILLE_CLASSEMENT or 10 do
+	-- pire cas : nom de 14 caractères, valeur de 10 caractères (temps « 123:45.67 », aura « 12 345 678 »)
+	table.insert(lignesClassement, string.format("%2d. %-14s %s", rang, string.rep("W", 14), "12 345 678"))
+end
+local listeClassement = { table.concat(lignesClassement, "\n") }
+
+local function dimensionsPixels(part, gui, label)
+	local s = part.Size
+	local l, h = s.X, s.Y
+	local nom = gui.Face.Name
+	if nom == "Left" or nom == "Right" then
+		l, h = s.Z, s.Y
+	elseif nom == "Top" or nom == "Bottom" then
+		l, h = s.X, s.Z
+	end
+	local densite = gui.PixelsPerStud
+	local toileL, toileH = l * densite, h * densite
+	local t = label.Size
+	local w = t.X.Scale * toileL + t.X.Offset
+	local hauteur = t.Y.Scale * toileH + t.Y.Offset
+	local marge = label:FindFirstChildOfClass("UIPadding")
+	if marge then
+		w -= marge.PaddingLeft.Offset + marge.PaddingRight.Offset + (marge.PaddingLeft.Scale + marge.PaddingRight.Scale) * w
+		hauteur -= marge.PaddingTop.Offset + marge.PaddingBottom.Offset + (marge.PaddingTop.Scale + marge.PaddingBottom.Scale) * hauteur
+	end
+	return l, h, densite, w, hauteur
+end
+
+-- Lune ne lit pas la propriété Font d'un .rbxm (« malformed property info ») mais lit FontFace : on retrouve le nom de
+-- police de la règle (Gotham, GothamBold, GothamBlack, Code) d'après la famille et la graisse.
+local function policeDe(label): string
+	local face = label.FontFace
+	if string.find(face.Family, "Inconsolata", 1, true) then
+		return "Code"
+	end
+	local graisse = face.Weight.Name
+	if graisse == "Heavy" or graisse == "ExtraBold" then
+		return "GothamBlack"
+	elseif graisse == "Bold" or graisse == "SemiBold" then
+		return "GothamBold"
+	end
+	return "Gotham"
+end
+
+local nbTextes = 0
+local nbParCarte = {}
+for carte, modele in { Evenements = evenementsModele, Parcours = parcoursModele } do
+	nbParCarte[carte] = 0
+	for _, gui in modele:GetDescendants() do
+		if not (gui:IsA("SurfaceGui") and gui.Parent and gui.Parent:IsA("BasePart")) then
+			continue
+		end
+		if gui.SizingMode ~= roblox.Enum.SurfaceGuiSizingMode.PixelsPerStud then
+			defaut(`{carte} : {gui:GetFullName()} n'est pas en PixelsPerStud`)
+		end
+		for _, label in gui:GetDescendants() do
+			if not label:IsA("TextLabel") then
+				continue
+			end
+			nbTextes += 1
+			nbParCarte[carte] += 1
+			local chemin = `{carte} : {label:GetFullName()}`
+			if label.TextScaled then
+				defaut(`{chemin} : TextScaled (taille de texte fixe obligatoire sur une SurfaceGui)`)
+			end
+			if label.TextSize < TAILLE_MIN or label.TextSize > TAILLE_MAX then
+				defaut(`{chemin} : TextSize {label.TextSize} hors de {TAILLE_MIN} à {TAILLE_MAX}`)
+			end
+			if not label.TextWrapped or label.RichText then
+				defaut(`{chemin} : TextWrapped faux ou RichText vrai`)
+			end
+			local police = policeDe(label)
+			local l, h, densite, w, hauteur = dimensionsPixels(gui.Parent, gui, label)
+			local contenus = { label.Text }
+			if label.Name == "Corps" and gui.Parent:HasTag("PanneauAnecdote") then
+				contenus = corpsEtapes
+			elseif label.Name == "Titre" and gui.Parent:HasTag("PanneauAnecdote") then
+				contenus = zonesEtapes
+			elseif label.Name == "Liste" then
+				contenus = listeClassement
+			end
+			local lignesMax, pire = 0, ""
+			for _, contenu in contenus do
+				local taille, lignes = ajusterTexte(contenu, police, w, hauteur, label.TextSize)
+				if taille < label.TextSize then
+					defaut(
+						`{chemin} : TextSize {label.TextSize} trop grand, « {contenu:sub(1, 40)} » ne tient pas ({taille} au plus)`
+					)
+				end
+				if lignes >= lignesMax then
+					lignesMax, pire = lignes, contenu
+				end
+			end
+			local m = METRIQUES[police] or METRIQUES.GothamBold
+			local pct = math.floor(100 * lignesMax * m[6] * label.TextSize / (h * densite) + 0.5)
+			print(
+				string.format(
+					"  %s | %s face %.1fx%.1f st %.0f px/st | %s%d lignes, TextSize %d, %d %% de la hauteur | « %s »",
+					carte,
+					gui.Parent.Name,
+					l,
+					h,
+					densite,
+					if label.Name ~= "Texte" then label.Name .. " : " else "",
+					lignesMax,
+					label.TextSize,
+					pct,
+					(pire:gsub("\n", " / ")):sub(1, 40)
+				)
+			)
+		end
+	end
+end
+print(`textes de SurfaceGui : {nbTextes} (Evenements {nbParCarte.Evenements}, Parcours {nbParCarte.Parcours})`)
+assert(nbTextes > 0, "aucun TextLabel de SurfaceGui trouvé")
 
 ---------------------------------------------------------------------------------------------------------------
 local pieces = 0
