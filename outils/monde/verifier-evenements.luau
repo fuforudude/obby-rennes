@@ -11,9 +11,14 @@
 --   qu'une partie du temps.
 -- - Balancier : sur une période, la fenêtre de passage (la pièce hors de sa zone ZoneControleMin/Max) dure au moins
 --   1,5 s d'affilée ; sur toute son amplitude, la pièce ne touche aucune pièce solide de la carte.
+-- - Volume de réapparition de chaque checkpoint (pièce taguée Checkpoint de Parcours.rbxm : cylindre de rayon 1,5
+--   centré sur la dalle, de son dessus à dessus + 5) : aucun événement (boîte balayée élargie des marges de contact)
+--   ni aucun balancier (sur toute son amplitude) ne doit y entrer. C'est un défaut : le personnage réapparaît
+--   là, un danger qui y passe le pousserait ou le tuerait à la réapparition.
 -- - PanneauAnecdote : Numero 0 à 15, une fois chacun, un TextLabel « Texte », près de son checkpoint, sans toucher de
 --   pièce solide de la carte.
--- Horaires : ceux de src/partage/Horaires.luau (chargé s'il existe, sinon même formule recopiée ci-dessous).
+-- Horaires : ceux de src/partage/Horaires.luau (chargé s'il existe, sinon même formule recopiée ci-dessous) ;
+-- marges de contact : celles de src/partage/Reglages.luau (EVENEMENT_MARGE_HORIZONTALE / _VERTICALE).
 -- Code de sortie 1 au moindre défaut.
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
@@ -50,6 +55,18 @@ else
 	}
 	print("horaires : formule recopiée (src/partage/Horaires.luau absent de cette branche)")
 end
+
+-- Marges de contact du client : lues dans les réglages du jeu, jamais recopiées.
+assert(
+	fs.isFile("src/partage/Reglages.luau"),
+	"src/partage/Reglages.luau introuvable (lancer depuis la racine du dépôt)"
+)
+local Reglages = luau.load(fs.readFile("src/partage/Reglages.luau"), { debugName = "Reglages" })()
+assert(
+	type(Reglages.EVENEMENT_MARGE_HORIZONTALE) == "number" and type(Reglages.EVENEMENT_MARGE_VERTICALE) == "number",
+	"Reglages.EVENEMENT_MARGE_HORIZONTALE / EVENEMENT_MARGE_VERTICALE absents"
+)
+print("marges de contact : src/partage/Reglages.luau")
 
 local evenementsModele = roblox.deserializeModel(fs.readFile(process.args[1] or "monde/Evenements.rbxm"))[1]
 local parcoursModele = roblox.deserializeModel(fs.readFile(process.args[2] or "monde/Parcours.rbxm"))[1]
@@ -204,6 +221,36 @@ for _, d in parcoursModele:GetDescendants() do
 	end
 end
 
+-- Volume de réapparition d'un checkpoint : cylindre de rayon RAYON_APPARITION autour du centre de la dalle, du dessus
+-- à dessus + HAUTEUR_APPARITION. Il est échantillonné (anneaux tous les 0,25 stud, 32 points par anneau, un niveau
+-- tous les 0,25 stud) ; une pièce testée contre ces points est élargie de DILATATION (environ la moitié du pas) pour
+-- que rien de fin ne passe entre deux points.
+local RAYON_APPARITION, HAUTEUR_APPARITION, DILATATION = 1.5, 5, 0.15
+type Apparition = { nom: string, centre: any, points: { any } }
+local apparitions: { Apparition } = {}
+for _, d in parcoursModele:GetDescendants() do
+	if d:IsA("BasePart") and d:HasTag("Checkpoint") then
+		local pos, s = d.CFrame.Position, d.Size
+		local dessus = pos.Y + s.Y / 2
+		local points = {}
+		for k = 0, HAUTEUR_APPARITION / 0.25 do
+			local y = dessus + k * 0.25
+			table.insert(points, Vector3.new(pos.X, y, pos.Z))
+			for _, r in { 0.25, 0.5, 0.75, 1, 1.25, RAYON_APPARITION } do
+				for a = 0, 31 do
+					local angle = a * math.pi / 16
+					table.insert(points, Vector3.new(pos.X + r * math.cos(angle), y, pos.Z + r * math.sin(angle)))
+				end
+			end
+		end
+		table.insert(apparitions, {
+			nom = `{d.Name} ({string.format("%.1f, %.1f, %.1f", pos.X, dessus, pos.Z)})`,
+			centre = Vector3.new(pos.X, dessus + HAUTEUR_APPARITION / 2, pos.Z),
+			points = points,
+		})
+	end
+end
+
 -- Où peut être le centre d'un personnage debout sur la dalle (environ 3 studs au-dessus du dessus).
 local function volumeDuCentre(p: Plateforme): Boite
 	return { min = Vector3.new(p.x1, p.haut + 2.5, p.z1), max = Vector3.new(p.x2, p.haut + 3.5, p.z2) }
@@ -212,7 +259,11 @@ end
 ---------------------------------------------------------------------------------------------------------------
 -- Événements.
 print("\n== Événements ==")
-local MARGE = Vector3.new(0.8, 2, 0.8) -- marges de contact du client
+local MARGE = Vector3.new(
+	Reglages.EVENEMENT_MARGE_HORIZONTALE,
+	Reglages.EVENEMENT_MARGE_VERTICALE,
+	Reglages.EVENEMENT_MARGE_HORIZONTALE
+) -- marges de contact du client
 local DUREE_SIMULEE, PAS = 120, 0.01
 
 type Horaire = { nom: string, periode: number, decalage: number, preavis: number, duree: number }
@@ -290,6 +341,21 @@ for _, m in evenementsModele:GetDescendants() do
 		end
 	end
 	local touche = elargir(balaye, MARGE)
+	for _, ap in apparitions do
+		for _, pt in ap.points do
+			if
+				pt.X > touche.min.X
+				and pt.X < touche.max.X
+				and pt.Y > touche.min.Y
+				and pt.Y < touche.max.Y
+				and pt.Z > touche.min.Z
+				and pt.Z < touche.max.Z
+			then
+				defaut(`{nom} : un danger passe dans le volume de réapparition du checkpoint {ap.nom}`)
+				break
+			end
+		end
+	end
 	local concernees = {}
 	for _, p in plateformes do
 		if aabbSeCroisent(touche, volumeDuCentre(p)) then
@@ -496,6 +562,32 @@ for _, b in evenementsModele:GetDescendants() do
 	end
 	for nomDecor, a in contactsAvec(prochesParmi(fantomes)) do
 		avertir(`{nom} traverse le décor {nomDecor} (à {a}°)`)
+	end
+	-- Volume de réapparition des checkpoints : jamais balayé, sur toute l'amplitude.
+	for _, ap in apparitions do
+		if (ap.centre - pivot).Magnitude > rayon + RAYON_APPARITION + HAUTEUR_APPARITION then
+			continue
+		end
+		local angle = -amplitude
+		local pris: number? = nil
+		while not pris and angle <= amplitude + 1e-6 do
+			local o = obb(aLAngle(angle), taille)
+			for _, pt in ap.points do
+				local d = pt - o.c
+				if
+					math.abs(d:Dot(o.axes[1])) <= o.h[1] + DILATATION
+					and math.abs(d:Dot(o.axes[2])) <= o.h[2] + DILATATION
+					and math.abs(d:Dot(o.axes[3])) <= o.h[3] + DILATATION
+				then
+					pris = angle
+					break
+				end
+			end
+			angle += 0.5
+		end
+		if pris then
+			defaut(`{nom} balaie le volume de réapparition du checkpoint {ap.nom} (à {pris}°)`)
+		end
 	end
 	print(
 		string.format(
