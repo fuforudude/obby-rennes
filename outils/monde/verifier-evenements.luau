@@ -11,7 +11,7 @@
 --   qu'une partie du temps.
 -- - Balancier : sur une période, la fenêtre de passage (la pièce hors de sa zone ZoneControleMin/Max) dure au moins
 --   1,5 s d'affilée ; sur toute son amplitude, la pièce ne touche aucune pièce solide de la carte.
--- - Volume de réapparition de chaque checkpoint (pièce taguée Checkpoint de Parcours.rbxm : cylindre de rayon 1,5
+-- - Volume de réapparition de chaque checkpoint (pièce taguée Checkpoint de Parcours.rbxm : cylindre de rayon 2
 --   centré sur la dalle, de son dessus à dessus + 5) : aucun événement (boîte balayée élargie des marges de contact)
 --   ni aucun balancier (sur toute son amplitude) ne doit y entrer. C'est un défaut : le personnage réapparaît
 --   là, un danger qui y passe le pousserait ou le tuerait à la réapparition.
@@ -222,8 +222,8 @@ for _, d in parcoursModele:GetDescendants() do
 end
 
 -- Volume de réapparition d'un checkpoint : cylindre de rayon RAYON_APPARITION autour du centre de la dalle, du dessus
--- à dessus + HAUTEUR_APPARITION. Il est échantillonné (anneaux tous les 0,25 stud, 32 points par anneau, un niveau
--- tous les 0,25 stud) ; une pièce testée contre ces points est élargie de DILATATION (environ la moitié du pas) pour
+-- à dessus + HAUTEUR_APPARITION. Il est échantillonné (un anneau tous les 0,25 stud de rayon, un point tous les
+-- 0,25 stud le long de chaque anneau, un niveau tous les 0,25 stud) ; une pièce testée contre ces points est élargie de DILATATION (environ la moitié du pas) pour
 -- que rien de fin ne passe entre deux points.
 local RAYON_APPARITION, HAUTEUR_APPARITION, DILATATION = 2, 5, 0.15
 type Apparition = { nom: string, centre: any, points: { any } }
@@ -236,9 +236,10 @@ for _, d in parcoursModele:GetDescendants() do
 		for k = 0, HAUTEUR_APPARITION / 0.25 do
 			local y = dessus + k * 0.25
 			table.insert(points, Vector3.new(pos.X, y, pos.Z))
-			for _, r in { 0.25, 0.5, 0.75, 1, 1.25, RAYON_APPARITION } do
-				for a = 0, 31 do
-					local angle = a * math.pi / 16
+			for r = 0.25, RAYON_APPARITION, 0.25 do
+				local nb = math.ceil(2 * math.pi * r / 0.25) -- un point tous les 0,25 stud le long de l'anneau
+				for a = 0, nb - 1 do
+					local angle = a * 2 * math.pi / nb
 					table.insert(points, Vector3.new(pos.X + r * math.cos(angle), y, pos.Z + r * math.sin(angle)))
 				end
 			end
