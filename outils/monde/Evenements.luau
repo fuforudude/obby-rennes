@@ -303,9 +303,12 @@ return function(R)
 	local ROUGE_STAR = Color3.fromRGB(235, 50, 60)
 
 	-- Une rame qui traverse en Z au niveau des pieds, de tunnel en tunnel ; un feu fixe près de l'escalator.
-	local function rame(nom, x, dessus, sens, periode, decalage, feuX, feuZ)
+	-- `zMoins` : distance du centre de la rame cachée dans le tunnel côté -Z (45 par défaut, moins si le décor gêne).
+	local function rame(nom, x, dessus, sens, periode, decalage, feuX, feuZ, zMoins)
+		zMoins = zMoins or 45
 		local yc = dessus + 0.2 + 3.5
-		local depart, arrivee = Vector3.new(x, yc, -45 * sens), Vector3.new(x, yc, 45 * sens)
+		local bouts = { [-1] = Vector3.new(x, yc, -zMoins), [1] = Vector3.new(x, yc, 45) }
+		local depart, arrivee = bouts[-sens], bouts[sens]
 		local m = evenement(metro, nom, {
 			Type = "Passage",
 			Periode = periode,
@@ -346,12 +349,12 @@ return function(R)
 			x + 2,
 			dessus - 2.2,
 			dessus - 1,
-			-57,
+			-zMoins - 12,
 			57,
 			Color3.fromRGB(120, 125, 135),
 			Enum.Material.Concrete
 		)
-		for _, cote in { -1, 1 } do
+		for _, bout in { -zMoins, 45 } do
 			boite(
 				decor,
 				"Tunnel",
@@ -359,8 +362,8 @@ return function(R)
 				x + 3.2,
 				dessus - 1,
 				dessus + 8.6,
-				cote * 33,
-				cote * 58,
+				bout - 12.5,
+				bout + 12.5,
 				Color3.fromRGB(45, 45, 55),
 				Enum.Material.Concrete
 			)
@@ -378,7 +381,7 @@ return function(R)
 		)
 	end
 	rame("RameLigneA", 219, 26, 1, 8, 1, 222.6, -5)
-	rame("RameLigneA", 231, 18, -1, 9.5, 5, 234.6, 5)
+	rame("RameLigneA", 231, 18, -1, 9.5, 5, 234.6, 5, 22.5) -- pavillon de l'hôtel de ville en z < -35
 
 	---------------------------------------------------------------------------------------------------------------
 	-- 3 · Les échafaudages de la tour : des drones de livraison qui coupent la descente.
@@ -387,9 +390,11 @@ return function(R)
 	local tour = dossier(racineEvenements, "Tour")
 	local tubesPoses = {}
 
-	local function drone(x, dessus, z, sens, periode, decalage)
+	-- `zMin` : bout du trajet côté -Z (z - 28 par défaut, plus près là où le décor gêne).
+	local function drone(x, dessus, z, sens, periode, decalage, zMin)
 		local yc = dessus + 3.2
-		local depart, arrivee = Vector3.new(x, yc, z - 28 * sens), Vector3.new(x, yc, z + 28 * sens)
+		local bouts = { [-1] = Vector3.new(x, yc, zMin or z - 28), [1] = Vector3.new(x, yc, z + 28) }
+		local depart, arrivee = bouts[-sens], bouts[sens]
 		local m = evenement(tour, "DroneDeLivraison", {
 			Type = "Passage",
 			Periode = periode,
@@ -459,7 +464,7 @@ return function(R)
 	end
 	drone(421, 58, 0, 1, 6, 0.5)
 	drone(430, 50, 4, -1, 7, 3)
-	drone(439, 42, -4, 1, 5.5, 2)
+	drone(439, 42, -4, 1, 5.5, 2, -15) -- affiche « ascenseur en panne » en z = -17
 	drone(448, 34, 0, -1, 8, 5)
 	drone(448, 34, 0, 1, 12, 9.5)
 
@@ -523,25 +528,25 @@ return function(R)
 	end
 
 	local function bus(sens, periode, decalage)
-		local m, z = vehicule("BusStar", 13, sens, periode, decalage, 1.8, 4.6)
+		local m, z = vehicule("BusStar", 6.8, sens, periode, decalage, 1.8, 4.6)
 		local y0 = DESSUS_TERRASSE + 0.3
 		local corps = piece(
 			m,
 			"Caisse",
 			3.6,
 			5.5,
-			13,
+			6.8,
 			CFrame.new(VOIE_X, y0 + 2.75, z),
 			Color3.fromRGB(235, 235, 240),
 			Enum.Material.Metal
 		)
-		piece(m, "Bande", 3.65, 1, 13.05, CFrame.new(VOIE_X, y0 + 1, z), ROUGE_STAR, Enum.Material.Metal)
+		piece(m, "Bande", 3.65, 1, 6.85, CFrame.new(VOIE_X, y0 + 1, z), ROUGE_STAR, Enum.Material.Metal)
 		piece(
 			m,
 			"Vitres",
 			3.65,
 			1.6,
-			12.4,
+			6.2,
 			CFrame.new(VOIE_X, y0 + 3.6, z),
 			Color3.fromRGB(40, 50, 70),
 			Enum.Material.Glass
@@ -598,7 +603,7 @@ return function(R)
 	-- la terrasse.
 	local pierre = Color3.fromRGB(225, 205, 175)
 	for _, cote in { -1, 1 } do
-		local z1, z2 = if cote < 0 then -25 else 9, if cote < 0 then -9 else 25
+		local z1, z2 = if cote < 0 then -16.4 else 9, if cote < 0 then -9 else 16.4
 		boite(decor, "PorteCochere", 511.5, VOIE_X - 2.1, SOL, 30, z1, z2, pierre, Enum.Material.Brick)
 		boite(decor, "PorteCochere", VOIE_X + 2.1, 524, SOL, 30, z1, z2, pierre, Enum.Material.Brick)
 		boite(decor, "PorteCochere", VOIE_X - 2.1, VOIE_X + 2.1, 17, 30, z1, z2, pierre, Enum.Material.Brick)
@@ -627,18 +632,7 @@ return function(R)
 			Color3.fromRGB(70, 70, 75),
 			Enum.Material.Asphalt
 		)
-		local toit = boite(
-			decor,
-			"Toit",
-			511,
-			524.5,
-			30,
-			31,
-			z1 - 0.5,
-			z2 + 0.5,
-			Color3.fromRGB(85, 95, 120),
-			Enum.Material.Slate
-		)
+		local toit = boite(decor, "Toit", 511, 524.5, 30, 31, z1, z2, Color3.fromRGB(85, 95, 120), Enum.Material.Slate)
 		toit.CastShadow = true
 	end
 
@@ -782,7 +776,7 @@ return function(R)
 	do
 		local d = dossier(decor, "PortiqueCortege")
 		local poutre =
-			boite(d, "Poutre", 301.5, 302.5, 34, 35, -17, 17, Color3.fromRGB(60, 60, 70), Enum.Material.Metal)
+			boite(d, "Poutre", 301.5, 302.5, 34, 35, -19.5, 19.5, Color3.fromRGB(60, 60, 70), Enum.Material.Metal)
 		for _, cote in { -1, 1 } do
 			boite(
 				d,
@@ -791,8 +785,8 @@ return function(R)
 				302.5,
 				SOL,
 				34,
-				cote * 17 - 0.5,
-				cote * 17 + 0.5,
+				cote * 19 - 0.5,
+				cote * 19 + 0.5,
 				Color3.fromRGB(60, 60, 70),
 				Enum.Material.Metal
 			)
@@ -836,21 +830,25 @@ return function(R)
 		)
 	end
 
-	-- Cloche (les clochers ne sont jamais loin, rue de la Soif) : clocheton au-dessus du toit de la maison (475, 30).
+	-- Cloche (les clochers ne sont jamais loin, rue de la Soif) : clocheton au-dessus de la sortie du checkpoint 9,
+	-- sur le toit plat du bar « Le Rattrapage » (dalle 482..494 × -6..6, dessus 28 ; les maisons voisines ont des
+	-- pignons qui gêneraient la cloche).
 	do
 		local d = dossier(decor, "Clocheton")
-		local poutre = boite(d, "Joug", 474.4, 475.6, 40, 41.2, -11, 11, Color3.fromRGB(95, 60, 35), Enum.Material.Wood)
+		local X, PIVOT_Y = 492, 40
+		local bois = Color3.fromRGB(95, 60, 35)
+		local poutre = boite(d, "Joug", X - 0.6, X + 0.6, PIVOT_Y, PIVOT_Y + 1.2, -13.5, 13.5, bois, Enum.Material.Wood)
 		for _, cote in { -1, 1 } do
 			boite(
 				d,
 				"Montant",
-				474.4,
-				475.6,
+				X - 0.6,
+				X + 0.6,
 				SOL,
-				40,
-				cote * 11 - 0.6,
-				cote * 11 + 0.6,
-				Color3.fromRGB(95, 60, 35),
+				PIVOT_Y,
+				cote * 13 - 0.6,
+				cote * 13 + 0.6,
+				bois,
 				Enum.Material.Wood
 			)
 		end
@@ -860,21 +858,21 @@ return function(R)
 			3.4,
 			3.2,
 			3.2,
-			CFrame.new(475, 32, 0) * DEBOUT,
+			CFrame.new(X, 30, 0) * DEBOUT,
 			Color3.fromRGB(190, 140, 60),
 			Enum.Material.Metal,
 			Enum.PartType.Cylinder
 		)
-		corde(poutre, Vector3.new(475, 40, 0), cloche, Vector3.new(475, 33.7, 0), Color3.fromRGB(60, 60, 60))
+		corde(poutre, Vector3.new(X, PIVOT_Y, 0), cloche, Vector3.new(X, 31.7, 0), Color3.fromRGB(60, 60, 60))
 		balancier(
 			cloche,
-			Vector3.new(475, 40, 0),
+			Vector3.new(X, PIVOT_Y, 0),
 			Vector3.new(1, 0, 0),
 			80,
-			6.5,
+			7,
 			0.7,
-			Vector3.new(473, 30.5, -4.2),
-			Vector3.new(477, 35, 4.2)
+			Vector3.new(X - 1, 28.5, -6),
+			Vector3.new(X + 1, 33, 6)
 		)
 	end
 
@@ -1035,12 +1033,12 @@ return function(R)
 	aCote(6, 342, 19, 0, 12, -1, 4.5, accents.cortege, SOL)
 	aCote(7, 374, 24, 0, 8, 1, 0, accents.tour, SOL)
 	aCote(8, 404.5, 66, 0, 6, 1, -1, accents.tour, 63)
-	aCote(9, 488, 28, 0, 12, -1, 4.5, accents.soif, SOL)
+	aCote(9, 488, 28, 0, 12, -1, -4.5, accents.soif, SOL)
 	aCote(10, 559, 10, 0, 12, -1, 4.5, accents.soif, SOL)
-	aCote(11, 611, 5, 0, 12, -1, 4.5, accents.vilaine, SOL)
-	aCote(12, 647, 17, 0, 12, -1, 4.5, accents.vilaine, SOL)
+	aCote(11, 611, 5, 0, 12, -1, 4.5, accents.vilaine, 2)
+	aCote(12, 647, 17, 0, 12, -1, 4.5, accents.vilaine, 2)
 	aCote(13, 715, 42, 0, 8, -1, 4.5, accents.parlement, 40.6)
-	aCote(14, 810, 18, 0, 12, -1, 4.5, accents.thabor, SOL)
+	aCote(14, 810, 18, 0, 12, -1, 4.5, accents.thabor, 12)
 	-- Salle de partiel (checkpoint 15, dalle 828..840 × 2..14) : panneau au mur ouest, face à la salle.
 	panneau(15, CFrame.new(826.3, 46.5, 8) * versLaDirection(1, 0), accents.vinci, nil)
 

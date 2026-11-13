@@ -54,10 +54,15 @@ end
 local evenementsModele = roblox.deserializeModel(fs.readFile(process.args[1] or "monde/Evenements.rbxm"))[1]
 local parcoursModele = roblox.deserializeModel(fs.readFile(process.args[2] or "monde/Parcours.rbxm"))[1]
 
-local defauts = 0
+local defauts, avertissements = 0, 0
 local function defaut(message: string)
 	defauts += 1
 	print("  DÉFAUT : " .. message)
+end
+-- Recoupement avec du décor sans collision : rien ne bloque, mais ça se voit ; à regarder.
+local function avertir(message: string)
+	avertissements += 1
+	print("  avertissement : " .. message)
 end
 
 ---------------------------------------------------------------------------------------------------------------
@@ -153,6 +158,7 @@ end
 type Plateforme = { nom: string, x1: number, x2: number, z1: number, z2: number, haut: number, cp: number? }
 local plateformes: { Plateforme } = {}
 local solides = {}
+local fantomes = {} -- décor visible sans collision
 local checkpoints = {}
 
 for _, d in parcoursModele:GetDescendants() do
@@ -162,6 +168,11 @@ for _, d in parcoursModele:GetDescendants() do
 	if d.CanCollide and d.Transparency < 1 then
 		table.insert(
 			solides,
+			{ nom = d:GetFullName(), boite = aabbDePiece(d.CFrame, d.Size), obb = obb(d.CFrame, d.Size) }
+		)
+	elseif d.Transparency < 1 and d.Name ~= "Sol" then
+		table.insert(
+			fantomes,
 			{ nom = d:GetFullName(), boite = aabbDePiece(d.CFrame, d.Size), obb = obb(d.CFrame, d.Size) }
 		)
 	end
@@ -454,28 +465,37 @@ for _, b in evenementsModele:GetDescendants() do
 	end
 	-- Contact avec la carte sur toute l'amplitude.
 	local rayon = (cf0.Position - pivot).Magnitude + taille.Magnitude / 2
-	local proches = {}
-	for _, s in solides do
-		local c = (s.boite.min + s.boite.max) / 2
-		local demi = (s.boite.max - s.boite.min) / 2
-		local ecart = ((c - pivot):Abs() - demi):Max(Vector3.zero)
-		if ecart.Magnitude <= rayon then
-			table.insert(proches, s)
-		end
-	end
-	local contacts = {}
-	local angle = -amplitude
-	while angle <= amplitude + 1e-6 do
-		local o = obb(aLAngle(angle), taille)
-		for _, s in proches do
-			if not contacts[s.nom] and obbSeCroisent(o, s.obb) then
-				contacts[s.nom] = angle
+	local function prochesParmi(liste)
+		local proches = {}
+		for _, s in liste do
+			local c = (s.boite.min + s.boite.max) / 2
+			local demi = (s.boite.max - s.boite.min) / 2
+			local ecart = ((c - pivot):Abs() - demi):Max(Vector3.zero)
+			if ecart.Magnitude <= rayon then
+				table.insert(proches, s)
 			end
 		end
-		angle += 0.5
+		return proches
 	end
-	for nomSolide, a in contacts do
+	local function contactsAvec(proches)
+		local contacts = {}
+		local angle = -amplitude
+		while angle <= amplitude + 1e-6 do
+			local o = obb(aLAngle(angle), taille)
+			for _, s in proches do
+				if not contacts[s.nom] and obbSeCroisent(o, s.obb) then
+					contacts[s.nom] = angle
+				end
+			end
+			angle += 0.5
+		end
+		return contacts
+	end
+	for nomSolide, a in contactsAvec(prochesParmi(solides)) do
 		defaut(`{nom} touche {nomSolide} (à {a}°)`)
+	end
+	for nomDecor, a in contactsAvec(prochesParmi(fantomes)) do
+		avertir(`{nom} traverse le décor {nomDecor} (à {a}°)`)
 	end
 	print(
 		string.format(
@@ -532,6 +552,11 @@ for _, p in evenementsModele:GetDescendants() do
 			defaut(`PanneauAnecdote {n} touche {s.nom}`)
 		end
 	end
+	for _, s in fantomes do
+		if obbSeCroisent(o, s.obb) then
+			avertir(`PanneauAnecdote {n} traverse le décor {s.nom}`)
+		end
+	end
 end
 for n = 0, 15 do
 	if not vus[n] then
@@ -554,7 +579,7 @@ for _, d in evenementsModele:GetDescendants() do
 	end
 end
 print(`\n{nbEvenements} événements, {nbBalanciers} balanciers, {pieces} pièces dans Evenements.rbxm`)
-print(`défauts : {defauts}`)
+print(`défauts : {defauts}, avertissements : {avertissements}`)
 if defauts > 0 then
 	process.exit(1)
 end
