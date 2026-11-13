@@ -56,6 +56,8 @@ Prises par l'étudiant le 2026-11-13.
 | Événements et streaming de Roblox (après revue) | Client robuste aux pièces qui arrivent ou partent ; désactiver le streaming ; modèles atomiques | Client robuste | Marche dans tous les cas, garde le streaming possible pour le mobile |
 | Sens de « fenêtre sûre de 2 s » (après revue) | 2 s par cycle ; 2 s entre deux dangers | 2 s par cycle | Les rafales rapprochées font l'effet aléatoire voulu |
 | Raccourcis clavier et manette ajoutés par l'agent UI (après revue) | Garder corrigés ; retirer | Garder, corrigés | Pratiques au clavier et à la manette |
+| Régression : le serveur refusait tous les signalements (2e revue) | Contrôle de cadence à un seul endroit + séquence testée ; déplacer une ligne | Cadence à un seul endroit, séquence « cadence, noter, valider » en fonction pure testée | Le piège disparaît et un test le couvre |
+| Rayon du volume de réapparition dans le contrôle (2e revue) | 2 studs ; garder 1,5 | 2 studs | Marge pour un personnage bras compris |
 
 ## Contrats entre agents
 - **Tag `Evenement`** sur un `Model` (ou une `BasePart`) de danger, avec les attributs :
