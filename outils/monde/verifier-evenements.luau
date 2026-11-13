@@ -674,6 +674,127 @@ print(`panneaux : {#(function()
 end)()} / 16`)
 
 ---------------------------------------------------------------------------------------------------------------
+-- « ! » de préavis (BillboardGui « FeuRouge », AlwaysOnTop faux : le décor opaque le cache). Pour chacun, aucune
+-- pièce opaque (Parcours.rbxm hors pièces tournantes, et le décor fixe d'Evenements.rbxm : dossier « Decor ») ne doit
+-- couper le segment entre lui et les yeux d'un joueur qui attend (dernier auvent de la rue de la Soif, y 14 + 4,5 ;
+-- terrasse, y 10 + 4,5), ni le contenir (carré de 2 studs, retiré du mur d'un stud de marge à plat : rien n'est dans
+-- le cube de demi-côté 0,9 autour de son centre) ; et il ne recouvre aucun véhicule (volume balayé par un
+-- événement de passage, agrandi d'un stud).
+print("\n== « ! » de préavis ==")
+local occulteurs = {}
+for _, d in parcoursModele:GetDescendants() do
+	if d:IsA("BasePart") and d.Transparency <= 0.5 and not d:HasTag("Tournant") then
+		table.insert(occulteurs, { nom = d:GetFullName(), obb = obb(d.CFrame, d.Size) })
+	end
+end
+for _, d in evenementsModele:GetDescendants() do
+	if d:IsA("BasePart") and d.Transparency <= 0.5 and d.Name ~= "Preavis" and d:FindFirstAncestor("Decor") then
+		table.insert(occulteurs, { nom = d:GetFullName(), obb = obb(d.CFrame, d.Size) })
+	end
+end
+
+-- Le segment [a, b] traverse-t-il la boîte orientée ? (test des plans parallèles, dans le repère de la boîte ;
+-- `marge` rétrécit la boîte pour ne pas compter un simple effleurement)
+local function segmentCoupe(a, b, o, marge: number): boolean
+	local tmin, tmax = 0, 1
+	local d = b - a
+	for i = 1, 3 do
+		local axe = o.axes[i]
+		local h = o.h[i] - marge
+		local p0 = (a - o.c):Dot(axe)
+		local dp = d:Dot(axe)
+		if math.abs(dp) < 1e-9 then
+			if math.abs(p0) > h then
+				return false
+			end
+		else
+			local t1, t2 = (-h - p0) / dp, (h - p0) / dp
+			if t1 > t2 then
+				t1, t2 = t2, t1
+			end
+			tmin, tmax = math.max(tmin, t1), math.min(tmax, t2)
+			if tmin > tmax then
+				return false
+			end
+		end
+	end
+	return true
+end
+
+local yeux = {}
+for _, z in { -3, 0, 3 } do
+	table.insert(yeux, { nom = `auvent (511, 18.5, {z})`, pos = Vector3.new(511, 18.5, z) })
+end
+for _, x in { 518, 524, 530, 536, 542, 546 } do
+	for _, z in { -4, 0, 4 } do
+		table.insert(yeux, { nom = `terrasse ({x}, 14.5, {z})`, pos = Vector3.new(x, 14.5, z) })
+	end
+end
+
+local balayes = {} -- volumes balayés par les véhicules (hors bande de préavis)
+for _, m in evenementsModele:GetDescendants() do
+	if m:HasTag("Evenement") and m:GetAttribute("Type") == "Passage" and m.PrimaryPart then
+		local corps: Boite? = nil
+		for _, p in m:GetDescendants() do
+			if p:IsA("BasePart") and p.Name ~= "Preavis" then
+				corps = union(corps, aabbDePiece(p.CFrame, p.Size))
+			end
+		end
+		local depart, arrivee = m:GetAttribute("Depart"), m:GetAttribute("Arrivee")
+		if corps and typeof(depart) == "Vector3" and typeof(arrivee) == "Vector3" then
+			local pivot = m.PrimaryPart.CFrame.Position
+			table.insert(balayes, {
+				nom = m:GetFullName(),
+				boite = union(decaler(corps, depart - pivot), decaler(corps, arrivee - pivot)),
+			})
+		end
+	end
+end
+
+local nbFeux, nbSegments = 0, 0
+for _, g in evenementsModele:GetDescendants() do
+	if not (g:IsA("BillboardGui") and g.Name == "FeuRouge") then
+		continue
+	end
+	nbFeux += 1
+	local bande = g.Parent :: any
+	local centre = bande.CFrame.Position + g.StudsOffsetWorldSpace
+	local nom = g:GetFullName()
+	if g.AlwaysOnTop or g.MaxDistance ~= 80 or g.Size.X.Scale ~= 2 then
+		defaut(`{nom} : « ! » à 2 studs, AlwaysOnTop faux, MaxDistance 80 attendus`)
+	end
+	local cube = obbDeBoite({ min = centre - Vector3.new(0.9, 0.9, 0.9), max = centre + Vector3.new(0.9, 0.9, 0.9) })
+	for _, o in occulteurs do
+		if obbSeCroisent(cube, o.obb, 0) then
+			defaut(`{nom} ({string.format("%.1f, %.1f, %.1f", centre.X, centre.Y, centre.Z)}) touche {o.nom}`)
+		end
+	end
+	for _, v in balayes do
+		if
+			aabbSeCroisent(
+				elargir(v.boite, Vector3.new(1, 1, 1)),
+				{ min = centre - Vector3.one, max = centre + Vector3.one }
+			)
+		then
+			defaut(`{nom} recouvre le passage de {v.nom}`)
+		end
+	end
+	if g:FindFirstAncestor("RueDeLaSoif") then
+		for _, oeil in yeux do
+			nbSegments += 1
+			for _, o in occulteurs do
+				if segmentCoupe(oeil.pos, centre, o.obb, 0.05) then
+					defaut(`{nom} caché depuis {oeil.nom} par {o.nom}`)
+					break
+				end
+			end
+		end
+	end
+end
+print(`{nbFeux} « ! », {nbSegments} lignes de vue testées contre {#occulteurs} pièces opaques`)
+assert(nbFeux > 0, "aucun « ! » de préavis trouvé")
+
+---------------------------------------------------------------------------------------------------------------
 local pieces = 0
 for _, d in evenementsModele:GetDescendants() do
 	if d:IsA("BasePart") then
