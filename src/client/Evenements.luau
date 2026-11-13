@@ -4,8 +4,9 @@
 -- tous les joueurs voient la même chose au même moment, sans que le serveur ne déplace rien (voir Horaires.luau
 -- pour le cycle). Contrat des attributs : docs/specs/2026-11-13-evenements-batiments-interface.md.
 --
--- Pendant le préavis, l'enfant facultatif `Preavis` (une BasePart : ombre au sol, phares) apparaît en clignotant, à
--- l'endroit où la carte l'a posé. Pendant le danger, l'objet se déplace (Passage : de Depart à Arrivee ; Chute : de
+-- Pendant le préavis, l'enfant facultatif `Preavis` (une BasePart : la bande rouge au sol, signal principal, avec sa
+-- lumière et ses feux « ! » hors de la ligne de vue) apparaît en clignotant, à l'endroit où la carte l'a posé.
+-- Pendant le danger, l'objet se déplace (Passage : de Depart à Arrivee ; Chute : de
 -- Hauteur studs au-dessus de sa place vers sa place, en accélérant). Hors danger, il est rangé très loin (rien n'est
 -- détruit, pas d'ombre, pas de pièce à parcourir à chaque image).
 --

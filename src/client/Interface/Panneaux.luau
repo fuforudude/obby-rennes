@@ -1,7 +1,9 @@
 --!strict
 -- Les panneaux d'anecdote du décor : chaque pièce taguée `PanneauAnecdote` (attribut `Numero`, 0 à 15) porte un
--- SurfaceGui avec un TextLabel nommé `Texte`. Le client y écrit la zone, l'anecdote et la vanne de ce checkpoint
--- (Etapes.obtenir). Les panneaux ajoutés plus tard (carte en streaming, génération tardive) sont pris en charge.
+-- SurfaceGui avec deux TextLabel : `Titre` (le nom de la zone) et `Corps` (l'anecdote, une ligne vide, puis la vanne),
+-- en texte simple, sans RichText : la taille du texte est réglée par la carte. Le client y écrit ce que dit
+-- Etapes.obtenir pour ce checkpoint. Les panneaux ajoutés plus tard (carte en streaming, génération tardive) sont
+-- pris en charge. Si la carte est une ancienne version (un seul label `Texte`), on prévient une fois et on ignore.
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -9,11 +11,13 @@ local Affichage = require(ReplicatedStorage.Partage.Affichage)
 local Etapes = require(ReplicatedStorage.Partage.Etapes)
 
 local TAG = "PanneauAnecdote"
-local NOM_TEXTE = "Texte"
+local NOM_TITRE = "Titre"
+local NOM_CORPS = "Corps"
 
 local Panneaux = {}
 
 local monte = false
+local avertiAncienneCarte = false
 -- Les connexions de chaque panneau, coupées quand il disparaît (stream-out, destruction, retrait du tag).
 local connexions: { [Instance]: { RBXScriptConnection } } = {}
 
@@ -27,17 +31,30 @@ local function oublier(panneau: Instance)
 	end
 end
 
---- Écrit le texte du checkpoint dans le TextLabel « Texte » du panneau. Rend `true` s'il l'a trouvé.
+--- Écrit le texte du checkpoint dans les TextLabel « Titre » et « Corps » du panneau. Rend `true` s'ils sont là.
 local function remplir(panneau: Instance): boolean
 	local numero = panneau:GetAttribute("Numero")
-	local texte = panneau:FindFirstChild(NOM_TEXTE, true)
-	if typeof(numero) ~= "number" or not texte or not texte:IsA("TextLabel") then
+	if typeof(numero) ~= "number" then
+		return false
+	end
+	local titre = panneau:FindFirstChild(NOM_TITRE, true)
+	local corps = panneau:FindFirstChild(NOM_CORPS, true)
+	if not (titre and titre:IsA("TextLabel") and corps and corps:IsA("TextLabel")) then
+		-- Ancienne carte (label `Texte` seul) : on prévient une fois. Sinon, le SurfaceGui n'est pas encore arrivé.
+		local ancien = panneau:FindFirstChild("Texte", true)
+		if ancien and ancien:IsA("TextLabel") and not avertiAncienneCarte then
+			avertiAncienneCarte = true
+			warn(
+				`[Panneaux] {panneau:GetFullName()} : label « Texte » sans « Titre » ni « Corps » (ancienne carte), ignoré`
+			)
+		end
 		return false
 	end
 	local etape = Etapes.obtenir(numero)
 	if etape then
-		texte.RichText = true -- titre en gras et vanne en italique (texte échappé par Affichage)
-		texte.Text = Affichage.textePanneau(etape)
+		titre.RichText = false
+		corps.RichText = false
+		titre.Text, corps.Text = Affichage.textePanneau(etape)
 	end
 	return true
 end

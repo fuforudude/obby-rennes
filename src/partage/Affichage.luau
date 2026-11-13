@@ -46,18 +46,10 @@ function Affichage.passerVisible(produit: number, etape: number, total: number):
 	return produit ~= 0 and etape < total
 end
 
---- Échappe les caractères du texte enrichi de Roblox (RichText), pour qu'une anecdote ne casse pas le balisage.
-function Affichage.echapper(texte: string): string
-	local resultat = texte:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
-	return resultat
-end
-
---- Le texte d'un panneau du décor : la zone en titre, l'anecdote, puis la vanne (texte enrichi).
-function Affichage.textePanneau(etape: Etapes.Etape): string
-	local zone = Affichage.echapper(etape.zone)
-	local anecdote = Affichage.echapper(etape.anecdote)
-	local blague = Affichage.echapper(etape.blague)
-	return `<b>{zone}</b>\n\n{anecdote}\n\n<i>{blague}</i>`
+--- Le texte d'un panneau du décor, en deux morceaux de texte simple (sans balises) : le titre (la zone) et le corps
+--- (l'anecdote, une ligne vide, puis la vanne).
+function Affichage.textePanneau(etape: Etapes.Etape): (string, string)
+	return etape.zone, `{etape.anecdote}\n\n{etape.blague}`
 end
 
 --- Résumé de l'écran d'arrivée. `gainAura` > `auraArrivee` veut dire que le bonus « sans chute » est compris.
