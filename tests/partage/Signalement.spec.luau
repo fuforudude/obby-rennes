@@ -1,5 +1,6 @@
 -- La validation serveur d'un « j'ai été touché » : un refus par raison (mauvais type, pas un événement, attributs
--- invalides, joueur mort, danger pas actif, trop loin, trop souvent) et le cas accepté.
+-- invalides, joueur mort, danger pas actif, trop loin), le cas accepté, et la cadence des signalements telle que le
+-- service l'appelle (Signalement.traiter).
 return function()
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
 	local Signalement = require(ReplicatedStorage.Partage.Signalement)
@@ -25,12 +26,9 @@ return function()
 		Arrivee = Vector3.new(100, 5, 0),
 	}
 
-	-- Une entrée valide : joueur vivant au pied de la chute, danger actif, premier signalement.
+	-- Une entrée valide : joueur vivant au pied de la chute, danger actif.
 	local function entree(modif: { [string]: any }?)
 		local e: { [string]: any } = {
-			instant = 100,
-			dernierSignalement = nil,
-			delaiMin = 0.5,
 			objetValide = true,
 			avecTag = true,
 			attributs = ATTRIBUTS_CHUTE,
@@ -144,20 +142,88 @@ return function()
 		expect(pourquoi).to.equal("trop_loin")
 	end)
 
-	it("refuse un signalement trop rapproché du précédent", function()
-		local ok, pourquoi = raison({ dernierSignalement = 99.8 })
-		expect(ok).to.equal(false)
-		expect(pourquoi).to.equal("trop_souvent")
-	end)
-
-	it("accepte un signalement assez espacé du précédent", function()
-		local ok = raison({ dernierSignalement = 99 })
-		expect(ok).to.equal(true)
-	end)
-
 	it("tropSouvent ne refuse jamais le premier signalement", function()
 		expect(Signalement.tropSouvent(0, nil, 0.5)).to.equal(false)
 		expect(Signalement.tropSouvent(1, 0.6, 0.5)).to.equal(true)
 		expect(Signalement.tropSouvent(1, 0.5, 0.5)).to.equal(false)
+	end)
+
+	-- La cadence : exactement comme le service l'appelle, avec une table `derniers` qui vit entre les appels.
+	describe("traiter (cadence + validation, comme le service)", function()
+		local DELAI = 0.5
+		local function traiter(derniers: { [any]: number }, cle: any, instant: number, modif: { [string]: any }?)
+			local ok, pourquoi = Signalement.traiter(derniers, cle, instant, DELAI, function()
+				return entree(modif)
+			end)
+			return ok, pourquoi
+		end
+
+		it(
+			"accepte le premier signalement d'un joueur (non-régression : la cadence ne se refuse pas elle-même)",
+			function()
+				local derniers = {}
+				local ok, pourquoi = traiter(derniers, "A", 100)
+				expect(ok).to.equal(true)
+				expect(pourquoi).never.to.be.ok()
+			end
+		)
+
+		it("refuse un second signalement dans le délai minimal", function()
+			local derniers = {}
+			expect(traiter(derniers, "A", 100)).to.equal(true)
+			local ok, pourquoi = traiter(derniers, "A", 100.3)
+			expect(ok).to.equal(false)
+			expect(pourquoi).to.equal("trop_souvent")
+		end)
+
+		it("accepte à nouveau une fois le délai écoulé", function()
+			local derniers = {}
+			expect(traiter(derniers, "A", 100)).to.equal(true)
+			expect(traiter(derniers, "A", 100.5)).to.equal(true)
+		end)
+
+		it("un joueur n'en gêne pas un autre", function()
+			local derniers = {}
+			expect(traiter(derniers, "A", 100)).to.equal(true)
+			expect(traiter(derniers, "B", 100.1)).to.equal(true)
+		end)
+
+		it("note l'heure même quand la validation refuse (un spam invalide reste limité)", function()
+			local derniers = {}
+			local ok, pourquoi = traiter(derniers, "A", 100, { avecTag = false })
+			expect(ok).to.equal(false)
+			expect(pourquoi).to.equal("pas_un_evenement")
+			expect(derniers.A).to.equal(100)
+			local _, suite = traiter(derniers, "A", 100.2)
+			expect(suite).to.equal("trop_souvent")
+		end)
+
+		it("un refus de cadence ne repousse pas l'heure notée", function()
+			local derniers = {}
+			traiter(derniers, "A", 100)
+			traiter(derniers, "A", 100.4) -- refusé : la fenêtre reste calée sur 100
+			expect(derniers.A).to.equal(100)
+			expect(traiter(derniers, "A", 100.5)).to.equal(true)
+		end)
+
+		it(
+			"n'évalue pas l'entrée quand la cadence refuse (les rafales sont écartées avant de rassembler)",
+			function()
+				local derniers = {}
+				traiter(derniers, "A", 100)
+				local appels = 0
+				Signalement.traiter(derniers, "A", 100.1, DELAI, function()
+					appels += 1
+					return entree()
+				end)
+				expect(appels).to.equal(0)
+			end
+		)
+
+		it("rend la raison de validation quand la cadence passe", function()
+			local ok, pourquoi = traiter({}, "A", 100, { position = Vector3.new(100, 6, 0) })
+			expect(ok).to.equal(false)
+			expect(pourquoi).to.equal("trop_loin")
+		end)
 	end)
 end
