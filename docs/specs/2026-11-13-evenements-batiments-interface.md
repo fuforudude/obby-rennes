@@ -1,6 +1,6 @@
 # Événements dans les descentes, bâtiments rennais fidèles, textes et interface allégée
 
-Statut : validée
+Statut : en cours (PR #3 relue et prête ; essai en jeu sur l'expérience de test après fusion)
 Date : 2026-11-13
 
 ## Besoin
