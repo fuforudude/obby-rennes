@@ -19,7 +19,7 @@ Après les premiers essais : les descentes sont trop simples, les bâtiments ren
 - [ ] Chaque descente a son événement ; chacun suit un horaire fixe (période, décalage), identique pour tous les joueurs du serveur.
 - [ ] Avant chaque passage ou chute, un préavis visible d'au moins 1 seconde : ombre au sol pour ce qui tombe, phares ou clignotant pour ce qui passe.
 - [ ] Un joueur touché par un événement meurt et réapparaît au dernier checkpoint ; le serveur compte la chute (série d'aura remise à zéro, -50 d'aura).
-- [ ] Il existe toujours une façon sûre de passer : en attendant le bon moment, chaque descente se franchit sans être touché (fenêtre d'au moins 2 secondes entre deux dangers sur chaque plateforme).
+- [ ] Il existe toujours une façon sûre de passer : en attendant le bon moment, chaque descente se franchit sans être touché (au moins une fenêtre sûre de 2 secondes par cycle sur chaque plateforme ; des rafales rapprochées sont permises, elles donnent l'effet « aléatoire »).
 - [ ] Le mouvement est fluide côté joueur, et ce qu'il voit est ce qui le touche (animé chez lui, calé sur l'horloge du serveur).
 ### Obstacles (ajout de l'étudiant à la validation)
 - [ ] Cinq à sept obstacles « balanciers » répartis sur tout le parcours, en va-et-vient régulier comme un marteau d'obby, mais adaptés au décor : par exemple battant de portique de validation au métro, pancarte géante balancée dans le cortège, porte battante de l'amphi, cloche de l'hôtel de ville, bôme de péniche sur la Vilaine, arroseur à bras ou branche au Thabor.
@@ -52,6 +52,10 @@ Prises par l'étudiant le 2026-11-13.
 | Messages de chute et arrivée | Discrets ; tels quels ; retirer les chutes | Garder, en plus discret | L'arrivée est la récompense |
 | Obstacles en plus des événements | Ajouter des balanciers façon marteau adaptés au décor | Oui | Demandé à la validation de la spec |
 | Effet d'un obstacle (réglage par défaut du Game Director, à revoir après essai) | Pousse ; tue | Pousse | Cohérent avec la barre tournante et le ventilateur existants |
+| Porte de l'amphi qui balayait la réapparition du checkpoint 2 (après revue) | Porte double ; amplitude réduite ; supprimer | Porte double (deux battants de 3,6 studs) | Fidèle à une porte d'amphi, l'obstacle reste, le checkpoint redevient sûr |
+| Événements et streaming de Roblox (après revue) | Client robuste aux pièces qui arrivent ou partent ; désactiver le streaming ; modèles atomiques | Client robuste | Marche dans tous les cas, garde le streaming possible pour le mobile |
+| Sens de « fenêtre sûre de 2 s » (après revue) | 2 s par cycle ; 2 s entre deux dangers | 2 s par cycle | Les rafales rapprochées font l'effet aléatoire voulu |
+| Raccourcis clavier et manette ajoutés par l'agent UI (après revue) | Garder corrigés ; retirer | Garder, corrigés | Pratiques au clavier et à la manette |
 
 ## Contrats entre agents
 - **Tag `Evenement`** sur un `Model` (ou une `BasePart`) de danger, avec les attributs :
