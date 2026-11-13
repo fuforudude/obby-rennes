@@ -58,6 +58,9 @@ Prises par l'étudiant le 2026-11-13.
 | Raccourcis clavier et manette ajoutés par l'agent UI (après revue) | Garder corrigés ; retirer | Garder, corrigés | Pratiques au clavier et à la manette |
 | Régression : le serveur refusait tous les signalements (2e revue) | Contrôle de cadence à un seul endroit + séquence testée ; déplacer une ligne | Cadence à un seul endroit, séquence « cadence, noter, valider » en fonction pure testée | Le piège disparaît et un test le couvre |
 | Rayon du volume de réapparition dans le contrôle (2e revue) | 2 studs ; garder 1,5 | 2 studs | Marge pour un personnage bras compris |
+| Tableaux de score illisibles (essai en jeu) | Taille de texte fixe ; centrer les messages courts | Taille fixe prévue pour 10 lignes, message court centré | Rendu stable quel que soit le nombre de scores |
+| Panneaux d'anecdotes illisibles (essai en jeu) | Titre + corps à taille fixe ; raccourcir ; agrandir seulement | Titre (zone, auto-ajusté) + corps (anecdote et vanne, taille fixe, sans texte enrichi), panneau 12 × 7,5 | Lisible quelle que soit la cause exacte |
+| « ! » des préavis qui cachaient le danger (revue) | Hors de la ligne de vue ; retirer | Hors de la ligne de vue, plus petits, pas au premier plan, portée 80 | La bande rouge au sol reste le signal principal |
 
 ## Contrats entre agents
 - **Tag `Evenement`** sur un `Model` (ou une `BasePart`) de danger, avec les attributs :
@@ -68,7 +71,7 @@ Prises par l'étudiant le 2026-11-13.
   - `Chute` : `Hauteur` (studs au-dessus de la position posée dans la carte), `DureeChute` (s).
   - Enfant facultatif nommé `Preavis` (BasePart, ombre au sol ou lumière) : le client le fait apparaître ou clignoter pendant le préavis.
   - Dans la carte, les pièces d'un événement sont ancrées, `CanCollide = false`, `CanTouch = false` (le serveur ne s'en sert pas) ; c'est le client qui les déplace et qui détecte le contact avec son personnage.
-- **Tag `PanneauAnecdote`** + attribut `Numero` (0 à 15) sur une pièce du décor à côté de chaque checkpoint, avec un `SurfaceGui` contenant un `TextLabel` nommé `Texte` : le client y écrit l'anecdote et la vanne de `src/partage/Etapes.luau`.
+- **Tag `PanneauAnecdote`** + attribut `Numero` (0 à 15) sur une pièce du décor à côté de chaque checkpoint, avec un `SurfaceGui` contenant deux `TextLabel` : `Titre` (nom de la zone, `TextScaled`) et `Corps` (anecdote puis vanne, taille de texte fixe, `TextWrapped`, sans `RichText`) : le client les remplit depuis `src/partage/Etapes.luau` (mis à jour après l'essai en jeu).
 - **Tag `Balancier`** sur une `BasePart` ancrée dans la carte (le bras ou la masse), avec les attributs `Pivot` (Vector3, point d'accroche dans le monde), `Axe` (Vector3 unitaire, axe de rotation), `Amplitude` (degrés, de part et d'autre de la position posée), `Periode` (s, aller-retour complet), `Decalage` (s). Le serveur (`src/serveur/Obstacles.luau`) la libère et la fait osciller par contraintes physiques (comme `Tournant`), pour qu'elle pousse les joueurs ; elle n'est pas mortelle.
 - **Module pur `src/partage/Horaires.luau`** : `etat(t, periode, decalage, preavis, duree) -> ("attente" | "preavis" | "actif", progression 0..1)`, testé.
 
