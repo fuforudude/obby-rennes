@@ -5,7 +5,7 @@ local Textes = {
 	chargement = "…",
 	aura = "Aura",
 	recommencer = "Recommencer",
-	recommencerConfirmer = "Sûr ? Clique encore",
+	recommencerConfirmer = "Sûr ? Encore une fois",
 	menu = "Menu",
 	passerEtape = "Passer l'étape (R$)",
 

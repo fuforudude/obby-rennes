@@ -389,9 +389,11 @@ function Hud.monter()
 			end
 		end
 	end
-	local function basculerMenu()
-		if not icone.Visible then
-			return
+	--- Ouvre ou ferme le menu. Rend `false` (sans rien faire) quand il n'existe pas : produit à 0, dernière étape,
+	--- ou interface cachée.
+	local function basculerMenu(): boolean
+		if not icone.Visible or not (ecran and ecran.Enabled) then
+			return false
 		end
 		if boutonPasser.Visible then
 			fermerMenu()
@@ -401,8 +403,11 @@ function Hud.monter()
 				GuiService.SelectedObject = boutonPasser
 			end
 		end
+		return true
 	end
-	icone.Activated:Connect(basculerMenu)
+	icone.Activated:Connect(function()
+		basculerMenu()
+	end)
 
 	Remotes.obtenir("EtatCourse").OnClientEvent:Connect(function(nouvel: Remotes.EtatCourse)
 		afficherAura(nouvel.aura, nouvel.serie) -- avant `etat = nouvel` : la première réception n'est pas un gain
@@ -467,8 +472,13 @@ function Hud.monter()
 
 	-- Un premier clic demande confirmation : on ne perd pas sa progression par erreur.
 	local confirmation = 0
-	local function demanderRecommencer()
-		if etat and etat.etape > 0 and confirmation == 0 then
+	--- Rend `true` si la demande a été prise en compte ; `false` (sans rien faire) quand Recommencer n'a pas de sens :
+	--- interface cachée ou état de la course pas encore reçu. Le raccourci laisse alors passer la touche.
+	local function demanderRecommencer(): boolean
+		if not (ecran and ecran.Enabled) or etat == nil then
+			return false
+		end
+		if etat.etape > 0 and confirmation == 0 then
 			confirmation += 1
 			local jeton = confirmation
 			boutonRecommencer.Text = Textes.recommencerConfirmer
@@ -478,14 +488,17 @@ function Hud.monter()
 					boutonRecommencer.Text = Textes.recommencer
 				end
 			end)
-			return
+			return true
 		end
 		confirmation = 0
 		boutonRecommencer.Text = Textes.recommencer
 		fin.Visible = false
 		Remotes.obtenir("DemanderRecommencer"):FireServer()
+		return true
 	end
-	boutonRecommencer.Activated:Connect(demanderRecommencer)
+	boutonRecommencer.Activated:Connect(function()
+		demanderRecommencer()
+	end)
 
 	boutonPasser.Activated:Connect(function()
 		if Reglages.PRODUIT_PASSER_ETAPE ~= 0 then
@@ -496,10 +509,13 @@ function Hud.monter()
 
 	-- Raccourcis par ContextActionService (clavier et manette) ; pas de bouton tactile : l'écran a déjà les siens.
 	-- R / Y : Recommencer (avec la même double confirmation). M / X : le menu en coin.
-	local function action(fonction: () -> ()): (string, Enum.UserInputState, InputObject) -> Enum.ContextActionResult
+	-- La fonction rend `true` quand elle a agi. Sinon (menu caché, Recommencer sans objet), la touche est laissée
+	-- passer : elle ne doit pas être confisquée à un autre usage (X et Y de la manette, M).
+	local function action(
+		fonction: () -> boolean
+	): (string, Enum.UserInputState, InputObject) -> Enum.ContextActionResult
 		return function(_nom, etatEntree, _entree)
-			if etatEntree == Enum.UserInputState.Begin then
-				fonction()
+			if etatEntree == Enum.UserInputState.Begin and fonction() then
 				return Enum.ContextActionResult.Sink
 			end
 			return Enum.ContextActionResult.Pass
