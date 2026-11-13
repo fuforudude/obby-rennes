@@ -194,7 +194,7 @@ return function(R)
 	-- fait clignoter (il ne déplace que cette pièce, et tout ce qu'elle porte part avec). C'est une bande de néon rouge
 	-- à moitié transparente, posée sur le sol de la zone dangereuse : c'est le signal principal. Elle porte une lueur
 	-- rouge (PointLight) et des « ! » rouges (BillboardGui) qui clignotent avec elle. Les « ! » sont posés au-dessus de
-	-- la porte cochère, du tunnel ou de l'échafaudage concerné, hors de la trajectoire et de la ligne de vue entre
+	-- l'arche de la porte cochère, du tunnel ou de l'échafaudage concerné (sur la façade, devant le mur), hors de la trajectoire et de la ligne de vue entre
 	-- l'endroit où on attend et le danger : petits, jamais au-dessus du décor (AlwaysOnTop faux), visibles de 80 studs.
 	-- `cf` : le centre de la bande ; `feux` : la position de chaque « ! » relative à ce centre ; `tailleFeu` : en studs.
 	local ROUGE_ALERTE = Color3.fromRGB(255, 35, 25)
@@ -589,7 +589,11 @@ return function(R)
 	-- (X 517 à 520,6), hors du balayage de l'enseigne tournante (rayon 11 autour de X = 532). On attend sur le
 	-- dernier auvent (511, 14), on traverse la bande, puis l'enseigne.
 	-- Ils sortent d'une porte cochère et entrent dans celle d'en face. Préavis : bande rouge sur toute la voie et un
-	-- « ! » au-dessus du toit de chaque porte cochère (hors de la voie et de la ligne de vue sur la terrasse).
+	-- « ! » sur la façade de chaque porte cochère, au-dessus de l'arche (dont le haut est à 17 ; le bus monte à 16,3) :
+	-- à 12 studs au-dessus de la bande (y ≈ 22) et à z = ±8, devant le mur (face en z = ±9 ; un disque de 2 studs qui
+	-- se tourne vers la caméra déborde de 1 stud, d'où 8 et non 8,6). Hors de la voie, hors du balayage des véhicules,
+	-- et rien d'opaque entre lui et l'auvent ou la terrasse (contrôlé par verifier-evenements.luau). Le toit des
+	-- portes (y 30 à 31) est bien plus haut : un « ! » posé dessus (y 33) était caché derrière lui.
 	local soif = dossier(racineEvenements, "RueDeLaSoif")
 	local VOIE_X, DESSUS_TERRASSE = 518.8, 10
 	local nbVehicules = 0
@@ -613,7 +617,7 @@ return function(R)
 			CFrame.new(VOIE_X, DESSUS_TERRASSE + 0.12 + nbVehicules * 0.02, 0),
 			3.8,
 			18,
-			{ Vector3.new(0, 23.3, -12.7), Vector3.new(0, 23.3, 12.7) },
+			{ Vector3.new(0, 12, -8), Vector3.new(0, 12, 8) },
 			TAILLE_FEU
 		)
 		return m, zDepart
