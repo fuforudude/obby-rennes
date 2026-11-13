@@ -25,7 +25,7 @@ local LISTE: { Etape } = {
 		numero = 2,
 		zone = "L'amphi bloqué",
 		anecdote = "Un blocus se vote en assemblée générale. Rennes 2 est bloquée… mais ton partiel à Sup de Vinci, lui, est maintenu.",
-		blague = "AG à 10 h, vote à main levée, trois heures de débat sur l'ordre du jour. Démocratie : +1000 aura.",
+		blague = "AG à 10 h, vote à main levée, débat sans fin sur l'ordre du jour. Démocratie : +1000 aura.",
 	},
 	{
 		numero = 3,
@@ -55,7 +55,7 @@ local LISTE: { Etape } = {
 		numero = 7,
 		zone = "Barricades de poubelles",
 		anecdote = "En 1720, un grand incendie a ravagé le centre de Rennes pendant près d'une semaine ; la ville a été reconstruite en pierre.",
-		blague = "Les poubelles s'entassent : la barricade est triée par couleur. C'est ça, l'écologie.",
+		blague = "Barricade de poubelles triée par couleur. Même le chaos a son tri sélectif.",
 	},
 	{
 		numero = 8,
@@ -91,7 +91,7 @@ local LISTE: { Etape } = {
 		numero = 13,
 		zone = "Sur le toit du Parlement",
 		anecdote = "Le Parlement de Bretagne a brûlé en 1994 lors d'une manifestation de marins-pêcheurs ; restauré, il a rouvert en 1999.",
-		blague = "Le Parlement s'est relevé de 1994. Toi, relève-toi de ces colonnes.",
+		blague = "Le Parlement a survécu à 1994. Tu survivras à ces colonnes. Peut-être.",
 	},
 	{
 		numero = 14,
