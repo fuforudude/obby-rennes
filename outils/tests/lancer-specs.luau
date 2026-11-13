@@ -6,11 +6,16 @@ local fs = require("@lune/fs")
 local luau = require("@lune/luau")
 local process = require("@lune/process")
 
+local jeu -- le faux `game`, défini plus bas
+
 -- `require` des specs : charge un module Luau par son chemin, une seule fois.
 local cache = {}
 local function charger(chemin: string)
 	if cache[chemin] == nil then
-		cache[chemin] = luau.load(fs.readFile(chemin), { debugName = chemin })()
+		-- Un module de partage peut lui aussi appeler `game:GetService("ReplicatedStorage")` et `require`.
+		local env = { game = jeu, require = charger }
+		cache[chemin] =
+			luau.load(fs.readFile(chemin), { debugName = chemin, environment = setmetatable(env, { __index = _G }) })()
 	end
 	return cache[chemin]
 end
@@ -28,6 +33,8 @@ local faux = {
 		return { Partage = partage }
 	end,
 }
+
+jeu = faux
 
 -- Résultats, et pile des `describe` en cours (pour nommer les échecs).
 local reussis, echecs = 0, {}
