@@ -50,12 +50,16 @@ local function nomDe(idJoueur: number): string
 	return resultat
 end
 
-local function afficher(tableau: Tableau, texte: string)
+--- Écrit `texte` sur les panneaux du tableau. Un message court (vide, indisponible) est centré ; la liste des scores
+--- est alignée en haut à gauche (le label `Liste` a une taille de texte fixe, prévue pour TAILLE_CLASSEMENT lignes).
+local function afficher(tableau: Tableau, texte: string, centre: boolean)
 	for _, panneau in CollectionService:GetTagged(tableau.tag) do
 		local gui = panneau:FindFirstChildOfClass("SurfaceGui")
 		local liste = gui and gui:FindFirstChild("Liste")
 		if liste and liste:IsA("TextLabel") then
 			liste.Text = texte
+			liste.TextXAlignment = if centre then Enum.TextXAlignment.Center else Enum.TextXAlignment.Left
+			liste.TextYAlignment = if centre then Enum.TextYAlignment.Center else Enum.TextYAlignment.Top
 		end
 	end
 end
@@ -63,14 +67,14 @@ end
 local function rafraichirTableau(tableau: Tableau)
 	local store = tableau.store
 	if not store then
-		afficher(tableau, "Classement indisponible")
+		afficher(tableau, "Classement indisponible", true)
 		return
 	end
 	local ok, page = pcall(function()
 		return store:GetSortedAsync(tableau.croissant, Reglages.TAILLE_CLASSEMENT):GetCurrentPage()
 	end)
 	if not ok then
-		afficher(tableau, "Classement indisponible pour l'instant")
+		afficher(tableau, "Classement indisponible pour l'instant", true)
 		return
 	end
 	local lignes = {}
@@ -79,10 +83,14 @@ local function rafraichirTableau(tableau: Tableau)
 		local nom = if id then nomDe(id) else "?"
 		table.insert(
 			lignes,
-			string.format("%2d. %-18s %s", rang, string.sub(nom, 1, 18), tableau.formater(entree.value))
+			string.format("%2d. %-14s %s", rang, string.sub(nom, 1, 14), tableau.formater(entree.value))
 		)
 	end
-	afficher(tableau, if #lignes > 0 then table.concat(lignes, "\n") else tableau.vide)
+	if #lignes > 0 then
+		afficher(tableau, table.concat(lignes, "\n"), false)
+	else
+		afficher(tableau, tableau.vide, true)
+	end
 end
 
 --- Écrit `valeur` pour ce joueur si elle est meilleure que celle déjà classée. Rend true si l'écriture a abouti.
