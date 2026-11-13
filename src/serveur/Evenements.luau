@@ -5,28 +5,19 @@
 -- Le serveur ne fait pas confiance au client : le danger doit être actif à cet instant (à la tolérance du réseau
 -- près), le joueur près de la trajectoire, vivant, et les signalements espacés. Un tricheur n'y gagne rien d'autre
 -- que de se tuer lui-même ; un client qui ne signale pas ne meurt pas (choix de la spec : décision de l'étudiant).
+-- La règle elle-même est une fonction pure et testée (src/partage/Signalement.luau) ; ce service rassemble les
+-- données du jeu et applique la décision.
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Horaires = require(ReplicatedStorage.Partage.Horaires)
 local Reglages = require(ReplicatedStorage.Partage.Reglages)
 local Remotes = require(ReplicatedStorage.Partage.Remotes)
+local Signalement = require(ReplicatedStorage.Partage.Signalement)
 
 local toucheParEvenement = Remotes.obtenir("ToucheParEvenement")
 
 local dernierSignalement: { [Player]: number } = {}
-
---- Distance d'un point à un segment [a, b].
-local function distanceAuSegment(p: Vector3, a: Vector3, b: Vector3): number
-	local ab = b - a
-	local longueur2 = ab:Dot(ab)
-	if longueur2 < 1e-9 then
-		return (p - a).Magnitude
-	end
-	local u = math.clamp((p - a):Dot(ab) / longueur2, 0, 1)
-	return (p - (a + ab * u)).Magnitude
-end
 
 local function demiTaille(objet: Instance): number
 	if objet:IsA("Model") then
@@ -37,59 +28,52 @@ local function demiTaille(objet: Instance): number
 	return math.huge
 end
 
---- Le joueur est-il assez près de la trajectoire de l'objet (telle que posée dans la carte) pour l'avoir touché ?
-local function assezPres(objet: Instance, params: Horaires.Parametres, position: Vector3): boolean
-	local posee = (objet :: any):GetPivot().Position
-	local distance
-	if params.type == "Passage" then
-		distance = distanceAuSegment(position, params.depart :: Vector3, params.arrivee :: Vector3)
-	else
-		distance = distanceAuSegment(position, posee, posee + Vector3.new(0, params.hauteur :: number, 0))
-	end
-	return distance <= Reglages.EVENEMENT_DISTANCE_MAX + demiTaille(objet)
-end
-
-local function surSignalement(joueur: Player, objet: unknown)
-	local instant = os.clock()
-	if instant - (dernierSignalement[joueur] or -math.huge) < Reglages.EVENEMENT_DELAI_MIN then
-		return
-	end
-	dernierSignalement[joueur] = instant
-
-	if typeof(objet) ~= "Instance" or not objet:IsDescendantOf(workspace) then
-		return
-	end
-	if not CollectionService:HasTag(objet, "Evenement") or not (objet:IsA("Model") or objet:IsA("BasePart")) then
-		return
-	end
-	local params = Horaires.depuisAttributs(objet:GetAttributes())
-	if not params then
-		return
-	end
+--- Rassemble ce que la règle (Signalement.valider) doit savoir, sans rien décider.
+local function rassembler(joueur: Player, objet: unknown, instant: number): Signalement.Entree
+	local valide = typeof(objet) == "Instance"
+		and objet:IsDescendantOf(workspace)
+		and (objet:IsA("Model") or objet:IsA("BasePart"))
+	local instance: any = if valide then objet else nil
 
 	local personnage = joueur.Character
 	local humanoide = personnage and personnage:FindFirstChildOfClass("Humanoid")
 	local racine = personnage and personnage:FindFirstChild("HumanoidRootPart")
-	if not humanoide or humanoide.Health <= 0 or not racine or not racine:IsA("BasePart") then
-		return
-	end
+	local position: Vector3? = if racine and racine:IsA("BasePart") then racine.Position else nil
 
-	if
-		not Horaires.actifAutour(
-			workspace:GetServerTimeNow(),
-			params.periode,
-			params.decalage,
-			params.duree,
-			Reglages.EVENEMENT_TOLERANCE
-		)
-	then
-		return
-	end
-	if not assezPres(objet, params, racine.Position) then
-		return
-	end
+	return {
+		instant = instant,
+		dernierSignalement = dernierSignalement[joueur],
+		delaiMin = Reglages.EVENEMENT_DELAI_MIN,
+		objetValide = valide,
+		avecTag = instance ~= nil and CollectionService:HasTag(instance, "Evenement"),
+		attributs = if instance then instance:GetAttributes() else {},
+		heureServeur = workspace:GetServerTimeNow(),
+		tolerance = Reglages.EVENEMENT_TOLERANCE,
+		vivant = humanoide ~= nil and humanoide.Health > 0,
+		position = position,
+		posee = if instance then instance:GetPivot().Position else Vector3.zero,
+		demiTaille = if instance then demiTaille(instance) else 0,
+		distanceMax = Reglages.EVENEMENT_DISTANCE_MAX,
+	}
+end
 
-	humanoide.Health = 0 -- le serveur voit Died : Parcours.luau compte la chute
+local function surSignalement(joueur: Player, objet: unknown)
+	local instant = os.clock()
+	-- Les rafales sont écartées avant de rassembler quoi que ce soit.
+	if Signalement.tropSouvent(instant, dernierSignalement[joueur], Reglages.EVENEMENT_DELAI_MIN) then
+		return
+	end
+	dernierSignalement[joueur] = instant
+
+	local accepte = Signalement.valider(rassembler(joueur, objet, instant))
+	if not accepte then
+		return
+	end
+	local personnage = joueur.Character
+	local humanoide = personnage and personnage:FindFirstChildOfClass("Humanoid")
+	if humanoide then
+		humanoide.Health = 0 -- le serveur voit Died : Parcours.luau compte la chute
+	end
 end
 
 local Evenements = {}
