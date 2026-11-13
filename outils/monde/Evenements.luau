@@ -15,7 +15,7 @@
 -- - tag « Balancier » sur une BasePart ancrée posée au repos : Pivot, Axe, Amplitude (degrés), Periode, Decalage.
 --   Attributs de contrôle seulement (lus par verifier-evenements.luau, ignorés par le jeu) : ZoneControleMin et
 --   ZoneControleMax, la boîte que le joueur traverse, où l'on mesure la fenêtre de passage.
--- - tag « PanneauAnecdote » + Numero (0 à 15) : SurfaceGui (face avant) avec un TextLabel « Texte » vide.
+-- - tag « PanneauAnecdote » + Numero (0 à 15) : SurfaceGui (face avant) avec deux TextLabel vides, « Titre » et « Corps ».
 
 return function(R)
 	local Instance, Vector3, Color3, CFrame, Enum, UDim2 = R.Instance, R.Vector3, R.Color3, R.CFrame, R.Enum, R.UDim2
@@ -99,11 +99,14 @@ return function(R)
 		return CFrame.Angles(0, math.atan2(-dx, -dz), 0)
 	end
 
-	-- Densité des SurfaceGui. Roblox plafonne la police d'un TextLabel TextScaled à 100 px : sur une toile trop
-	-- dense (40 px/stud, soit 560 × 400 px pour 14 × 10 studs), le texte court reste petit dans un coin. On vise donc
-	-- une toile d'environ 150 px sur la plus petite dimension de la face (jamais moins de 8, jamais plus de 40 px/stud),
-	-- ce qui rend le plafond de 100 px sans effet : la police s'adapte à la face, pas à la toile.
-	local TOILE_MIN = 150
+	-- Densité des SurfaceGui. Le plancher est de 40 px/stud pour toute face dont la plus petite dimension fait moins
+	-- de 15 studs (panneaux, tableaux, enseignes courantes) : baisser la densité ne grossit pas le texte (TextScaled et
+	-- les tailles fixes suivent le cadre, pas la toile), elle le rend seulement flou. Seules les très grandes enseignes
+	-- (15 studs et plus) gardent une toile d'environ 600 px sur leur plus petite dimension (jamais moins de 8 px/stud),
+	-- pour ne pas gaspiller de mémoire de texture.
+	local DENSITE = 40
+	local GRANDE_FACE = 15
+	local TOILE_GRANDE = 600
 	local function densiteDe(part, face)
 		local s = part.Size
 		local l, h
@@ -114,12 +117,16 @@ return function(R)
 		else
 			l, h = s.X, s.Y
 		end
-		return math.clamp(TOILE_MIN / math.min(l, h), 8, 40)
+		local petite = math.min(l, h)
+		if petite < GRANDE_FACE then
+			return DENSITE
+		end
+		return math.clamp(TOILE_GRANDE / petite, 8, DENSITE)
 	end
 
 	-- À appeler en fin de construction : règle la densité de chaque SurfaceGui d'après la face qui la porte.
 	local function calibrerSurfaces(ensemble)
-		for _, d in racine:GetDescendants() do
+		for _, d in ensemble:GetDescendants() do
 			if d:IsA("SurfaceGui") and d.Parent and d.Parent:IsA("BasePart") then
 				d.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 				d.PixelsPerStud = densiteDe(d.Parent, d.Face)
@@ -165,13 +172,6 @@ return function(R)
 		return modele
 	end
 
-	-- Lumière de préavis (phares, clignotant, feu) : reste à sa place posée, le client la fait clignoter.
-	local function lumiere(modele, sx, sy, sz, cf, couleur, forme)
-		local l = piece(modele, "Preavis", sx, sy, sz, cf, couleur, Enum.Material.Neon, forme)
-		l.CastShadow = false
-		return l
-	end
-
 	-- Ombre au sol, sous le point d'impact d'une chute.
 	local function ombre(modele, diametre, x, dessus, z)
 		local o = piece(
@@ -192,11 +192,14 @@ return function(R)
 
 	-- Préavis d'un passage (rame, drone, véhicule) : l'enfant « Preavis » est une seule BasePart, celle que le client
 	-- fait clignoter (il ne déplace que cette pièce, et tout ce qu'elle porte part avec). C'est une bande de néon rouge
-	-- à moitié transparente, posée sur le sol de la zone dangereuse ; elle porte une lueur rouge (PointLight) et des feux
-	-- rouges (BillboardGui toujours visibles, à hauteur des yeux), qui clignotent donc avec elle.
-	-- `cf` : le centre de la bande ; `feux` : la position de chaque feu relative à ce centre ; `tailleFeu` : en studs.
+	-- à moitié transparente, posée sur le sol de la zone dangereuse : c'est le signal principal. Elle porte une lueur
+	-- rouge (PointLight) et des « ! » rouges (BillboardGui) qui clignotent avec elle. Les « ! » sont posés au-dessus de
+	-- la porte cochère, du tunnel ou de l'échafaudage concerné, hors de la trajectoire et de la ligne de vue entre
+	-- l'endroit où on attend et le danger : petits, jamais au-dessus du décor (AlwaysOnTop faux), visibles de 80 studs.
+	-- `cf` : le centre de la bande ; `feux` : la position de chaque « ! » relative à ce centre ; `tailleFeu` : en studs.
 	local ROUGE_ALERTE = Color3.fromRGB(255, 35, 25)
 	local PREAVIS_RAME, PREAVIS_DRONE, PREAVIS_TRAFIC = 2.6, 2.4, 2.2
+	local TAILLE_FEU = 2
 
 	local function preavisPassage(modele, cf, sx, sz, feux, tailleFeu)
 		local bande = piece(modele, "Preavis", sx, 0.2, sz, cf, ROUGE_ALERTE, Enum.Material.Neon)
@@ -213,9 +216,9 @@ return function(R)
 			gui.Name = "FeuRouge"
 			gui.Size = UDim2.fromScale(tailleFeu, tailleFeu)
 			gui.StudsOffsetWorldSpace = position
-			gui.AlwaysOnTop = true
+			gui.AlwaysOnTop = false
 			gui.LightInfluence = 0
-			gui.MaxDistance = 250
+			gui.MaxDistance = 80
 			local disque = Instance.new("TextLabel")
 			disque.Size = UDim2.fromScale(1, 1)
 			disque.BackgroundColor3 = ROUGE_ALERTE
@@ -230,7 +233,7 @@ return function(R)
 			rond.Parent = disque
 			local contour = Instance.new("UIStroke")
 			contour.Color = Color3.fromRGB(255, 255, 255)
-			contour.Thickness = 3
+			contour.Thickness = 2
 			contour.Parent = disque
 			gui.Parent = bande
 		end
@@ -364,7 +367,7 @@ return function(R)
 	-- rouges près de lui pendant le préavis. Les tunnels sont loin (70 studs par défaut) : on voit la rame arriver.
 	-- `zMoins` / `zPlus` : distance du centre de la rame cachée dans le tunnel, côté -Z et côté +Z (70 par défaut, moins
 	-- si le décor gêne). Vitesse d'environ 50 studs/s : la durée du passage suit la longueur du trajet.
-	local function rame(nom, x, dessus, sens, periode, decalage, feuX, feuZ, zMoins, zPlus)
+	local function rame(nom, x, dessus, sens, periode, decalage, zMoins, zPlus)
 		zMoins = zMoins or 70
 		zPlus = zPlus or 70
 		local yc = dessus + 0.2 + 4
@@ -422,14 +425,15 @@ return function(R)
 				Enum.Material.Neon
 			)
 		end
-		-- Préavis : la bande couvre toute la largeur de la rame sur l'escalator, les feux sont sur le poteau et en face.
+		-- Préavis : la bande couvre toute la largeur de la rame sur l'escalator ; un « ! » flotte au-dessus de chaque
+		-- tunnel (à 12 studs au-dessus de la bande : hors du passage et de la ligne de vue sur l'escalator).
 		preavisPassage(
 			m,
 			CFrame.new(x, dessus + 0.12, 0),
 			6.2,
 			9,
-			{ Vector3.new(feuX - x, 5.3, feuZ), Vector3.new(-(feuX - x), 4.5, -feuZ) },
-			4.2
+			{ Vector3.new(0, 12.3, -zMoins), Vector3.new(0, 12.3, zPlus) },
+			TAILLE_FEU
 		)
 		finir(m, corps)
 		-- Décor : voie sous l'escalator, tunnels aux deux bouts, poteau et boîtier du feu.
@@ -459,31 +463,23 @@ return function(R)
 				Enum.Material.Concrete
 			)
 		end
-		boite(
-			decor,
-			"PoteauFeu",
-			feuX - 0.2,
-			feuX + 0.2,
-			SOL,
-			dessus + 4.6,
-			feuZ - 0.2,
-			feuZ + 0.2,
-			Color3.fromRGB(50, 50, 55)
-		)
-		boite(
-			decor,
-			"BoitierFeu",
-			feuX - 0.5,
-			feuX + 0.5,
-			dessus + 4.6,
-			dessus + 6,
-			feuZ - 0.5,
-			feuZ + 0.5,
-			Color3.fromRGB(120, 20, 20)
-		)
+		-- Boîtier du feu sur le toit de chaque tunnel (le « ! » flotte au-dessus).
+		for _, bout in { -zMoins, zPlus } do
+			boite(
+				decor,
+				"BoitierFeu",
+				x - 0.5,
+				x + 0.5,
+				dessus + 9.6,
+				dessus + 11,
+				bout - 0.5,
+				bout + 0.5,
+				Color3.fromRGB(120, 20, 20)
+			)
+		end
 	end
-	rame("RameLigneA", 219, 26, 1, 8, 1, 222.6, -5)
-	rame("RameLigneA", 231, 18, -1, 9.5, 5, 234.6, 5, 22.5) -- pavillon de l'hôtel de ville en z < -35
+	rame("RameLigneA", 219, 26, 1, 8, 1)
+	rame("RameLigneA", 231, 18, -1, 9.5, 5, 22.5) -- pavillon de l'hôtel de ville en z < -35
 
 	---------------------------------------------------------------------------------------------------------------
 	-- 3 · Les échafaudages de la tour : des drones de livraison qui coupent la descente.
@@ -542,7 +538,9 @@ return function(R)
 				Enum.PartType.Ball
 			)
 		end
-		-- Préavis : bande rouge sur l'échafaudage, feux rouges au coin de la dalle (un tube par dalle, partagé) et en face.
+		-- Préavis : bande rouge sur l'échafaudage, un « ! » 9 studs au-dessus de la dalle (5 au-dessus du drone, hors de
+		-- sa trajectoire et de la ligne de vue entre la dalle d'attente et la bande), et le boîtier du feu au coin de la
+		-- dalle (un tube par dalle, partagé).
 		local tx, tz = x + 2.4, z - 2.4 * sens
 		local cle = `{x},{dessus}`
 		local decalageLampe = if tubesPoses[cle] then 1.1 else 0
@@ -551,8 +549,8 @@ return function(R)
 			CFrame.new(x, dessus + 0.12 + decalageLampe * 0.02, z),
 			4.4,
 			7,
-			{ Vector3.new(tx - x, 4.6 + decalageLampe, tz - z), Vector3.new(-(tx - x), 4.2 + decalageLampe, -(tz - z)) },
-			3.6
+			{ Vector3.new(0, 9 + decalageLampe, 0) },
+			TAILLE_FEU
 		)
 		boite(
 			decor,
@@ -590,8 +588,8 @@ return function(R)
 	-- 4 · Rue de la Soif : voitures, bus et trottinettes qui coupent la terrasse en Z, sur sa bande d'entrée
 	-- (X 517 à 520,6), hors du balayage de l'enseigne tournante (rayon 11 autour de X = 532). On attend sur le
 	-- dernier auvent (511, 14), on traverse la bande, puis l'enseigne.
-	-- Ils sortent d'une porte cochère et entrent dans celle d'en face. Préavis : bande rouge sur toute la voie et
-	-- feux rouges à hauteur des yeux de chaque côté.
+	-- Ils sortent d'une porte cochère et entrent dans celle d'en face. Préavis : bande rouge sur toute la voie et un
+	-- « ! » au-dessus du toit de chaque porte cochère (hors de la voie et de la ligne de vue sur la terrasse).
 	local soif = dossier(racineEvenements, "RueDeLaSoif")
 	local VOIE_X, DESSUS_TERRASSE = 518.8, 10
 	local nbVehicules = 0
@@ -615,8 +613,8 @@ return function(R)
 			CFrame.new(VOIE_X, DESSUS_TERRASSE + 0.12 + nbVehicules * 0.02, 0),
 			3.8,
 			18,
-			{ Vector3.new(-3.4, 4.6, -6.5), Vector3.new(-3.4, 4.6, 6.5) },
-			4
+			{ Vector3.new(0, 23.3, -12.7), Vector3.new(0, 23.3, 12.7) },
+			TAILLE_FEU
 		)
 		return m, zDepart
 	end
@@ -1114,9 +1112,11 @@ return function(R)
 
 	---------------------------------------------------------------------------------------------------------------
 	-- Panneaux d'anecdotes : un par checkpoint, sur le côté de la dalle (hors des sauts), tourné vers son centre.
-	-- Le client écrit le texte (texte enrichi : nom de zone, anecdote, vanne) dans le TextLabel « Texte ».
+	-- Contrat avec le client : le SurfaceGui (40 px/stud, soit 480 × 300 px) contient deux TextLabel que le client
+	-- remplit : « Titre » (en haut, 20 % de la hauteur, TextScaled, gras : le nom de la zone) et « Corps » (le reste :
+	-- anecdote et vanne, taille fixe de 18 px = 0,45 stud, à la ligne, texte brut, aligné en haut à gauche).
 	local panneaux = dossier(racine, "PanneauxAnecdotes")
-	local LARGEUR, HAUTEUR = 8.5, 5.5
+	local LARGEUR, HAUTEUR = 12, 7.5
 
 	local function panneau(numero: number, cf, accent, piedDepuis)
 		local p = piece(panneaux, `PanneauAnecdote{numero}`, LARGEUR, HAUTEUR, 0.3, cf, Color3.fromRGB(25, 27, 35))
@@ -1127,18 +1127,38 @@ return function(R)
 		gui.Face = Enum.NormalId.Front
 		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud -- densité réglée par calibrerSurfaces
 		gui.LightInfluence = 0
-		local label = Instance.new("TextLabel")
-		label.Name = "Texte"
-		label.Position = UDim2.fromScale(0.03, 0.04)
-		label.Size = UDim2.fromScale(0.94, 0.92)
-		label.BackgroundTransparency = 1
-		label.TextColor3 = Color3.fromRGB(245, 245, 245)
-		label.TextScaled = true
-		label.TextWrapped = true
-		label.RichText = true
-		label.Font = Enum.Font.Gotham
-		label.Text = ""
-		label.Parent = gui
+		local titre = Instance.new("TextLabel")
+		titre.Name = "Titre"
+		titre.Position = UDim2.fromScale(0.03, 0.02)
+		titre.Size = UDim2.fromScale(0.94, 0.18)
+		titre.BackgroundTransparency = 1
+		titre.TextColor3 = Color3.fromRGB(255, 255, 255)
+		titre.TextScaled = true
+		titre.TextXAlignment = Enum.TextXAlignment.Left
+		titre.Font = Enum.Font.GothamBlack
+		titre.Text = ""
+		titre.Parent = gui
+		local corps = Instance.new("TextLabel")
+		corps.Name = "Corps"
+		corps.Position = UDim2.fromScale(0, 0.2)
+		corps.Size = UDim2.fromScale(1, 0.8)
+		corps.BackgroundTransparency = 1
+		corps.TextColor3 = Color3.fromRGB(245, 245, 245)
+		corps.TextScaled = false
+		corps.TextSize = math.floor(0.45 * DENSITE) -- 0,45 stud de haut : 18 px
+		corps.TextWrapped = true
+		corps.RichText = false
+		corps.TextXAlignment = Enum.TextXAlignment.Left
+		corps.TextYAlignment = Enum.TextYAlignment.Top
+		corps.Font = Enum.Font.Gotham
+		corps.Text = ""
+		corps.Parent = gui
+		local marge = Instance.new("UIPadding")
+		marge.PaddingLeft = UDim.new(0, 12)
+		marge.PaddingRight = UDim.new(0, 12)
+		marge.PaddingTop = UDim.new(0, 6)
+		marge.PaddingBottom = UDim.new(0, 6)
+		marge.Parent = corps
 		gui.Parent = p
 		-- Liseré de la couleur de la zone en haut, et pied jusqu'au sol (ou au toit) quand le panneau est dehors.
 		fantome(
@@ -1174,23 +1194,24 @@ return function(R)
 	end
 
 	-- Panneau à côté d'une dalle de checkpoint (centre cx, dessus, cz ; côté de taille t) : décalé de `dx` en X, sur
-	-- le côté `cote` (-1 : Z négatif), et tourné vers le centre de la dalle.
-	local function aCote(numero, cx, dessus, cz, t, cote, dx, accent, piedDepuis)
+	-- le côté `cote` (-1 : Z négatif), et tourné vers le centre de la dalle (`droit` : parallèle au côté de la dalle,
+	-- pour que le panneau, large de 12, ne balaye pas de l'espace en biais).
+	local function aCote(numero, cx, dessus, cz, t, cote, dx, accent, piedDepuis, droit)
 		local x, z = cx + dx, cz + cote * (t / 2 + 3.5)
 		local y = dessus + 1.5 + HAUTEUR / 2
-		local cf = CFrame.new(x, y, z) * versLaDirection(cx - x, cz - z)
+		local cf = CFrame.new(x, y, z) * if droit then versLaDirection(0, -cote) else versLaDirection(cx - x, cz - z)
 		return panneau(numero, cf, accent, piedDepuis)
 	end
 
 	aCote(0, -5, 40, 0, 14, -1, 4.5, accents.coloc, SOL)
 	aCote(1, 54, 10, 0, 12, 1, 4.5, accents.fac, SOL)
-	aCote(2, 119, 31, 0, 8, -1, 0, accents.fac, 22)
+	aCote(2, 119, 31, 0, 8, -1, -3, accents.fac, 22)
 	aCote(3, 202, 34, 0, 12, -1, 3, accents.metro, SOL)
 	aCote(4, 243, 14, 0, 12, -1, 4.5, accents.metro, SOL)
 	aCote(5, 298, 19, 0, 12, -1, -4.5, accents.cortege, SOL)
 	aCote(6, 342, 19, 0, 12, -1, 4.5, accents.cortege, SOL)
 	aCote(7, 374, 24, 0, 8, 1, 0, accents.tour, SOL)
-	aCote(8, 404.5, 66, 0, 6, 1, -1, accents.tour, 63)
+	aCote(8, 404.5, 66, 0, 6, 1, -2.5, accents.tour, 63, true)
 	aCote(9, 488, 28, 0, 12, -1, -4.5, accents.soif, SOL)
 	aCote(10, 559, 10, 0, 12, -1, 4.5, accents.soif, SOL)
 	aCote(11, 611, 5, 0, 12, -1, 4.5, accents.vilaine, 2)

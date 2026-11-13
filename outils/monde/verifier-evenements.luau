@@ -15,7 +15,7 @@
 --   centré sur la dalle, de son dessus à dessus + 5) : aucun événement (boîte balayée élargie des marges de contact)
 --   ni aucun balancier (sur toute son amplitude) ne doit y entrer. C'est un défaut : le personnage réapparaît
 --   là, un danger qui y passe le pousserait ou le tuerait à la réapparition.
--- - PanneauAnecdote : Numero 0 à 15, une fois chacun, un TextLabel « Texte », près de son checkpoint, sans toucher de
+-- - PanneauAnecdote : Numero 0 à 15, une fois chacun, un TextLabel « Titre » et un TextLabel « Corps », près de son checkpoint, sans toucher de
 --   pièce solide de la carte.
 -- Horaires : ceux de src/partage/Horaires.luau (chargé s'il existe, sinon même formule recopiée ci-dessous) ;
 -- marges de contact : celles de src/partage/Reglages.luau (EVENEMENT_MARGE_HORIZONTALE / _VERTICALE).
@@ -630,9 +630,18 @@ for _, p in evenementsModele:GetDescendants() do
 	end
 	vus[n] = true
 	local gui = p:FindFirstChildOfClass("SurfaceGui")
-	local texte = gui and gui:FindFirstChild("Texte")
-	if not texte or not texte:IsA("TextLabel") then
-		defaut(`PanneauAnecdote {n} : pas de SurfaceGui avec un TextLabel « Texte »`)
+	for _, nom in { "Titre", "Corps" } do
+		local label = gui and gui:FindFirstChild(nom)
+		if not label or not label:IsA("TextLabel") then
+			defaut(`PanneauAnecdote {n} : pas de SurfaceGui avec un TextLabel « {nom} »`)
+		end
+	end
+	if gui and gui:FindFirstChild("Texte") then
+		defaut(`PanneauAnecdote {n} : l'ancien label « Texte » est encore là`)
+	end
+	local corps = gui and gui:FindFirstChild("Corps")
+	if corps and corps:IsA("TextLabel") and (corps.TextScaled or not corps.TextWrapped or corps.RichText) then
+		defaut(`PanneauAnecdote {n} : « Corps » doit être à taille fixe, à la ligne, sans texte enrichi`)
 	end
 	local cp = checkpoints[n]
 	local distance = if cp then (p.CFrame.Position - cp).Magnitude else math.huge

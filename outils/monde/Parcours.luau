@@ -135,11 +135,14 @@ return function(R)
 		return p
 	end
 
-	-- Densité des SurfaceGui. Roblox plafonne la police d'un TextLabel TextScaled à 100 px : sur une toile trop
-	-- dense (40 px/stud, soit 560 × 400 px pour 14 × 10 studs), le texte court reste petit dans un coin. On vise donc
-	-- une toile d'environ 150 px sur la plus petite dimension de la face (jamais moins de 8, jamais plus de 40 px/stud),
-	-- ce qui rend le plafond de 100 px sans effet : la police s'adapte à la face, pas à la toile.
-	local TOILE_MIN = 150
+	-- Densité des SurfaceGui. Le plancher est de 40 px/stud pour toute face dont la plus petite dimension fait moins
+	-- de 15 studs (panneaux, tableaux, enseignes courantes) : baisser la densité ne grossit pas le texte (TextScaled et
+	-- les tailles fixes suivent le cadre, pas la toile), elle le rend seulement flou. Seules les très grandes enseignes
+	-- (15 studs et plus) gardent une toile d'environ 600 px sur leur plus petite dimension (jamais moins de 8 px/stud),
+	-- pour ne pas gaspiller de mémoire de texture.
+	local DENSITE = 40
+	local GRANDE_FACE = 15
+	local TOILE_GRANDE = 600
 	local function densiteDe(part, face)
 		local s = part.Size
 		local l, h
@@ -150,7 +153,11 @@ return function(R)
 		else
 			l, h = s.X, s.Y
 		end
-		return math.clamp(TOILE_MIN / math.min(l, h), 8, 40)
+		local petite = math.min(l, h)
+		if petite < GRANDE_FACE then
+			return DENSITE
+		end
+		return math.clamp(TOILE_GRANDE / petite, 8, DENSITE)
 	end
 
 	-- À appeler en fin de construction : règle la densité de chaque SurfaceGui d'après la face qui la porte.
@@ -295,7 +302,12 @@ return function(R)
 		liste.Size = UDim2.fromScale(0.92, 0.78)
 		liste.BackgroundTransparency = 1
 		liste.TextColor3 = Color3.fromRGB(240, 240, 240)
-		liste.TextScaled = true
+		-- Taille fixe : 10 lignes en police Code tiennent dans le label (hauteur en pixels / 11 ; 0,78 × 10 studs à
+		-- 40 px/stud = 312 px, soit 28 px). Le client règle l'alignement : centré pour un message, en haut à gauche
+		-- pour la liste.
+		liste.TextScaled = false
+		liste.TextWrapped = true
+		liste.TextSize = math.floor(0.78 * 10 * DENSITE / 11)
 		liste.TextXAlignment = Enum.TextXAlignment.Left
 		liste.TextYAlignment = Enum.TextYAlignment.Top
 		liste.Font = Enum.Font.Code
