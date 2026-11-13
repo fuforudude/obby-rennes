@@ -21,6 +21,22 @@ local Reglages = {
 	AURA_ARRIVEE = 1000,
 	AURA_SANS_CHUTE = 5000,
 
+	-- Événements de la carte (objets qui tombent, rame, drones, trafic ; voir Horaires.luau et client/Evenements.luau).
+	-- Contact : on agrandit chaque pièce dangereuse de ces marges (studs) autour du centre du personnage, qui est un
+	-- peu plus grand que son HumanoidRootPart. Plus petit = plus indulgent.
+	EVENEMENT_MARGE_HORIZONTALE = 0.8,
+	EVENEMENT_MARGE_VERTICALE = 2,
+	-- Fréquence du clignotement du préavis (fois par seconde) ; il reste allumé en continu les 0,35 dernières secondes.
+	EVENEMENT_CLIGNOTEMENT = 4,
+	-- Un objet « hors service » est rangé à cette distance (studs, sur Z) pour disparaître sans rien détruire.
+	EVENEMENT_RANGEMENT = 20000,
+	-- Côté serveur, quand un joueur dit avoir été touché : le danger doit être actif à cette tolérance près
+	-- (secondes, pour le retard réseau), le joueur à moins de EVENEMENT_DISTANCE_MAX studs de la trajectoire
+	-- (plus la demi-taille de l'objet), et pas plus d'un signalement par EVENEMENT_DELAI_MIN secondes.
+	EVENEMENT_TOLERANCE = 1,
+	EVENEMENT_DISTANCE_MAX = 40,
+	EVENEMENT_DELAI_MIN = 0.5,
+
 	TAILLE_CLASSEMENT = 10,
 	DELAI_RAFRAICHIR_CLASSEMENT = 60, -- secondes
 	DELAI_MIN_ENTRE_DEMANDES = 1, -- secondes, pour « Recommencer »

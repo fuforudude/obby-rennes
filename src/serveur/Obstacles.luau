@@ -1,8 +1,13 @@
 --!strict
 -- Les obstacles de la carte, retrouvés par leurs tags (posés par outils/monde/Parcours.luau) :
--- Mortel (tue au toucher), Fragile (s'efface puis revient), Mobile (va-et-vient), Tournant (barre qui tourne).
+-- Mortel (tue au toucher), Fragile (s'efface puis revient), Mobile (va-et-vient), Tournant (barre qui tourne),
+-- Balancier (oscille autour d'un pivot, pousse sans tuer).
 local CollectionService = game:GetService("CollectionService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+
+local Horaires = require(ReplicatedStorage.Partage.Horaires)
 
 local DELAI_AVANT_CHUTE = 0.5
 local DUREE_ABSENCE = 3
@@ -113,6 +118,99 @@ local function tournant(part: BasePart)
 	part:SetNetworkOwner(nil)
 end
 
+type Oscillation = { charniere: HingeConstraint, amplitude: number, periode: number, decalage: number }
+
+local oscillations: { [BasePart]: Oscillation } = {}
+local liaisonOscillations: RBXScriptConnection? = nil
+
+local function majOscillations()
+	local t = workspace:GetServerTimeNow()
+	for _, o in oscillations do
+		o.charniere.TargetAngle = Horaires.angleBalancier(t, o.amplitude, o.periode, o.decalage)
+	end
+end
+
+local function nombreFini(x: any): boolean
+	return type(x) == "number" and x == x and x > -math.huge and x < math.huge
+end
+
+-- Un balancier (battant, pancarte, bôme, cloche…) : la pièce est accrochée à un point fixe (Pivot) par une charnière
+-- dont un servo suit une sinusoïde calée sur l'horloge du serveur (Horaires.angleBalancier), de part et d'autre de la
+-- position posée. Libérée et simulée par le serveur, elle pousse physiquement les joueurs ; elle ne tue pas.
+-- Un seul Heartbeat pour tous les balanciers, déconnecté quand le dernier disparaît.
+local function balancier(part: BasePart)
+	local pivot = part:GetAttribute("Pivot")
+	local axe = part:GetAttribute("Axe")
+	local amplitude = part:GetAttribute("Amplitude")
+	local periode = part:GetAttribute("Periode")
+	local decalage = part:GetAttribute("Decalage") or 0
+	if
+		typeof(pivot) ~= "Vector3"
+		or typeof(axe) ~= "Vector3"
+		or axe.Magnitude < 0.9
+		or axe.Magnitude > 1.1
+		or not nombreFini(amplitude)
+		or amplitude <= 0
+		or amplitude > 180
+		or not nombreFini(periode)
+		or periode <= 0
+		or not nombreFini(decalage)
+	then
+		warn(
+			`[Obstacles] {part:GetFullName()} : attributs Pivot / Axe (unitaire) / Amplitude / Periode / Decalage invalides`
+		)
+		return
+	end
+	local sens = axe.Unit
+	-- Repère de la charnière : son axe X est l'axe du balancier, les autres axes sont quelconques mais orthogonaux.
+	local reference = if math.abs(sens:Dot(Vector3.yAxis)) < 0.99 then Vector3.yAxis else Vector3.zAxis
+	local orthogonal = (reference - sens * sens:Dot(reference)).Unit
+	local repere = CFrame.fromMatrix(Vector3.zero, sens, orthogonal)
+
+	local fixe = Instance.new("Part")
+	fixe.Name = part.Name .. "Pivot"
+	fixe.Anchored = true
+	fixe.CanCollide = false
+	fixe.CanTouch = false
+	fixe.CanQuery = false
+	fixe.Transparency = 1
+	fixe.Size = Vector3.one
+	fixe.CFrame = CFrame.new(pivot)
+	fixe.Parent = part.Parent
+	local a0 = Instance.new("Attachment")
+	a0.CFrame = repere
+	a0.Parent = fixe
+	local a1 = Instance.new("Attachment")
+	a1.CFrame = part.CFrame:ToObjectSpace(CFrame.new(pivot) * repere) -- confondu avec a0 tant que la pièce est posée
+	a1.Parent = part
+
+	local pic = math.rad(amplitude) * 2 * math.pi / periode -- vitesse angulaire maximale de la sinusoïde, en rad/s
+	local charniere = Instance.new("HingeConstraint")
+	charniere.ActuatorType = Enum.ActuatorType.Servo
+	charniere.LimitsEnabled = false
+	charniere.ServoMaxTorque = math.huge
+	charniere.AngularSpeed = math.max(pic * 10, 10) -- de la marge : le servo doit toujours rattraper la cible
+	charniere.TargetAngle = Horaires.angleBalancier(workspace:GetServerTimeNow(), amplitude, periode, decalage)
+	charniere.Attachment0 = a0
+	charniere.Attachment1 = a1
+	charniere.Parent = part
+	part.Anchored = false
+	part:SetNetworkOwner(nil) -- le serveur simule : tous les joueurs voient (et subissent) la même chose
+
+	oscillations[part] = { charniere = charniere, amplitude = amplitude, periode = periode, decalage = decalage }
+	if not liaisonOscillations then
+		liaisonOscillations = RunService.Heartbeat:Connect(majOscillations)
+	end
+	part.Destroying:Connect(function()
+		oscillations[part] = nil
+		fixe:Destroy()
+		if next(oscillations) == nil and liaisonOscillations then
+			liaisonOscillations:Disconnect()
+			liaisonOscillations = nil
+		end
+	end)
+end
+
 local Obstacles = {}
 
 function Obstacles.demarrer()
@@ -121,6 +219,7 @@ function Obstacles.demarrer()
 		Fragile = fragile,
 		Mobile = mobile,
 		Tournant = tournant,
+		Balancier = balancier,
 	}
 	for tag, preparer in familles do
 		for _, objet in CollectionService:GetTagged(tag) do
