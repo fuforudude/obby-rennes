@@ -16,4 +16,29 @@ return function()
 			expect(Vannes.chute(n) ~= Vannes.chute(n + 1)).to.equal(true)
 		end
 	end)
+
+	it("n'a aucune vanne en double dans la liste", function()
+		local vues: { [string]: boolean } = {}
+		for n = 1, Vannes.nombreDeChutes() do
+			local texte = Vannes.chute(n)
+			expect(vues[texte]).never.to.be.ok()
+			vues[texte] = true
+		end
+	end)
+
+	it("ne se moque pas des étudiants (notes, dossiers, Parcoursup) et ne fait pas la leçon", function()
+		local interdits = { "parcoursup", "moyenne", "dossier", "%f[%w]s1%f[%W]", "remontée" }
+		for n = 1, Vannes.nombreDeChutes() do
+			local texte = string.lower(Vannes.chute(n))
+			for _, motif in interdits do
+				expect(string.find(texte, motif) == nil).to.equal(true)
+			end
+		end
+	end)
+
+	it("reste courte : une ou deux lignes de panneau, quelques secondes d'affichage", function()
+		for n = 1, Vannes.nombreDeChutes() do
+			expect(#Vannes.chute(n) <= 70).to.equal(true)
+		end
+	end)
 end
