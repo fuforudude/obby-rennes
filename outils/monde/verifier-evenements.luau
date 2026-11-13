@@ -225,7 +225,7 @@ end
 -- à dessus + HAUTEUR_APPARITION. Il est échantillonné (anneaux tous les 0,25 stud, 32 points par anneau, un niveau
 -- tous les 0,25 stud) ; une pièce testée contre ces points est élargie de DILATATION (environ la moitié du pas) pour
 -- que rien de fin ne passe entre deux points.
-local RAYON_APPARITION, HAUTEUR_APPARITION, DILATATION = 1.5, 5, 0.15
+local RAYON_APPARITION, HAUTEUR_APPARITION, DILATATION = 2, 5, 0.15
 type Apparition = { nom: string, centre: any, points: { any } }
 local apparitions: { Apparition } = {}
 for _, d in parcoursModele:GetDescendants() do

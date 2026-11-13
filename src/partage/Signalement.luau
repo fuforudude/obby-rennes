@@ -15,9 +15,6 @@ export type Raison =
 	| "trop_loin"
 
 export type Entree = {
-	instant: number, -- l'horloge locale du serveur (os.clock), pour l'espacement des signalements
-	dernierSignalement: number?, -- le même horodatage pour le dernier signalement de ce joueur, nil s'il n'y en a pas
-	delaiMin: number, -- Reglages.EVENEMENT_DELAI_MIN
 	objetValide: boolean, -- le paramètre est une Instance de la carte, Model ou BasePart
 	avecTag: boolean, -- elle porte le tag Evenement
 	attributs: { [string]: any }, -- ses attributs (GetAttributes)
@@ -43,17 +40,14 @@ function Signalement.distanceAuSegment(p: Vector3, a: Vector3, b: Vector3): numb
 	return (p - (a + ab * u)).Magnitude
 end
 
---- Ce joueur signale-t-il trop vite ? Le service l'appelle d'abord, avant de rassembler le reste.
+--- Ce joueur signale-t-il trop vite ? (Utilisé par `traiter`, seul endroit qui contrôle la cadence.)
 function Signalement.tropSouvent(instant: number, dernierSignalement: number?, delaiMin: number): boolean
 	return dernierSignalement ~= nil and instant - dernierSignalement < delaiMin
 end
 
 --- Accepte ou refuse un signalement. Rend `true`, ou `false` et la raison du refus (à journaliser si utile).
---- L'ordre des vérifications va du moins cher au plus cher.
+--- Ne contrôle pas la cadence (c'est `traiter`). L'ordre des vérifications va du moins cher au plus cher.
 function Signalement.valider(e: Entree): (boolean, Raison?)
-	if Signalement.tropSouvent(e.instant, e.dernierSignalement, e.delaiMin) then
-		return false, "trop_souvent"
-	end
 	if not e.objetValide then
 		return false, "objet_invalide"
 	end
@@ -84,6 +78,26 @@ function Signalement.valider(e: Entree): (boolean, Raison?)
 		return false, "trop_loin"
 	end
 	return true, nil
+end
+
+--- Le point d'entrée du service : contrôle la cadence, note l'heure, puis valide.
+--- `derniers` : l'heure du dernier signalement de chaque clé (le joueur), table qui vit entre les appels.
+--- L'heure est notée dès que la cadence est passée, que la validation accepte ou non : un client qui spamme des
+--- signalements invalides reste limité à un par `delai`. Un refus de cadence ne repousse pas l'heure notée.
+--- `entree` est une fonction, appelée seulement si la cadence passe : les rafales sont écartées avant de rassembler
+--- quoi que ce soit dans le jeu.
+function Signalement.traiter(
+	derniers: { [any]: number },
+	cle: any,
+	instant: number,
+	delai: number,
+	entree: () -> Entree
+): (boolean, Raison?)
+	if Signalement.tropSouvent(instant, derniers[cle], delai) then
+		return false, "trop_souvent"
+	end
+	derniers[cle] = instant
+	return Signalement.valider(entree())
 end
 
 return table.freeze(Signalement)

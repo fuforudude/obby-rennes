@@ -29,7 +29,7 @@ local function demiTaille(objet: Instance): number
 end
 
 --- Rassemble ce que la règle (Signalement.valider) doit savoir, sans rien décider.
-local function rassembler(joueur: Player, objet: unknown, instant: number): Signalement.Entree
+local function rassembler(joueur: Player, objet: unknown): Signalement.Entree
 	local valide = typeof(objet) == "Instance"
 		and objet:IsDescendantOf(workspace)
 		and (objet:IsA("Model") or objet:IsA("BasePart"))
@@ -41,9 +41,6 @@ local function rassembler(joueur: Player, objet: unknown, instant: number): Sign
 	local position: Vector3? = if racine and racine:IsA("BasePart") then racine.Position else nil
 
 	return {
-		instant = instant,
-		dernierSignalement = dernierSignalement[joueur],
-		delaiMin = Reglages.EVENEMENT_DELAI_MIN,
 		objetValide = valide,
 		avecTag = instance ~= nil and CollectionService:HasTag(instance, "Evenement"),
 		attributs = if instance then instance:GetAttributes() else {},
@@ -58,14 +55,10 @@ local function rassembler(joueur: Player, objet: unknown, instant: number): Sign
 end
 
 local function surSignalement(joueur: Player, objet: unknown)
-	local instant = os.clock()
-	-- Les rafales sont écartées avant de rassembler quoi que ce soit.
-	if Signalement.tropSouvent(instant, dernierSignalement[joueur], Reglages.EVENEMENT_DELAI_MIN) then
-		return
-	end
-	dernierSignalement[joueur] = instant
-
-	local accepte = Signalement.valider(rassembler(joueur, objet, instant))
+	-- Cadence puis validation : une seule fonction pure et testée (les rafales sont écartées avant de rassembler).
+	local accepte = Signalement.traiter(dernierSignalement, joueur, os.clock(), Reglages.EVENEMENT_DELAI_MIN, function()
+		return rassembler(joueur, objet)
+	end)
 	if not accepte then
 		return
 	end

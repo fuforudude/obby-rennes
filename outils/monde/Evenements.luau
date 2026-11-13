@@ -726,8 +726,8 @@ return function(R)
 	end
 
 	-- Portillons du portique de validation, à la sortie de la station (checkpoint 4, dalle 237..249 × -6..6) :
-	-- deux battants en miroir qui s'ouvrent et se ferment ensemble. Battants de 5,4 : le bout d'un battant ne passe
-	-- jamais à moins de 1,7 du centre de la dalle (243, 14, 0), où le personnage réapparaît.
+	-- deux battants en miroir qui s'ouvrent et se ferment ensemble. Battants de 4,7 : le bout d'un battant ne passe
+	-- jamais à moins de 2,4 du centre de la dalle (243, 14, 0), où le personnage réapparaît (volume de rayon 2).
 	do
 		local station = dossier(decor, "PortiqueStation")
 		for _, cote in { -1, 1 } do
@@ -737,8 +737,8 @@ return function(R)
 				"PortillonValidation",
 				0.3,
 				4.5,
-				5.4,
-				CFrame.new(247, 16.55, gondZ - 2.7 * cote),
+				4.7,
+				CFrame.new(247, 16.55, gondZ - 2.35 * cote),
 				Color3.fromRGB(190, 225, 240),
 				Enum.Material.Glass
 			)
