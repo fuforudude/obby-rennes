@@ -9,6 +9,11 @@
 -- Hauteur studs au-dessus de sa place vers sa place, en accélérant). Hors danger, il est rangé très loin (rien n'est
 -- détruit, pas d'ombre, pas de pièce à parcourir à chaque image).
 --
+-- Streaming (StreamingEnabled) : les pièces d'un objet et son `Preavis` peuvent arriver après le signal du tag, ou
+-- partir. La liste des pièces et le préavis sont donc tenus à jour par DescendantAdded / DescendantRemoving de chaque
+-- objet (jamais de GetDescendants par image) ; une pièce arrivée hors de sa fenêtre est rangée aussitôt. Toutes les
+-- connexions d'un objet sont coupées quand il quitte le tag, est détruit ou sort du monde.
+--
 -- Contact : si le personnage local touche une pièce de l'objet pendant le danger, le client le signale au serveur
 -- (RemoteEvent ToucheParEvenement) qui vérifie et tue le joueur. Pourquoi pas `humanoide.Health = 0` ou
 -- `humanoide:ChangeState(Dead)` ici : le client est bien propriétaire de son personnage, mais Roblox ne garantit
@@ -33,12 +38,15 @@ type Piece = { decalage: CFrame, demi: Vector3 }
 type Evenement = {
 	objet: PVInstance,
 	params: Horaires.Parametres,
+	pret: boolean, -- faux tant que le pivot de l'objet n'est pas fiable (Model dont le PrimaryPart n'est pas arrivé)
 	posee: CFrame, -- le pivot tel que posé dans la carte
-	pieces: { Piece },
+	poseCourante: CFrame, -- le dernier pivot appliqué (posee, ou rangé, ou en mouvement)
+	pieces: { [BasePart]: Piece }, -- tenues à jour par DescendantAdded / DescendantRemoving
 	preavis: BasePart?,
 	preavisPose: CFrame, -- où la carte a posé le préavis
 	preavisVisible: boolean?, -- nil tant que pas encore appliqué
 	actif: boolean?, -- nil tant que pas encore placé
+	connexions: { RBXScriptConnection },
 }
 
 local evenements: { Evenement } = {}
@@ -53,26 +61,112 @@ local dernierSignalement = -math.huge
 
 local toucheParEvenement: RemoteEvent? = nil
 
+--- La pièce (ou un de ses descendants) est-elle le préavis ?
 local function estDansPreavis(descendant: Instance, preavis: BasePart?): boolean
 	return preavis ~= nil and (descendant == preavis or descendant:IsDescendantOf(preavis))
 end
 
-local function collecterPieces(objet: PVInstance, posee: CFrame, preavis: BasePart?): { Piece }
-	local pieces: { Piece } = {}
-	local function ajouter(partie: BasePart)
-		if not estDansPreavis(partie, preavis) then
-			table.insert(pieces, { decalage = posee:ToObjectSpace(partie.CFrame), demi = partie.Size / 2 })
+--- Montre ou range le préavis (la pièce garde sa place de la carte quand elle est montrée).
+local function afficherPreavis(evenement: Evenement, visible: boolean)
+	local preavis = evenement.preavis
+	if preavis then
+		preavis.CFrame = if visible then evenement.preavisPose else evenement.preavisPose + RANGEMENT
+	end
+	evenement.preavisVisible = visible
+end
+
+--- Une pièce de l'objet est là (au premier relevé, ou arrivée plus tard par le streaming). Elle arrive à sa place de
+--- la carte : si l'objet est ailleurs en ce moment (rangé, en plein trajet), on l'y amène tout de suite, pour qu'elle
+--- ne reste pas visible à sa place pendant que le reste de l'objet est parti.
+local function ajouterPiece(evenement: Evenement, partie: BasePart)
+	if evenement.pieces[partie] or estDansPreavis(partie, evenement.preavis) then
+		return
+	end
+	local decalage = evenement.posee:ToObjectSpace(partie.CFrame)
+	evenement.pieces[partie] = { decalage = decalage, demi = partie.Size / 2 }
+	if evenement.poseCourante ~= evenement.posee then
+		partie.CFrame = evenement.poseCourante * decalage
+	end
+end
+
+--- Le préavis est là : on retient sa place de la carte et on le range tout de suite (la prochaine image le remet
+--- dans son état du moment).
+local function definirPreavis(evenement: Evenement, preavis: BasePart)
+	evenement.preavis = preavis
+	evenement.preavisPose = preavis.CFrame
+	for partie in evenement.pieces do
+		if estDansPreavis(partie, preavis) then
+			evenement.pieces[partie] = nil
 		end
 	end
+	afficherPreavis(evenement, false)
+	evenement.preavisVisible = nil
+end
+
+local function surDescendantAjoute(evenement: Evenement, descendant: Instance)
+	if not evenement.pret then
+		return
+	end
+	if
+		evenement.preavis == nil
+		and descendant.Name == "Preavis"
+		and descendant.Parent == evenement.objet
+		and descendant:IsA("BasePart")
+	then
+		definirPreavis(evenement, descendant)
+	elseif descendant:IsA("BasePart") then
+		ajouterPiece(evenement, descendant)
+	end
+end
+
+local function surDescendantRetire(evenement: Evenement, descendant: Instance)
+	if descendant == evenement.preavis then
+		evenement.preavis = nil
+		evenement.preavisVisible = nil
+	end
+	if descendant:IsA("BasePart") then
+		evenement.pieces[descendant] = nil
+	end
+end
+
+--- Premier relevé : pivot posé, préavis et pièces présents. Ensuite, seuls les ajouts et retraits mettent à jour.
+local function initialiser(evenement: Evenement)
+	local objet = evenement.objet
+	evenement.pret = true
+	evenement.posee = objet:GetPivot()
+	evenement.poseCourante = evenement.posee
+	local candidat = objet:FindFirstChild("Preavis")
+	if candidat and candidat:IsA("BasePart") then
+		evenement.preavis = candidat
+		evenement.preavisPose = candidat.CFrame
+	elseif candidat then
+		warn(`[Evenements] {objet:GetFullName()}.Preavis n'est pas une BasePart : ignoré`)
+	end
 	if objet:IsA("BasePart") then
-		ajouter(objet)
+		ajouterPiece(evenement, objet)
 	end
 	for _, d in objet:GetDescendants() do
 		if d:IsA("BasePart") then
-			ajouter(d)
+			ajouterPiece(evenement, d)
 		end
 	end
-	return pieces
+end
+
+--- Coupe toutes les connexions d'un objet : retiré du tag, détruit, ou sorti du monde par le streaming.
+local function retirer(objet: Instance)
+	local evenement = parObjet[objet]
+	if not evenement then
+		return
+	end
+	parObjet[objet] = nil
+	for _, c in evenement.connexions do
+		c:Disconnect()
+	end
+	table.clear(evenement.connexions)
+	local i = table.find(evenements, evenement)
+	if i then
+		table.remove(evenements, i)
+	end
 end
 
 local function enregistrer(instance: Instance)
@@ -92,44 +186,60 @@ local function enregistrer(instance: Instance)
 		return
 	end
 	local posee = objet:GetPivot()
-	local candidat = objet:FindFirstChild("Preavis")
-	local preavis: BasePart? = if candidat and candidat:IsA("BasePart") then candidat else nil
-	if candidat and not preavis then
-		warn(`[Evenements] {objet:GetFullName()}.Preavis n'est pas une BasePart : ignoré`)
-	end
 	local evenement: Evenement = {
 		objet = objet,
 		params = params,
+		pret = false,
 		posee = posee,
-		pieces = collecterPieces(objet, posee, preavis),
-		preavis = preavis,
-		preavisPose = if preavis then preavis.CFrame else posee,
+		poseCourante = posee,
+		pieces = {},
+		preavis = nil,
+		preavisPose = posee,
 		preavisVisible = nil,
 		actif = nil,
+		connexions = {},
 	}
 	parObjet[objet] = evenement
 	table.insert(evenements, evenement)
-end
 
-local function retirer(objet: Instance)
-	local evenement = parObjet[objet]
-	if not evenement then
-		return
-	end
-	parObjet[objet] = nil
-	local i = table.find(evenements, evenement)
-	if i then
-		table.remove(evenements, i)
-	end
-end
+	-- Les pièces et le préavis peuvent arriver (ou partir) après le signal du tag quand StreamingEnabled est actif.
+	table.insert(
+		evenement.connexions,
+		objet.DescendantAdded:Connect(function(d)
+			surDescendantAjoute(evenement, d)
+		end)
+	)
+	table.insert(
+		evenement.connexions,
+		objet.DescendantRemoving:Connect(function(d)
+			surDescendantRetire(evenement, d)
+		end)
+	)
+	table.insert(
+		evenement.connexions,
+		objet.Destroying:Connect(function()
+			retirer(objet)
+		end)
+	)
 
---- Montre ou range le préavis (la pièce garde sa place de la carte quand elle est montrée).
-local function afficherPreavis(evenement: Evenement, visible: boolean)
-	local preavis = evenement.preavis
-	if preavis then
-		preavis.CFrame = if visible then evenement.preavisPose else evenement.preavisPose + RANGEMENT
+	-- Un Model dont le PrimaryPart (son pivot) n'est pas encore arrivé n'a pas de pivot fiable : on attend.
+	if objet:IsA("Model") and objet.PrimaryPart == nil then
+		table.insert(
+			evenement.connexions,
+			objet:GetPropertyChangedSignal("PrimaryPart"):Connect(function()
+				if not evenement.pret and (objet :: Model).PrimaryPart ~= nil then
+					initialiser(evenement)
+				end
+			end)
+		)
+		task.delay(10, function()
+			if not evenement.pret and parObjet[objet] == evenement then
+				warn(`[Evenements] {objet:GetFullName()} : pas de PrimaryPart (son pivot), ignoré`)
+			end
+		end)
+	else
+		initialiser(evenement)
 	end
-	evenement.preavisVisible = visible
 end
 
 local function poseDuDanger(evenement: Evenement, progression: number): CFrame
@@ -191,11 +301,15 @@ local function surImage()
 	end
 
 	for _, evenement in evenements do
+		if not evenement.pret then
+			continue
+		end
 		local params = evenement.params
 		local etat, progression = Horaires.etat(t, params.periode, params.decalage, params.preavis, params.duree)
 		if etat == "actif" then
 			local pose = poseDuDanger(evenement, progression)
 			evenement.objet:PivotTo(pose)
+			evenement.poseCourante = pose
 			evenement.actif = true
 			-- Le préavis d'une chute (l'ombre) reste jusqu'à l'impact ; celui d'un passage s'éteint quand il arrive.
 			-- Réappliqué à chaque image : le préavis est un enfant de l'objet, que PivotTo vient de déplacer.
@@ -207,7 +321,8 @@ local function surImage()
 			local visible = etat == "preavis"
 				and Horaires.preavisAllume(progression, params.preavis, Reglages.EVENEMENT_CLIGNOTEMENT)
 			if evenement.actif ~= false then
-				evenement.objet:PivotTo(evenement.posee + RANGEMENT)
+				evenement.poseCourante = evenement.posee + RANGEMENT
+				evenement.objet:PivotTo(evenement.poseCourante)
 				evenement.actif = false
 				afficherPreavis(evenement, visible)
 			elseif evenement.preavisVisible ~= visible then

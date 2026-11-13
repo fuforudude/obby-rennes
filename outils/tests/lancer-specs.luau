@@ -5,6 +5,7 @@
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
 local process = require("@lune/process")
+local roblox = require("@lune/roblox") -- Vector3 pour les specs qui en ont besoin
 
 local jeu -- le faux `game`, défini plus bas
 
@@ -13,7 +14,7 @@ local cache = {}
 local function charger(chemin: string)
 	if cache[chemin] == nil then
 		-- Un module de partage peut lui aussi appeler `game:GetService("ReplicatedStorage")` et `require`.
-		local env = { game = jeu, require = charger }
+		local env = { game = jeu, require = charger, Vector3 = roblox.Vector3 }
 		cache[chemin] =
 			luau.load(fs.readFile(chemin), { debugName = chemin, environment = setmetatable(env, { __index = _G }) })()
 	end
@@ -91,6 +92,7 @@ for _, fichier in fichiers do
 	local env = setmetatable({
 		game = faux,
 		require = charger,
+		Vector3 = roblox.Vector3,
 		describe = describe,
 		it = it,
 		expect = expect,
