@@ -4,5 +4,11 @@
     "sortie": "monde/Parcours.rbxm",
     "auteur": "claude",
     "note": "Les 15 étapes, de la coloc à Villejean jusqu'à la salle de partiel de Sup de Vinci, et le décor de la ville."
+  },
+  "Evenements": {
+    "generateur": "outils/monde/Evenements.luau",
+    "sortie": "monde/Evenements.rbxm",
+    "auteur": "claude",
+    "note": "Événements des quatre descentes (chutes des balcons, rames, drones, trafic), balanciers du parcours et panneaux d'anecdotes des 16 checkpoints. Contrôle : outils/monde/verifier-evenements.luau."
   }
 }
