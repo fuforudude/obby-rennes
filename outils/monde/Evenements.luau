@@ -642,7 +642,9 @@ return function(R)
 	local balanciers = dossier(racine, "Balanciers")
 
 	local function balancier(p, pivot, axe, amplitude, periode, decalage, zoneMin, zoneMax)
-		p.CanQuery = false
+		-- CanQuery reste vrai : un joueur posé sur la bôme ou le bras doit pouvoir sauter (la détection du sol
+		-- du Humanoid lance des rayons).
+		p.CanQuery = true
 		p:SetAttribute("Pivot", pivot)
 		p:SetAttribute("Axe", axe.Unit)
 		p:SetAttribute("Amplitude", amplitude)
@@ -677,47 +679,55 @@ return function(R)
 		b.Parent = mobile
 	end
 
-	-- Porte battante de l'amphi : la porte va-et-vient de la fenêtre de sortie (X 124 à 125, Z -4 à 4, Y 31 à 40),
-	-- gond côté Z = -3,6. On saute du checkpoint 2 vers le rebord (128, 31) quand elle est ouverte.
+	-- Porte battante double de l'amphi, dans la fenêtre de sortie (X 124 à 125, Z -4 à 4, Y 31 à 40) : deux battants
+	-- de 3,6 studs en miroir, gonds près des deux montants (Z = ±3,7, à 0,3 du mur pour que l'arrière du battant ne
+	-- le touche pas en tournant), qui s'ouvrent et se ferment ensemble. Un battant n'est jamais à plus de 3,6 de son
+	-- gond : il reste à plus de 3,3 de Z du centre de la dalle du checkpoint 2 (119, 31, 0), où le personnage
+	-- réapparaît, et à plus de 3,3 de l'axe du rebord d'arrivée (dalle 4 × 6 centrée (128, 31, 0)). On saute de la
+	-- dalle au rebord quand ils sont ouverts (zone de contrôle : le couloir de 3 studs de large au milieu).
 	do
-		local porte = piece(
-			balanciers,
-			"PorteBattanteAmphi",
-			0.4,
-			7,
-			7.2,
-			CFrame.new(124.5, 34.8, 0),
-			Color3.fromRGB(150, 95, 55),
-			Enum.Material.Wood
-		)
-		texteFixe(
-			porte,
-			Enum.NormalId.Left,
-			"AMPHI B\nPOUSSEZ",
-			Color3.fromRGB(255, 255, 255),
-			Color3.fromRGB(110, 60, 30)
-		)
-		texteFixe(
-			porte,
-			Enum.NormalId.Right,
-			"AMPHI B\nTIREZ",
-			Color3.fromRGB(255, 255, 255),
-			Color3.fromRGB(110, 60, 30)
-		)
-		balancier(
-			porte,
-			Vector3.new(124.5, 34.8, -3.6),
-			Vector3.new(0, 1, 0),
-			80,
-			5.5,
-			0,
-			Vector3.new(123, 31.5, -1.5),
-			Vector3.new(126, 36, 4)
-		)
+		for _, cote in { -1, 1 } do
+			local gondZ = 3.7 * cote
+			local battant = piece(
+				balanciers,
+				"PorteBattanteAmphi",
+				0.4,
+				7,
+				3.6,
+				CFrame.new(124.5, 34.8, gondZ - 1.8 * cote),
+				Color3.fromRGB(150, 95, 55),
+				Enum.Material.Wood
+			)
+			texteFixe(
+				battant,
+				Enum.NormalId.Left,
+				"AMPHI B\nPOUSSEZ",
+				Color3.fromRGB(255, 255, 255),
+				Color3.fromRGB(110, 60, 30)
+			)
+			texteFixe(
+				battant,
+				Enum.NormalId.Right,
+				"AMPHI B\nTIREZ",
+				Color3.fromRGB(255, 255, 255),
+				Color3.fromRGB(110, 60, 30)
+			)
+			balancier(
+				battant,
+				Vector3.new(124.5, 34.8, gondZ),
+				Vector3.new(0, -cote, 0),
+				85,
+				6,
+				0,
+				Vector3.new(123, 31.5, -1.5),
+				Vector3.new(126, 36, 1.5)
+			)
+		end
 	end
 
 	-- Portillons du portique de validation, à la sortie de la station (checkpoint 4, dalle 237..249 × -6..6) :
-	-- deux battants en miroir qui s'ouvrent et se ferment ensemble.
+	-- deux battants en miroir qui s'ouvrent et se ferment ensemble. Battants de 5,4 : le bout d'un battant ne passe
+	-- jamais à moins de 1,7 du centre de la dalle (243, 14, 0), où le personnage réapparaît.
 	do
 		local station = dossier(decor, "PortiqueStation")
 		for _, cote in { -1, 1 } do
@@ -727,8 +737,8 @@ return function(R)
 				"PortillonValidation",
 				0.3,
 				4.5,
-				5.6,
-				CFrame.new(247, 16.55, gondZ - 2.8 * cote),
+				5.4,
+				CFrame.new(247, 16.55, gondZ - 2.7 * cote),
 				Color3.fromRGB(190, 225, 240),
 				Enum.Material.Glass
 			)
