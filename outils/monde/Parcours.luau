@@ -420,17 +420,17 @@ return function(R)
 			etiquette(marque, nom, accent, 5)
 			return p
 		end
-		local demi = taille / 2 + 0.6
+		-- Arche discrète : piliers fins en plastique de la couleur de la zone, seul le liseré sous le fronton est en
+		-- néon ; passage de 8 studs (le fronton garde 3 studs de haut et sa largeur : taille de texte inchangée).
+		local demi = taille / 2 + 0.9
 		for _, cote in { -1, 1 } do
-			decor(
-				bloc(parent, "PilierArche", 1.2, 11, 1.2, x, dessus + 11, z + cote * demi, accent, Enum.Material.Neon)
-			)
+			decor(bloc(parent, "PilierArche", 0.6, 8, 0.6, x, dessus + 8, z + cote * demi, accent))
 		end
 		local fronton =
-			decor(bloc(parent, "Arche", 1.2, 3, taille + 2.4, x, dessus + 14, z, Color3.fromRGB(25, 25, 35)))
+			decor(bloc(parent, "Arche", 0.8, 3, taille + 2.4, x, dessus + 11, z, Color3.fromRGB(25, 25, 35)))
 		texte(Enum.NormalId.Left, nom, accent).Parent = fronton
 		texte(Enum.NormalId.Right, nom, accent).Parent = fronton
-		decor(bloc(parent, "LisereArche", 1.3, 0.4, taille + 2.4, x, dessus + 11.2, z, accent, Enum.Material.Neon))
+		decor(bloc(parent, "LisereArche", 0.9, 0.3, taille + 2.4, x, dessus + 8.15, z, accent, Enum.Material.Neon))
 		return p
 	end
 
