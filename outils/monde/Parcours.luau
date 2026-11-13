@@ -135,11 +135,38 @@ return function(R)
 		return p
 	end
 
+	-- Densité des SurfaceGui. Roblox plafonne la police d'un TextLabel TextScaled à 100 px : sur une toile trop
+	-- dense (40 px/stud, soit 560 × 400 px pour 14 × 10 studs), le texte court reste petit dans un coin. On vise donc
+	-- une toile d'environ 150 px sur la plus petite dimension de la face (jamais moins de 8, jamais plus de 40 px/stud),
+	-- ce qui rend le plafond de 100 px sans effet : la police s'adapte à la face, pas à la toile.
+	local TOILE_MIN = 150
+	local function densiteDe(part, face)
+		local s = part.Size
+		local l, h
+		if face == Enum.NormalId.Left or face == Enum.NormalId.Right then
+			l, h = s.Z, s.Y
+		elseif face == Enum.NormalId.Top or face == Enum.NormalId.Bottom then
+			l, h = s.X, s.Z
+		else
+			l, h = s.X, s.Y
+		end
+		return math.clamp(TOILE_MIN / math.min(l, h), 8, 40)
+	end
+
+	-- À appeler en fin de construction : règle la densité de chaque SurfaceGui d'après la face qui la porte.
+	local function calibrerSurfaces(racine)
+		for _, d in racine:GetDescendants() do
+			if d:IsA("SurfaceGui") and d.Parent and d.Parent:IsA("BasePart") then
+				d.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+				d.PixelsPerStud = densiteDe(d.Parent, d.Face)
+			end
+		end
+	end
+
 	local function texte(surface, contenu: string, couleurTexte, couleurFond)
 		local gui = Instance.new("SurfaceGui")
 		gui.Face = surface
-		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-		gui.PixelsPerStud = 40
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud -- densité réglée par calibrerSurfaces
 		local label = Instance.new("TextLabel")
 		label.Name = "Texte"
 		label.Size = UDim2.fromScale(1, 1)
@@ -251,8 +278,7 @@ return function(R)
 		etiqueter(p, tag)
 		local gui = Instance.new("SurfaceGui")
 		gui.Face = face
-		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-		gui.PixelsPerStud = 40
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud -- densité réglée par calibrerSurfaces
 		gui.Parent = p
 		local titre = Instance.new("TextLabel")
 		titre.Name = "Titre"
@@ -2522,5 +2548,6 @@ return function(R)
 		end
 	end
 
+	calibrerSurfaces(parcours)
 	return parcours
 end
