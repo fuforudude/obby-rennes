@@ -135,11 +135,45 @@ return function(R)
 		return p
 	end
 
+	-- Densité des SurfaceGui. Le plancher est de 40 px/stud pour toute face dont la plus petite dimension fait moins
+	-- de 15 studs (panneaux, tableaux, enseignes courantes) : baisser la densité ne grossit pas le texte (TextScaled et
+	-- les tailles fixes suivent le cadre, pas la toile), elle le rend seulement flou. Seules les très grandes enseignes
+	-- (15 studs et plus) gardent une toile d'environ 600 px sur leur plus petite dimension (jamais moins de 8 px/stud),
+	-- pour ne pas gaspiller de mémoire de texture.
+	local DENSITE = 40
+	local GRANDE_FACE = 15
+	local TOILE_GRANDE = 600
+	local function densiteDe(part, face)
+		local s = part.Size
+		local l, h
+		if face == Enum.NormalId.Left or face == Enum.NormalId.Right then
+			l, h = s.Z, s.Y
+		elseif face == Enum.NormalId.Top or face == Enum.NormalId.Bottom then
+			l, h = s.X, s.Z
+		else
+			l, h = s.X, s.Y
+		end
+		local petite = math.min(l, h)
+		if petite < GRANDE_FACE then
+			return DENSITE
+		end
+		return math.clamp(TOILE_GRANDE / petite, 8, DENSITE)
+	end
+
+	-- À appeler en fin de construction : règle la densité de chaque SurfaceGui d'après la face qui la porte.
+	local function calibrerSurfaces(racine)
+		for _, d in racine:GetDescendants() do
+			if d:IsA("SurfaceGui") and d.Parent and d.Parent:IsA("BasePart") then
+				d.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+				d.PixelsPerStud = densiteDe(d.Parent, d.Face)
+			end
+		end
+	end
+
 	local function texte(surface, contenu: string, couleurTexte, couleurFond)
 		local gui = Instance.new("SurfaceGui")
 		gui.Face = surface
-		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-		gui.PixelsPerStud = 40
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud -- densité réglée par calibrerSurfaces
 		local label = Instance.new("TextLabel")
 		label.Name = "Texte"
 		label.Size = UDim2.fromScale(1, 1)
@@ -251,8 +285,7 @@ return function(R)
 		etiqueter(p, tag)
 		local gui = Instance.new("SurfaceGui")
 		gui.Face = face
-		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-		gui.PixelsPerStud = 40
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud -- densité réglée par calibrerSurfaces
 		gui.Parent = p
 		local titre = Instance.new("TextLabel")
 		titre.Name = "Titre"
@@ -269,7 +302,12 @@ return function(R)
 		liste.Size = UDim2.fromScale(0.92, 0.78)
 		liste.BackgroundTransparency = 1
 		liste.TextColor3 = Color3.fromRGB(240, 240, 240)
-		liste.TextScaled = true
+		-- Taille fixe : 10 lignes en police Code tiennent dans le label (hauteur en pixels / 11 ; 0,78 × 10 studs à
+		-- 40 px/stud = 312 px, soit 28 px). Le client règle l'alignement : centré pour un message, en haut à gauche
+		-- pour la liste.
+		liste.TextScaled = false
+		liste.TextWrapped = true
+		liste.TextSize = math.floor(0.78 * 10 * DENSITE / 11)
 		liste.TextXAlignment = Enum.TextXAlignment.Left
 		liste.TextYAlignment = Enum.TextYAlignment.Top
 		liste.Font = Enum.Font.Code
@@ -2522,5 +2560,6 @@ return function(R)
 		end
 	end
 
+	calibrerSurfaces(parcours)
 	return parcours
 end

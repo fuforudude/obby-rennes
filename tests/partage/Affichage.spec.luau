@@ -50,13 +50,17 @@ return function()
 	end)
 
 	describe("le panneau d'anecdote", function()
-		it("échappe le texte pour le texte enrichi", function()
-			expect(Affichage.echapper("Rock & <roll> « ok »")).to.equal("Rock &amp; &lt;roll&gt; « ok »")
-		end)
-		it("met la zone en titre, puis l'anecdote, puis la vanne", function()
-			local texte =
+		it("rend la zone en titre, puis l'anecdote et la vanne séparées d'une ligne vide", function()
+			local titre, corps =
 				Affichage.textePanneau({ numero = 3, zone = "Zone", anecdote = "Un fait.", blague = "Une vanne." })
-			expect(texte).to.equal("<b>Zone</b>\n\nUn fait.\n\n<i>Une vanne.</i>")
+			expect(titre).to.equal("Zone")
+			expect(corps).to.equal("Un fait.\n\nUne vanne.")
+		end)
+		it("ne touche pas aux caractères spéciaux (texte simple, sans balises)", function()
+			local titre, corps =
+				Affichage.textePanneau({ numero = 1, zone = "A & B", anecdote = "<b>x</b>", blague = "« ok »" })
+			expect(titre).to.equal("A & B")
+			expect(corps).to.equal("<b>x</b>\n\n« ok »")
 		end)
 	end)
 

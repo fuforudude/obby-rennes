@@ -15,10 +15,11 @@
 -- - tag « Balancier » sur une BasePart ancrée posée au repos : Pivot, Axe, Amplitude (degrés), Periode, Decalage.
 --   Attributs de contrôle seulement (lus par verifier-evenements.luau, ignorés par le jeu) : ZoneControleMin et
 --   ZoneControleMax, la boîte que le joueur traverse, où l'on mesure la fenêtre de passage.
--- - tag « PanneauAnecdote » + Numero (0 à 15) : SurfaceGui (face avant) avec un TextLabel « Texte » vide.
+-- - tag « PanneauAnecdote » + Numero (0 à 15) : SurfaceGui (face avant) avec deux TextLabel vides, « Titre » et « Corps ».
 
 return function(R)
 	local Instance, Vector3, Color3, CFrame, Enum, UDim2 = R.Instance, R.Vector3, R.Color3, R.CFrame, R.Enum, R.UDim2
+	local UDim = R.UDim
 	local NumberRange, NumberSequence, ColorSequence = R.NumberRange, R.NumberSequence, R.ColorSequence
 
 	math.randomseed(1312)
@@ -98,11 +99,45 @@ return function(R)
 		return CFrame.Angles(0, math.atan2(-dx, -dz), 0)
 	end
 
+	-- Densité des SurfaceGui. Le plancher est de 40 px/stud pour toute face dont la plus petite dimension fait moins
+	-- de 15 studs (panneaux, tableaux, enseignes courantes) : baisser la densité ne grossit pas le texte (TextScaled et
+	-- les tailles fixes suivent le cadre, pas la toile), elle le rend seulement flou. Seules les très grandes enseignes
+	-- (15 studs et plus) gardent une toile d'environ 600 px sur leur plus petite dimension (jamais moins de 8 px/stud),
+	-- pour ne pas gaspiller de mémoire de texture.
+	local DENSITE = 40
+	local GRANDE_FACE = 15
+	local TOILE_GRANDE = 600
+	local function densiteDe(part, face)
+		local s = part.Size
+		local l, h
+		if face == Enum.NormalId.Left or face == Enum.NormalId.Right then
+			l, h = s.Z, s.Y
+		elseif face == Enum.NormalId.Top or face == Enum.NormalId.Bottom then
+			l, h = s.X, s.Z
+		else
+			l, h = s.X, s.Y
+		end
+		local petite = math.min(l, h)
+		if petite < GRANDE_FACE then
+			return DENSITE
+		end
+		return math.clamp(TOILE_GRANDE / petite, 8, DENSITE)
+	end
+
+	-- À appeler en fin de construction : règle la densité de chaque SurfaceGui d'après la face qui la porte.
+	local function calibrerSurfaces(ensemble)
+		for _, d in ensemble:GetDescendants() do
+			if d:IsA("SurfaceGui") and d.Parent and d.Parent:IsA("BasePart") then
+				d.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+				d.PixelsPerStud = densiteDe(d.Parent, d.Face)
+			end
+		end
+	end
+
 	local function texteFixe(part, face, contenu: string, encre, fond)
 		local gui = Instance.new("SurfaceGui")
 		gui.Face = face
-		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-		gui.PixelsPerStud = 40
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud -- densité réglée par calibrerSurfaces
 		local label = Instance.new("TextLabel")
 		label.Name = "Texte"
 		label.Size = UDim2.fromScale(1, 1)
@@ -137,13 +172,6 @@ return function(R)
 		return modele
 	end
 
-	-- Lumière de préavis (phares, clignotant, feu) : reste à sa place posée, le client la fait clignoter.
-	local function lumiere(modele, sx, sy, sz, cf, couleur, forme)
-		local l = piece(modele, "Preavis", sx, sy, sz, cf, couleur, Enum.Material.Neon, forme)
-		l.CastShadow = false
-		return l
-	end
-
 	-- Ombre au sol, sous le point d'impact d'une chute.
 	local function ombre(modele, diametre, x, dessus, z)
 		local o = piece(
@@ -162,15 +190,69 @@ return function(R)
 		return o
 	end
 
+	-- Préavis d'un passage (rame, drone, véhicule) : l'enfant « Preavis » est une seule BasePart, celle que le client
+	-- fait clignoter (il ne déplace que cette pièce, et tout ce qu'elle porte part avec). C'est une bande de néon rouge
+	-- à moitié transparente, posée sur le sol de la zone dangereuse : c'est le signal principal. Elle porte une lueur
+	-- rouge (PointLight) et des « ! » rouges (BillboardGui) qui clignotent avec elle. Les « ! » sont posés au-dessus de
+	-- l'arche de la porte cochère, du tunnel ou de l'échafaudage concerné (sur la façade, devant le mur), hors de la trajectoire et de la ligne de vue entre
+	-- l'endroit où on attend et le danger : petits, jamais au-dessus du décor (AlwaysOnTop faux), visibles de 80 studs.
+	-- `cf` : le centre de la bande ; `feux` : la position de chaque « ! » relative à ce centre ; `tailleFeu` : en studs.
+	local ROUGE_ALERTE = Color3.fromRGB(255, 35, 25)
+	local PREAVIS_RAME, PREAVIS_DRONE, PREAVIS_TRAFIC = 2.6, 2.4, 2.2
+	local TAILLE_FEU = 2
+
+	local function preavisPassage(modele, cf, sx, sz, feux, tailleFeu)
+		local bande = piece(modele, "Preavis", sx, 0.2, sz, cf, ROUGE_ALERTE, Enum.Material.Neon)
+		bande.Transparency = 0.4
+		bande.CastShadow = false
+		local lueur = Instance.new("PointLight")
+		lueur.Color = ROUGE_ALERTE
+		lueur.Brightness = 3
+		lueur.Range = 28
+		lueur.Shadows = false
+		lueur.Parent = bande
+		for _, position in feux do
+			local gui = Instance.new("BillboardGui")
+			gui.Name = "FeuRouge"
+			gui.Size = UDim2.fromScale(tailleFeu, tailleFeu)
+			gui.StudsOffsetWorldSpace = position
+			gui.AlwaysOnTop = false
+			gui.LightInfluence = 0
+			gui.MaxDistance = 80
+			local disque = Instance.new("TextLabel")
+			disque.Size = UDim2.fromScale(1, 1)
+			disque.BackgroundColor3 = ROUGE_ALERTE
+			disque.BorderSizePixel = 0
+			disque.TextColor3 = Color3.fromRGB(255, 255, 255)
+			disque.TextScaled = true
+			disque.Font = Enum.Font.GothamBlack
+			disque.Text = "!"
+			disque.Parent = gui
+			local rond = Instance.new("UICorner")
+			rond.CornerRadius = UDim.new(0.5, 0)
+			rond.Parent = disque
+			local contour = Instance.new("UIStroke")
+			contour.Color = Color3.fromRGB(255, 255, 255)
+			contour.Thickness = 2
+			contour.Parent = disque
+			gui.Parent = bande
+		end
+		return bande
+	end
+
 	local racineEvenements = dossier(racine, "Evenements")
 	local decor = dossier(racine, "Decor")
 
 	---------------------------------------------------------------------------------------------------------------
-	-- 1 · La coloc : pots de fleurs, linge et cartons qui tombent des balcons du dessus.
+	-- 1 · La coloc : pots de fleurs, linge et cartons qui tombent du ciel, sur les balcons de la descente.
+	-- Rien au-dessus des balcons (ni dalle, ni rambarde : ça gênait la caméra) ; les objets tombent de haut, pour qu'on
+	-- les voie arriver.
 	-- Balcons de Parcours.luau (dalles 4 × 4, dessus) : B1 (7, 36, 3), B2 (14, 32, -3), B4 (30, 24, 6), B5 (37, 20, 0),
 	-- B6 (44, 16, -6). L'étendoir mobile (22, 28, 0) n'a rien : il bouge déjà.
+	-- Chute libre de 36 studs sous la gravité de Roblox (196,2 studs/s²) : sqrt(2 × 36 / 196,2) = 0,61 s ; on prend 0,7 s
+	-- (objets un peu freinés par l'air). Le client suit h × (1 - p²) : il accélère, comme une vraie chute.
 	local coloc = dossier(racineEvenements, "Coloc")
-	local HAUTEUR_CHUTE, DUREE_CHUTE, PREAVIS_CHUTE = 14, 0.9, 1.2
+	local HAUTEUR_CHUTE, DUREE_CHUTE, PREAVIS_CHUTE = 36, 0.7, 1.4
 
 	local function chute(nom, x, dessus, z, periode, decalage)
 		return evenement(coloc, nom, {
@@ -267,27 +349,6 @@ return function(R)
 		return finir(m, corps)
 	end
 
-	-- Les balcons du dessus, d'où tombent les objets (décor sans collision).
-	local function balconDuDessus(x, dessus, z)
-		local y = dessus + HAUTEUR_CHUTE - 0.3
-		boite(decor, "BalconDuDessus", x - 2.4, x + 2.4, y - 0.5, y, z - 2.4, z + 2.4, Color3.fromRGB(205, 205, 210))
-		boite(
-			decor,
-			"Rambarde",
-			x - 2.4,
-			x + 2.4,
-			y,
-			y + 1.4,
-			z + 2.2,
-			z + 2.4,
-			Color3.fromRGB(70, 75, 85),
-			Enum.Material.Metal
-		)
-	end
-	for _, b in { { 7, 36, 3 }, { 14, 32, -3 }, { 30, 24, 6 }, { 37, 20, 0 }, { 44, 16, -6 } } do
-		balconDuDessus(b[1], b[2], b[3])
-	end
-
 	potDeFleurs(7.2, 36, 2.8, 6, 0)
 	linge(14, 32, -3, 7, 2.5)
 	carton(14.3, 32, -3.3, 10, 6)
@@ -302,46 +363,80 @@ return function(R)
 	local metro = dossier(racineEvenements, "Metro")
 	local ROUGE_STAR = Color3.fromRGB(235, 50, 60)
 
-	-- Une rame qui traverse en Z au niveau des pieds, de tunnel en tunnel ; un feu fixe près de l'escalator.
-	-- `zMoins` : distance du centre de la rame cachée dans le tunnel côté -Z (45 par défaut, moins si le décor gêne).
-	local function rame(nom, x, dessus, sens, periode, decalage, feuX, feuZ, zMoins)
-		zMoins = zMoins or 45
-		local yc = dessus + 0.2 + 3.5
-		local bouts = { [-1] = Vector3.new(x, yc, -zMoins), [1] = Vector3.new(x, yc, 45) }
+	-- Une rame qui traverse en Z au niveau des pieds, de tunnel en tunnel ; une bande rouge sur l'escalator et des feux
+	-- rouges près de lui pendant le préavis. Les tunnels sont loin (70 studs par défaut) : on voit la rame arriver.
+	-- `zMoins` / `zPlus` : distance du centre de la rame cachée dans le tunnel, côté -Z et côté +Z (70 par défaut, moins
+	-- si le décor gêne). Vitesse d'environ 50 studs/s : la durée du passage suit la longueur du trajet.
+	local function rame(nom, x, dessus, sens, periode, decalage, zMoins, zPlus)
+		zMoins = zMoins or 70
+		zPlus = zPlus or 70
+		local yc = dessus + 0.2 + 4
+		local bouts = { [-1] = Vector3.new(x, yc, -zMoins), [1] = Vector3.new(x, yc, zPlus) }
 		local depart, arrivee = bouts[-sens], bouts[sens]
 		local m = evenement(metro, nom, {
 			Type = "Passage",
 			Periode = periode,
 			Decalage = decalage,
-			Preavis = 1.5,
+			Preavis = PREAVIS_RAME,
 			Depart = depart,
 			Arrivee = arrivee,
-			DureePassage = 2,
+			DureePassage = math.floor((zMoins + zPlus) / 50 * 10 + 0.5) / 10,
 		})
-		local corps = piece(m, "Caisse", 5, 7, 22, CFrame.new(depart), ROUGE_STAR, Enum.Material.Metal)
+		local corps = piece(m, "Caisse", 5.6, 8, 24, CFrame.new(depart), ROUGE_STAR, Enum.Material.Metal)
+		piece(
+			m,
+			"Bande",
+			5.7,
+			1.2,
+			24.1,
+			CFrame.new(depart + Vector3.new(0, -1.9, 0)),
+			Color3.fromRGB(250, 250, 255),
+			Enum.Material.SmoothPlastic
+		)
 		piece(
 			m,
 			"Vitres",
-			5.1,
-			2,
-			20,
-			CFrame.new(depart + Vector3.new(0, 1, 0)),
+			5.7,
+			2.2,
+			22,
+			CFrame.new(depart + Vector3.new(0, 1.3, 0)),
 			Color3.fromRGB(30, 40, 60),
 			Enum.Material.Glass
 		)
 		piece(
 			m,
-			"Phares",
-			3.5,
-			0.8,
-			0.2,
-			CFrame.new(depart + Vector3.new(0, -2.2, 11.05 * sens)),
-			Color3.fromRGB(255, 245, 200),
+			"Toit",
+			3,
+			0.5,
+			24.1,
+			CFrame.new(depart + Vector3.new(0, 4.1, 0)),
+			Color3.fromRGB(255, 225, 40),
 			Enum.Material.Neon
 		)
-		lumiere(m, 0.9, 0.9, 0.9, CFrame.new(feuX, dessus + 5.5, feuZ), Color3.fromRGB(255, 70, 40), Enum.PartType.Ball)
+		for _, cote in { -1, 1 } do
+			piece(
+				m,
+				"Phare",
+				1.5,
+				1.5,
+				0.3,
+				CFrame.new(depart + Vector3.new(cote * 1.8, -2.6, 12.1 * sens)),
+				Color3.fromRGB(255, 255, 215),
+				Enum.Material.Neon
+			)
+		end
+		-- Préavis : la bande couvre toute la largeur de la rame sur l'escalator ; un « ! » flotte au-dessus de chaque
+		-- tunnel (à 12 studs au-dessus de la bande : hors du passage et de la ligne de vue sur l'escalator).
+		preavisPassage(
+			m,
+			CFrame.new(x, dessus + 0.12, 0),
+			6.2,
+			9,
+			{ Vector3.new(0, 12.3, -zMoins), Vector3.new(0, 12.3, zPlus) },
+			TAILLE_FEU
+		)
 		finir(m, corps)
-		-- Décor : voie sous l'escalator, tunnels aux deux bouts, poteau du feu.
+		-- Décor : voie sous l'escalator, tunnels aux deux bouts, poteau et boîtier du feu.
 		boite(
 			decor,
 			"Voie",
@@ -350,38 +445,41 @@ return function(R)
 			dessus - 2.2,
 			dessus - 1,
 			-zMoins - 12,
-			57,
+			zPlus + 12,
 			Color3.fromRGB(120, 125, 135),
 			Enum.Material.Concrete
 		)
-		for _, bout in { -zMoins, 45 } do
+		for _, bout in { -zMoins, zPlus } do
 			boite(
 				decor,
 				"Tunnel",
-				x - 3.2,
-				x + 3.2,
+				x - 3.8,
+				x + 3.8,
 				dessus - 1,
-				dessus + 8.6,
+				dessus + 9.6,
 				bout - 12.5,
 				bout + 12.5,
 				Color3.fromRGB(45, 45, 55),
 				Enum.Material.Concrete
 			)
 		end
-		boite(
-			decor,
-			"PoteauFeu",
-			feuX - 0.2,
-			feuX + 0.2,
-			SOL,
-			dessus + 5,
-			feuZ - 0.2,
-			feuZ + 0.2,
-			Color3.fromRGB(50, 50, 55)
-		)
+		-- Boîtier du feu sur le toit de chaque tunnel (le « ! » flotte au-dessus).
+		for _, bout in { -zMoins, zPlus } do
+			boite(
+				decor,
+				"BoitierFeu",
+				x - 0.5,
+				x + 0.5,
+				dessus + 9.6,
+				dessus + 11,
+				bout - 0.5,
+				bout + 0.5,
+				Color3.fromRGB(120, 20, 20)
+			)
+		end
 	end
-	rame("RameLigneA", 219, 26, 1, 8, 1, 222.6, -5)
-	rame("RameLigneA", 231, 18, -1, 9.5, 5, 234.6, 5, 22.5) -- pavillon de l'hôtel de ville en z < -35
+	rame("RameLigneA", 219, 26, 1, 8, 1)
+	rame("RameLigneA", 231, 18, -1, 9.5, 5, 22.5) -- pavillon de l'hôtel de ville en z < -35
 
 	---------------------------------------------------------------------------------------------------------------
 	-- 3 · Les échafaudages de la tour : des drones de livraison qui coupent la descente.
@@ -390,62 +488,69 @@ return function(R)
 	local tour = dossier(racineEvenements, "Tour")
 	local tubesPoses = {}
 
-	-- `zMin` : bout du trajet côté -Z (z - 28 par défaut, plus près là où le décor gêne).
+	-- `zMin` : bout du trajet côté -Z (z - 42 par défaut, plus près là où le décor gêne). Le drone part de loin (42
+	-- studs) et vole à environ 40 studs/s.
 	local function drone(x, dessus, z, sens, periode, decalage, zMin)
 		local yc = dessus + 3.2
-		local bouts = { [-1] = Vector3.new(x, yc, zMin or z - 28), [1] = Vector3.new(x, yc, z + 28) }
+		local bouts = { [-1] = Vector3.new(x, yc, zMin or z - 42), [1] = Vector3.new(x, yc, z + 42) }
 		local depart, arrivee = bouts[-sens], bouts[sens]
 		local m = evenement(tour, "DroneDeLivraison", {
 			Type = "Passage",
 			Periode = periode,
 			Decalage = decalage,
-			Preavis = 1.3,
+			Preavis = PREAVIS_DRONE,
 			Depart = depart,
 			Arrivee = arrivee,
-			DureePassage = 1.6,
+			DureePassage = math.floor((arrivee - depart).Magnitude / 40 * 10 + 0.5) / 10,
 		})
-		local corps = piece(
-			m,
-			"Corps",
-			1.6,
-			0.7,
-			1.6,
-			CFrame.new(depart),
-			Color3.fromRGB(240, 240, 245),
-			Enum.Material.SmoothPlastic
-		)
+		local corps =
+			piece(m, "Corps", 2.4, 0.9, 2.4, CFrame.new(depart), Color3.fromRGB(255, 225, 30), Enum.Material.Metal)
 		piece(
 			m,
 			"Helices",
-			2.8,
+			4.2,
 			0.15,
-			2.8,
-			CFrame.new(depart + Vector3.new(0, 0.45, 0)),
+			4.2,
+			CFrame.new(depart + Vector3.new(0, 0.6, 0)),
 			Color3.fromRGB(35, 35, 40),
 			Enum.Material.Metal
 		)
 		piece(
 			m,
 			"Colis",
-			1.3,
-			1.2,
-			1.3,
-			CFrame.new(depart + Vector3.new(0, -1, 0)),
-			Color3.fromRGB(190, 145, 95),
+			1.7,
+			1.5,
+			1.7,
+			CFrame.new(depart + Vector3.new(0, -1.2, 0)),
+			Color3.fromRGB(235, 120, 40),
 			Enum.Material.Cardboard
 		)
-		-- Clignotant sur le tube d'échafaudage, au coin de la dalle (un tube par dalle, partagé).
+		for _, cote in { -1, 1 } do
+			piece(
+				m,
+				"Feu",
+				0.5,
+				0.5,
+				0.5,
+				CFrame.new(depart + Vector3.new(cote * 1.3, 0.1, 1.3 * sens)),
+				Color3.fromRGB(255, 40, 30),
+				Enum.Material.Neon,
+				Enum.PartType.Ball
+			)
+		end
+		-- Préavis : bande rouge sur l'échafaudage, un « ! » 9 studs au-dessus de la dalle (5 au-dessus du drone, hors de
+		-- sa trajectoire et de la ligne de vue entre la dalle d'attente et la bande), et le boîtier du feu au coin de la
+		-- dalle (un tube par dalle, partagé).
 		local tx, tz = x + 2.4, z - 2.4 * sens
 		local cle = `{x},{dessus}`
 		local decalageLampe = if tubesPoses[cle] then 1.1 else 0
-		lumiere(
+		preavisPassage(
 			m,
-			0.8,
-			0.8,
-			0.8,
-			CFrame.new(tx, dessus + 4.8 + decalageLampe, tz),
-			Color3.fromRGB(255, 170, 20),
-			Enum.PartType.Ball
+			CFrame.new(x, dessus + 0.12 + decalageLampe * 0.02, z),
+			4.4,
+			7,
+			{ Vector3.new(0, 9 + decalageLampe, 0) },
+			TAILLE_FEU
 		)
 		boite(
 			decor,
@@ -453,18 +558,29 @@ return function(R)
 			tx - 0.18,
 			tx + 0.18,
 			SOL,
-			dessus + 4.4 + decalageLampe,
+			dessus + 4.2 + decalageLampe,
 			tz - 0.18,
 			tz + 0.18,
 			Color3.fromRGB(240, 160, 40),
 			Enum.Material.Metal
+		)
+		boite(
+			decor,
+			"BoitierFeu",
+			tx - 0.4,
+			tx + 0.4,
+			dessus + 4.2 + decalageLampe,
+			dessus + 5.2 + decalageLampe,
+			tz - 0.4,
+			tz + 0.4,
+			Color3.fromRGB(120, 20, 20)
 		)
 		tubesPoses[cle] = true
 		return finir(m, corps)
 	end
 	drone(421, 58, 0, 1, 6, 0.5)
 	drone(430, 50, 4, -1, 7, 3)
-	drone(439, 42, -4, 1, 5.5, 2, -15) -- affiche « ascenseur en panne » en z = -17
+	drone(439, 42, -4, 1, 5.5, 2, -22) -- affiche « ascenseur en panne » en z = -17
 	drone(448, 34, 0, -1, 8, 5)
 	drone(448, 34, 0, 1, 12, 9.5)
 
@@ -472,30 +588,37 @@ return function(R)
 	-- 4 · Rue de la Soif : voitures, bus et trottinettes qui coupent la terrasse en Z, sur sa bande d'entrée
 	-- (X 517 à 520,6), hors du balayage de l'enseigne tournante (rayon 11 autour de X = 532). On attend sur le
 	-- dernier auvent (511, 14), on traverse la bande, puis l'enseigne.
-	-- Ils sortent d'une porte cochère et entrent dans celle d'en face.
+	-- Ils sortent d'une porte cochère et entrent dans celle d'en face. Préavis : bande rouge sur toute la voie et un
+	-- « ! » sur la façade de chaque porte cochère, au-dessus de l'arche (dont le haut est à 17 ; le bus monte à 16,3) :
+	-- à 12 studs au-dessus de la bande (y ≈ 22) et à z = ±8, devant le mur (face en z = ±9 ; un disque de 2 studs qui
+	-- se tourne vers la caméra déborde de 1 stud, d'où 8 et non 8,6). Hors de la voie, hors du balayage des véhicules,
+	-- et rien d'opaque entre lui et l'auvent ou la terrasse (contrôlé par verifier-evenements.luau). Le toit des
+	-- portes (y 30 à 31) est bien plus haut : un « ! » posé dessus (y 33) était caché derrière lui.
 	local soif = dossier(racineEvenements, "RueDeLaSoif")
 	local VOIE_X, DESSUS_TERRASSE = 518.8, 10
+	local nbVehicules = 0
 
-	local function vehicule(nom, longueur, sens, periode, decalage, duree, hauteurPhare)
+	local function vehicule(nom, longueur, sens, periode, decalage, duree)
 		local demi = longueur / 2
 		local zDepart = -(9 + demi + 0.5) * sens
 		local m = evenement(soif, nom, {
 			Type = "Passage",
 			Periode = periode,
 			Decalage = decalage,
-			Preavis = 1.3,
+			Preavis = PREAVIS_TRAFIC,
 			Depart = Vector3.new(VOIE_X, 0, zDepart), -- Y fixé par l'appelant
 			Arrivee = Vector3.new(VOIE_X, 0, -zDepart),
 			DureePassage = duree,
 		})
-		-- Phares de préavis, fixes, à la bouche de la porte cochère de départ.
-		lumiere(
+		-- Bande sur la voie (chaque véhicule a la sienne, très légèrement décalée en hauteur pour ne pas scintiller).
+		nbVehicules += 1
+		preavisPassage(
 			m,
-			2.6,
-			0.6,
-			0.2,
-			CFrame.new(VOIE_X, DESSUS_TERRASSE + hauteurPhare, -9.3 * sens),
-			Color3.fromRGB(255, 245, 190)
+			CFrame.new(VOIE_X, DESSUS_TERRASSE + 0.12 + nbVehicules * 0.02, 0),
+			3.8,
+			18,
+			{ Vector3.new(0, 12, -8), Vector3.new(0, 12, 8) },
+			TAILLE_FEU
 		)
 		return m, zDepart
 	end
@@ -507,37 +630,54 @@ return function(R)
 		return finir(m, corps)
 	end
 
+	-- Phares de néon à l'avant (le véhicule va vers +Z quand `sens` vaut 1).
+	local function phares(m, z, sens, avant, y, ecart, taille)
+		for _, cote in { -1, 1 } do
+			piece(
+				m,
+				"Phare",
+				taille,
+				taille * 0.7,
+				0.25,
+				CFrame.new(VOIE_X + cote * ecart, y, z + avant * sens),
+				Color3.fromRGB(255, 255, 210),
+				Enum.Material.Neon
+			)
+		end
+	end
+
 	local function voiture(sens, periode, decalage)
-		local m, z = vehicule("Voiture", 6, sens, periode, decalage, 1.1, 1.1)
-		local couleur = Color3.fromHSV(math.random(), 0.6, 0.9)
+		local m, z = vehicule("Voiture", 6, sens, periode, decalage, 1.1)
+		local couleur = Color3.fromHSV(math.random(), 0.95, 1)
 		local y0 = DESSUS_TERRASSE + 0.3
 		local corps =
-			piece(m, "Carrosserie", 3.4, 1.6, 6, CFrame.new(VOIE_X, y0 + 0.8, z), couleur, Enum.Material.Metal)
-		piece(m, "Habitacle", 3, 1.4, 3.4, CFrame.new(VOIE_X, y0 + 2.3, z - 0.3 * sens), couleur, Enum.Material.Metal)
+			piece(m, "Carrosserie", 3.4, 1.8, 6, CFrame.new(VOIE_X, y0 + 0.9, z), couleur, Enum.Material.Metal)
+		piece(m, "Habitacle", 3, 1.6, 3.4, CFrame.new(VOIE_X, y0 + 2.5, z - 0.3 * sens), couleur, Enum.Material.Metal)
 		piece(
 			m,
 			"Vitres",
 			3.05,
-			1,
+			1.2,
 			3.45,
-			CFrame.new(VOIE_X, y0 + 2.35, z - 0.3 * sens),
+			CFrame.new(VOIE_X, y0 + 2.55, z - 0.3 * sens),
 			Color3.fromRGB(40, 50, 70),
 			Enum.Material.Glass
 		)
+		phares(m, z, sens, 3.05, y0 + 1, 1.1, 0.9)
 		return poserPivot(m, corps)
 	end
 
 	local function bus(sens, periode, decalage)
-		local m, z = vehicule("BusStar", 6.8, sens, periode, decalage, 1.8, 4.6)
+		local m, z = vehicule("BusStar", 6.8, sens, periode, decalage, 1.8)
 		local y0 = DESSUS_TERRASSE + 0.3
 		local corps = piece(
 			m,
 			"Caisse",
 			3.6,
-			5.5,
+			6,
 			6.8,
-			CFrame.new(VOIE_X, y0 + 2.75, z),
-			Color3.fromRGB(235, 235, 240),
+			CFrame.new(VOIE_X, y0 + 3, z),
+			Color3.fromRGB(255, 200, 20),
 			Enum.Material.Metal
 		)
 		piece(m, "Bande", 3.65, 1, 6.85, CFrame.new(VOIE_X, y0 + 1, z), ROUGE_STAR, Enum.Material.Metal)
@@ -545,17 +685,18 @@ return function(R)
 			m,
 			"Vitres",
 			3.65,
-			1.6,
+			1.8,
 			6.2,
-			CFrame.new(VOIE_X, y0 + 3.6, z),
+			CFrame.new(VOIE_X, y0 + 4, z),
 			Color3.fromRGB(40, 50, 70),
 			Enum.Material.Glass
 		)
+		phares(m, z, sens, 3.45, y0 + 1, 1.2, 1)
 		return poserPivot(m, corps)
 	end
 
 	local function trottinette(sens, periode, decalage)
-		local m, z = vehicule("Trottinette", 3, sens, periode, decalage, 0.9, 1.9)
+		local m, z = vehicule("Trottinette", 3, sens, periode, decalage, 0.9)
 		local y0 = DESSUS_TERRASSE + 0.3
 		local corps = piece(
 			m,
@@ -574,10 +715,10 @@ return function(R)
 			3.2,
 			0.3,
 			CFrame.new(VOIE_X, y0 + 1.9, z + 1.3 * sens),
-			Color3.fromRGB(60, 200, 120),
-			Enum.Material.Metal
+			Color3.fromRGB(60, 255, 130),
+			Enum.Material.Neon
 		)
-		local couleur = Color3.fromHSV(math.random(), 0.5, 0.8)
+		local couleur = Color3.fromHSV(math.random(), 0.9, 1)
 		piece(m, "Pilote", 1.6, 2.2, 1, CFrame.new(VOIE_X, y0 + 2.7, z), couleur, Enum.Material.Fabric)
 		piece(
 			m,
@@ -589,6 +730,16 @@ return function(R)
 			Color3.fromRGB(250, 210, 40),
 			Enum.Material.SmoothPlastic,
 			Enum.PartType.Ball
+		)
+		piece(
+			m,
+			"Phare",
+			0.6,
+			0.4,
+			0.2,
+			CFrame.new(VOIE_X, y0 + 0.9, z + 1.55 * sens),
+			Color3.fromRGB(255, 255, 210),
+			Enum.Material.Neon
 		)
 		return poserPivot(m, corps)
 	end
@@ -965,9 +1116,11 @@ return function(R)
 
 	---------------------------------------------------------------------------------------------------------------
 	-- Panneaux d'anecdotes : un par checkpoint, sur le côté de la dalle (hors des sauts), tourné vers son centre.
-	-- Le client écrit le texte (texte enrichi : nom de zone, anecdote, vanne) dans le TextLabel « Texte ».
+	-- Contrat avec le client : le SurfaceGui (40 px/stud, soit 480 × 300 px) contient deux TextLabel que le client
+	-- remplit : « Titre » (en haut, 20 % de la hauteur, TextScaled, gras : le nom de la zone) et « Corps » (le reste :
+	-- anecdote et vanne, taille fixe de 18 px = 0,45 stud, à la ligne, texte brut, aligné en haut à gauche).
 	local panneaux = dossier(racine, "PanneauxAnecdotes")
-	local LARGEUR, HAUTEUR = 8.5, 5.5
+	local LARGEUR, HAUTEUR = 12, 7.5
 
 	local function panneau(numero: number, cf, accent, piedDepuis)
 		local p = piece(panneaux, `PanneauAnecdote{numero}`, LARGEUR, HAUTEUR, 0.3, cf, Color3.fromRGB(25, 27, 35))
@@ -976,21 +1129,40 @@ return function(R)
 		p:AddTag("PanneauAnecdote")
 		local gui = Instance.new("SurfaceGui")
 		gui.Face = Enum.NormalId.Front
-		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-		gui.PixelsPerStud = 45
+		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud -- densité réglée par calibrerSurfaces
 		gui.LightInfluence = 0
-		local label = Instance.new("TextLabel")
-		label.Name = "Texte"
-		label.Position = UDim2.fromScale(0.04, 0.06)
-		label.Size = UDim2.fromScale(0.92, 0.88)
-		label.BackgroundTransparency = 1
-		label.TextColor3 = Color3.fromRGB(245, 245, 245)
-		label.TextScaled = true
-		label.TextWrapped = true
-		label.RichText = true
-		label.Font = Enum.Font.Gotham
-		label.Text = ""
-		label.Parent = gui
+		local titre = Instance.new("TextLabel")
+		titre.Name = "Titre"
+		titre.Position = UDim2.fromScale(0.03, 0.02)
+		titre.Size = UDim2.fromScale(0.94, 0.18)
+		titre.BackgroundTransparency = 1
+		titre.TextColor3 = Color3.fromRGB(255, 255, 255)
+		titre.TextScaled = true
+		titre.TextXAlignment = Enum.TextXAlignment.Left
+		titre.Font = Enum.Font.GothamBlack
+		titre.Text = ""
+		titre.Parent = gui
+		local corps = Instance.new("TextLabel")
+		corps.Name = "Corps"
+		corps.Position = UDim2.fromScale(0, 0.2)
+		corps.Size = UDim2.fromScale(1, 0.8)
+		corps.BackgroundTransparency = 1
+		corps.TextColor3 = Color3.fromRGB(245, 245, 245)
+		corps.TextScaled = false
+		corps.TextSize = math.floor(0.45 * DENSITE) -- 0,45 stud de haut : 18 px
+		corps.TextWrapped = true
+		corps.RichText = false
+		corps.TextXAlignment = Enum.TextXAlignment.Left
+		corps.TextYAlignment = Enum.TextYAlignment.Top
+		corps.Font = Enum.Font.Gotham
+		corps.Text = ""
+		corps.Parent = gui
+		local marge = Instance.new("UIPadding")
+		marge.PaddingLeft = UDim.new(0, 12)
+		marge.PaddingRight = UDim.new(0, 12)
+		marge.PaddingTop = UDim.new(0, 6)
+		marge.PaddingBottom = UDim.new(0, 6)
+		marge.Parent = corps
 		gui.Parent = p
 		-- Liseré de la couleur de la zone en haut, et pied jusqu'au sol (ou au toit) quand le panneau est dehors.
 		fantome(
@@ -1026,23 +1198,24 @@ return function(R)
 	end
 
 	-- Panneau à côté d'une dalle de checkpoint (centre cx, dessus, cz ; côté de taille t) : décalé de `dx` en X, sur
-	-- le côté `cote` (-1 : Z négatif), et tourné vers le centre de la dalle.
-	local function aCote(numero, cx, dessus, cz, t, cote, dx, accent, piedDepuis)
+	-- le côté `cote` (-1 : Z négatif), et tourné vers le centre de la dalle (`droit` : parallèle au côté de la dalle,
+	-- pour que le panneau, large de 12, ne balaye pas de l'espace en biais).
+	local function aCote(numero, cx, dessus, cz, t, cote, dx, accent, piedDepuis, droit)
 		local x, z = cx + dx, cz + cote * (t / 2 + 3.5)
 		local y = dessus + 1.5 + HAUTEUR / 2
-		local cf = CFrame.new(x, y, z) * versLaDirection(cx - x, cz - z)
+		local cf = CFrame.new(x, y, z) * if droit then versLaDirection(0, -cote) else versLaDirection(cx - x, cz - z)
 		return panneau(numero, cf, accent, piedDepuis)
 	end
 
 	aCote(0, -5, 40, 0, 14, -1, 4.5, accents.coloc, SOL)
 	aCote(1, 54, 10, 0, 12, 1, 4.5, accents.fac, SOL)
-	aCote(2, 119, 31, 0, 8, -1, 0, accents.fac, 22)
+	aCote(2, 119, 31, 0, 8, -1, -3, accents.fac, 22)
 	aCote(3, 202, 34, 0, 12, -1, 3, accents.metro, SOL)
 	aCote(4, 243, 14, 0, 12, -1, 4.5, accents.metro, SOL)
 	aCote(5, 298, 19, 0, 12, -1, -4.5, accents.cortege, SOL)
 	aCote(6, 342, 19, 0, 12, -1, 4.5, accents.cortege, SOL)
 	aCote(7, 374, 24, 0, 8, 1, 0, accents.tour, SOL)
-	aCote(8, 404.5, 66, 0, 6, 1, -1, accents.tour, 63)
+	aCote(8, 404.5, 66, 0, 6, 1, -2.5, accents.tour, 63, true)
 	aCote(9, 488, 28, 0, 12, -1, -4.5, accents.soif, SOL)
 	aCote(10, 559, 10, 0, 12, -1, 4.5, accents.soif, SOL)
 	aCote(11, 611, 5, 0, 12, -1, 4.5, accents.vilaine, 2)
@@ -1052,5 +1225,6 @@ return function(R)
 	-- Salle de partiel (checkpoint 15, dalle 828..840 × 2..14) : panneau au mur ouest, face à la salle.
 	panneau(15, CFrame.new(826.3, 46.5, 8) * versLaDirection(1, 0), accents.vinci, nil)
 
+	calibrerSurfaces(racine)
 	return racine
 end
