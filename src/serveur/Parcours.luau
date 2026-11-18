@@ -20,6 +20,9 @@ local demanderRecommencer = Remotes.obtenir("DemanderRecommencer")
 local checkpoints: { [number]: BasePart } = {}
 local courses: { [Player]: Regles.Course } = {}
 local derniereDemande: { [Player]: number } = {}
+-- Services qui doivent lâcher le joueur quand il clique « Recommencer » (src/serveur/Ascension.luau y abandonne la
+-- tentative d'ascension). Un abonnement plutôt qu'un require : Ascension requiert déjà Parcours.
+local avantRecommencer: { (Player) -> () } = {}
 
 local function maintenant(): number
 	return workspace:GetServerTimeNow()
@@ -71,7 +74,7 @@ end
 --- fonction que l'ouverture de l'ascension côté src/serveur/Ascension.luau : les deux services doivent toujours dire
 --- la même chose, sinon ils se disputent la réapparition.
 local function placeParAscension(joueur: Player, donnees: Regles.Donnees): boolean
-	return joueur:GetAttribute("EnAscension") == true and Regles.ascensionOuverte(donnees)
+	return Regles.placeParAscension(joueur:GetAttribute("EnAscension") == true, donnees)
 end
 
 --- Pose le personnage sur son dernier checkpoint, tourné vers la suite du parcours (+X).
@@ -149,7 +152,7 @@ end
 local function surChute(joueur: Player)
 	local donnees = Donnees.obtenir(joueur)
 	local course = courses[joueur]
-	-- Pas de perte d'aura à l'arrivée, ni dans l'ascension (même après « Recommencer », qui remet l'étape à 0).
+	-- Pas de perte d'aura à l'arrivée, ni dans l'ascension.
 	if not donnees or not course or donnees.etape >= Reglages.NB_ETAPES or placeParAscension(joueur, donnees) then
 		return
 	end
@@ -184,13 +187,26 @@ local function recommencer(joueur: Player)
 		return
 	end
 	derniereDemande[joueur] = instant
-	donnees.etape = 0
+	-- D'abord on ferme la tentative d'ascension en cours (attribut EnAscension à false) : sans ça, le joueur serait
+	-- remis au pied de l'ascension et non au départ du tuto. Aucune aura n'est touchée, rien n'est classé.
+	for _, fonction in avantRecommencer do
+		local ok, erreur = pcall(fonction, joueur)
+		if not ok then
+			warn(`[Parcours] abandon avant « Recommencer » en échec : {erreur}`)
+		end
+	end
+	Regles.recommencer(donnees)
 	courses[joueur] = Regles.nouvelleCourse(maintenant())
 	joueur:LoadCharacter() -- le nouveau personnage est posé au départ par CharacterAdded
 	envoyerEtat(joueur)
 end
 
 local Parcours = {}
+
+--- Abonne un service à « Recommencer » : `fonction(joueur)` est appelée avant que le joueur soit renvoyé au départ.
+function Parcours.avantRecommencer(fonction: (Player) -> ())
+	table.insert(avantRecommencer, fonction)
+end
 
 --- Replace le joueur sur son dernier checkpoint. Sert à src/serveur/Ascension.luau, qui rend la main quand il n'a
 --- pas réussi à poser le joueur au pied de l'ascension : sans ça, plus personne ne le placerait.

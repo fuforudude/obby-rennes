@@ -241,6 +241,70 @@ return function()
 		)
 	end)
 
+	describe("« Recommencer » renvoie au tuto sans rien retirer au joueur", function()
+		local function joueurAvance()
+			local d = Regles.donneesNeuves()
+			d.etape = 15
+			d.tutoFini = true
+			d.aura = 12345
+			d.meilleurTemps = 250
+			d.paliers = { 1, 2, 3 }
+			d.meilleureHauteur = 190
+			d.meilleurTempsAscension = 95
+			d.capacites = { course = true, doubleSaut = true }
+			return d
+		end
+
+		it("remet l'étape à 0 et rien d'autre", function()
+			local d = joueurAvance()
+			Regles.recommencer(d)
+			expect(d.etape).to.equal(0)
+			expect(d.tutoFini).to.equal(true)
+			expect(d.aura).to.equal(12345)
+			expect(d.meilleurTemps).to.equal(250)
+			expect(#d.paliers).to.equal(3)
+			expect(d.meilleureHauteur).to.equal(190)
+			expect(d.meilleurTempsAscension).to.equal(95)
+			expect(d.capacites.doubleSaut).to.equal(true)
+		end)
+
+		it("l'ascension reste ouverte après « Recommencer » : on peut se retéléporter", function()
+			local d = joueurAvance()
+			Regles.recommencer(d)
+			expect(Regles.ascensionOuverte(d)).to.equal(true)
+		end)
+
+		it("un joueur qui n'a pas fini le tuto n'ouvre rien en recommençant", function()
+			local d = Regles.donneesNeuves()
+			d.etape = 7
+			Regles.recommencer(d)
+			expect(d.etape).to.equal(0)
+			expect(Regles.ascensionOuverte(d)).to.equal(false)
+		end)
+
+		it("la réapparition est celle de l'ascension seulement pendant une tentative, tuto fini", function()
+			local d = joueurAvance()
+			expect(Regles.placeParAscension(true, d)).to.equal(true)
+			-- Tentative abandonnée (attribut EnAscension à false) : Parcours replace au checkpoint 0.
+			expect(Regles.placeParAscension(false, d)).to.equal(false)
+			-- Tuto pas fini : jamais placé par l'ascension, même avec l'attribut.
+			expect(Regles.placeParAscension(true, Regles.donneesNeuves())).to.equal(false)
+		end)
+
+		it(
+			"après « Recommencer » depuis l'ascension, Parcours place au tuto (attribut retombé à false)",
+			function()
+				local d = joueurAvance()
+				local enAscension = true
+				expect(Regles.placeParAscension(enAscension, d)).to.equal(true)
+				enAscension = false -- le service d'ascension a abandonné la tentative
+				Regles.recommencer(d)
+				expect(Regles.placeParAscension(enAscension, d)).to.equal(false)
+				expect(d.etape).to.equal(0) -- le checkpoint 0 du tuto
+			end
+		)
+	end)
+
 	describe("un achat n'est jamais donné deux fois", function()
 		it("reconnaît un achat déjà traité", function()
 			local achats = {}

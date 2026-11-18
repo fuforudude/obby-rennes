@@ -57,6 +57,18 @@ function Regles.ascensionOuverte(donnees: Donnees): boolean
 	return donnees.tutoFini
 end
 
+--- La réapparition de ce joueur revient-elle au service d'ascension (pas à Parcours) ? Il faut qu'il soit dans une
+--- tentative (`enAscension`, l'attribut du joueur) et que l'ascension lui soit ouverte (`ascensionOuverte`).
+--- Même fonction pour tous : Parcours ne recopie pas la condition d'ouverture.
+function Regles.placeParAscension(enAscension: boolean, donnees: Donnees): boolean
+	return enAscension and Regles.ascensionOuverte(donnees)
+end
+
+--- « Recommencer » : l'étape repart à 0, rien d'autre ne bouge (aura, tutoFini, paliers, records, capacités).
+function Regles.recommencer(donnees: Donnees)
+	donnees.etape = 0
+end
+
 --- Course qui démarre au départ, chrono lancé.
 function Regles.nouvelleCourse(maintenant: number): Course
 	return { debut = maintenant, passages = 0, reprise = false, serie = 0, chutes = 0 }
