@@ -55,6 +55,37 @@ local Reglages = {
 	SAUT_DOUBLE_FACTEUR = 1,
 	-- Durée (s) du tour complet du personnage pendant le double saut (rotation calculée par le code).
 	VRILLE_DUREE = 0.45,
+
+	-- Effets visuels des capacités (client/EffetsVisuels.luau). Ils sont joués par le client qui déclenche la capacité
+	-- (aucun délai pour lui), puis rejoués chez les autres joueurs : le serveur relaie SignalerEffet en EffetCapacite.
+	-- Dash : le corps se penche de DASH_INCLINAISON degrés vers l'avant ; la traînée met DASH_TRAINEE_DUREE secondes à
+	-- s'effacer derrière le personnage ; le champ de vision gagne DASH_FOV_BONUS degrés d'un coup puis revient en
+	-- DASH_FOV_RETOUR secondes ; DASH_CHOC_PARTICULES particules marquent le point d'arrivée.
+	DASH_INCLINAISON = 55,
+	DASH_TRAINEE_DUREE = 0.35,
+	DASH_FOV_BONUS = 18,
+	DASH_FOV_RETOUR = 0.4,
+	DASH_CHOC_PARTICULES = 14,
+	-- Double saut : l'onde de choc sous les pieds grandit jusqu'à VRILLE_ONDE_RAYON studs en VRILLE_ONDE_DUREE secondes
+	-- en s'effaçant ; la traînée de la rotation s'efface en VRILLE_TRAINEE_DUREE secondes.
+	VRILLE_ONDE_DUREE = 0.45,
+	VRILLE_ONDE_RAYON = 9,
+	VRILLE_TRAINEE_DUREE = 0.3,
+	-- Course : la traînée au sol s'efface en COURSE_TRAINEE_DUREE secondes.
+	COURSE_TRAINEE_DUREE = 0.25,
+	-- Réplication : le serveur accepte au plus un signalement d'effet par capacité et par joueur toutes les
+	-- EFFET_DELAI_MIN secondes (un dash et un double saut peuvent s'enchaîner en moins de ce délai) ; un client ne
+	-- rejoue pas l'effet d'un joueur à plus de EFFET_DISTANCE_MAX studs de lui (invisible de toute façon).
+	EFFET_DELAI_MIN = 0.3,
+	EFFET_DISTANCE_MAX = 150,
+	-- Animations Roblox à la place de la rotation calculée (le corps penché du dash, la vrille du double saut). Vides :
+	-- le code calcule la rotation. Pour en mettre une : créer l'animation dans l'Animation Editor de Studio (rig R15
+	-- du personnage), la publier sur Roblox (clic droit > Publier dans Roblox), copier son identifiant et écrire ici
+	-- "rbxassetid://123456789". Elle est alors jouée chez tout le monde, sans rien changer d'autre : traînée, lignes de
+	-- vitesse, onde de choc et champ de vision restent. Elle doit appartenir à l'expérience (ou à son groupe) et ne
+	-- pas boucler ; prévoir environ DASH_DUREE (0,2 s) pour le dash et VRILLE_DUREE (0,45 s) pour le double saut.
+	ANIMATION_DASH = "",
+	ANIMATION_DOUBLE_SAUT = "",
 	-- Surveillance serveur : la position de chaque joueur est relevée toutes les SURVEILLANCE_PERIODE secondes, et son
 	-- déplacement est comparé à ce que ses capacités permettent sur une **fenêtre glissante** de SURVEILLANCE_FENETRE
 	-- secondes (et non d'un relevé au suivant). Au-delà de (maximum x SURVEILLANCE_MARGE + SURVEILLANCE_TOLERANCE
