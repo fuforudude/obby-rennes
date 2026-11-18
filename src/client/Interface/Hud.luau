@@ -5,8 +5,7 @@
 -- menu en coin. Le record et « non classé » ne se voient qu'à l'arrivée.
 -- Ascension (après Sup de Vinci) : « 7/15 » devient la hauteur (« 182 m »), le chrono est celui de l'ascension, une
 -- ligne discrète dessous donne le record de hauteur et « non classé ». S'y ajoutent, montés ici et dans le même écran :
--- les capacités débloquées (IconesCapacites, en bas au centre), l'annonce d'un déblocage (AnnonceCapacite, au centre)
--- et le menu des paliers (MenuPaliers, entrée « Paliers » du menu en coin).
+-- les capacités débloquées (IconesCapacites, en bas au centre) et l'annonce d'un déblocage (AnnonceCapacite, au centre).
 -- Tout ce qui s'affiche vient de l'état envoyé par le serveur ; le serveur seul décide (le bouton envoie une demande).
 -- Tailles en proportions de l'écran, bornées par des contraintes ; boutons d'au moins 44 px ; animations < 0,3 s.
 local ContextActionService = game:GetService("ContextActionService")
@@ -25,7 +24,6 @@ local Vannes = require(ReplicatedStorage.Partage.Vannes)
 local AnnonceCapacite = require(script.Parent.AnnonceCapacite)
 local Composants = require(script.Parent.Composants)
 local IconesCapacites = require(script.Parent.IconesCapacites)
-local MenuPaliers = require(script.Parent.MenuPaliers)
 local Panneaux = require(script.Parent.Panneaux)
 local Textes = require(script.Parent.Textes)
 
@@ -160,7 +158,8 @@ function Hud.monter()
 	})
 
 	-- Le menu en coin : une icône (trois barres) au bord gauche, à 30 % de la hauteur, sous la barre de Roblox.
-	-- Il ouvre un petit panneau avec « Passer l'étape ». Caché tant que le produit n'existe pas.
+	-- Il ouvre un petit panneau avec « Passer l'étape ». Caché tant qu'il n'a aucune entrée (produit absent ou
+	-- dernière étape).
 	local icone = creer("TextButton", {
 		Name = "Menu",
 		Position = UDim2.new(0, 8, 0.3, 0),
@@ -186,12 +185,12 @@ function Hud.monter()
 		}, icone)
 		arrondir(barre, 4)
 	end
-	-- La liste du menu, à droite de l'icône : 4,2 fois sa largeur (185 à 235 px), deux entrées de la hauteur de l'icône
-	-- l'une sous l'autre : « Passer l'étape » (en haut, s'il existe) et « Paliers » (s'il y a un palier débloqué).
+	-- La liste du menu, à droite de l'icône : 4,2 fois sa largeur (185 à 235 px), une entrée de la hauteur de l'icône :
+	-- « Passer l'étape » (s'il existe). Une liste verticale, pour accueillir d'autres entrées plus tard.
 	local liste = creer("Frame", {
 		Name = "Liste",
 		Position = UDim2.new(1, 6, 0, 0),
-		Size = UDim2.fromScale(4.2, 2.1),
+		Size = UDim2.fromScale(4.2, 1),
 		BackgroundTransparency = 1,
 		Visible = false,
 	}, icone)
@@ -203,15 +202,9 @@ function Hud.monter()
 	local boutonPasser = bouton(liste, Textes.passerEtape, COULEURS.vinci, 8)
 	boutonPasser.Name = "PasserEtape"
 	boutonPasser.LayoutOrder = 1
-	boutonPasser.Size = UDim2.fromScale(1, 0.47)
+	boutonPasser.Size = UDim2.fromScale(1, 1)
 	boutonPasser.Visible = false
 	boutonPasser.SelectionOrder = 3
-	local boutonPaliers = bouton(liste, Textes.paliers, COULEURS.vinci, 8)
-	boutonPaliers.Name = "Paliers"
-	boutonPaliers.LayoutOrder = 2
-	boutonPaliers.Size = UDim2.fromScale(1, 0.47)
-	boutonPaliers.Visible = false
-	boutonPaliers.SelectionOrder = 4
 
 	-- Écran d'arrivée : compact, au centre. Conservé : temps, aura gagnée, record, non classé.
 	local fin = creer("Frame", {
@@ -270,10 +263,9 @@ function Hud.monter()
 	fermer.Size = UDim2.fromScale(0.45, 0.2)
 	creer("UISizeConstraint", { MinSize = Vector2.new(120, 44) }, fermer)
 
-	-- Les composants de l'ascension, dans le même écran : capacités, annonce de déblocage, menu des paliers.
+	-- Les composants de l'ascension, dans le même écran : capacités, annonce de déblocage.
 	IconesCapacites.monter(gui)
 	AnnonceCapacite.monter(gui)
-	MenuPaliers.monter(gui, icone)
 
 	gui.Parent = joueur:WaitForChild("PlayerGui")
 
@@ -391,10 +383,9 @@ function Hud.monter()
 		end
 	end
 
-	-- Le menu en coin : « Passer l'étape » (si le produit existe et qu'il reste une étape) et « Paliers » (dès qu'un
-	-- palier est débloqué). L'icône n'existe que s'il y a au moins une entrée.
+	-- Le menu en coin : « Passer l'étape » (si le produit existe et qu'il reste une étape). L'icône n'existe que s'il
+	-- y a au moins une entrée visible.
 	local peutPasser = false
-	local peutPaliers = false
 	local function fermerMenu()
 		if liste.Visible then
 			liste.Visible = false
@@ -406,14 +397,13 @@ function Hud.monter()
 	end
 	local function majEntrees()
 		boutonPasser.Visible = peutPasser
-		boutonPaliers.Visible = peutPaliers
-		icone.Visible = peutPasser or peutPaliers
+		icone.Visible = peutPasser
 		if not icone.Visible then
 			fermerMenu()
 		end
 	end
-	--- Ouvre ou ferme le menu. Rend `false` (sans rien faire) quand il n'existe pas : ni « Passer l'étape » ni palier
-	--- débloqué, ou interface cachée.
+	--- Ouvre ou ferme le menu. Rend `false` (sans rien faire) quand il n'existe pas : aucune entrée, ou interface
+	--- cachée.
 	local function basculerMenu(): boolean
 		if not icone.Visible or not (ecran and ecran.Enabled) then
 			return false
@@ -423,27 +413,13 @@ function Hud.monter()
 		else
 			liste.Visible = true
 			if GuiService.SelectedObject == icone then
-				GuiService.SelectedObject = if boutonPasser.Visible then boutonPasser else boutonPaliers
+				GuiService.SelectedObject = boutonPasser
 			end
 		end
 		return true
 	end
 	icone.Activated:Connect(function()
 		basculerMenu()
-	end)
-	--- Ouvre le menu des paliers (entrée « Paliers » ou touche P) ; le ferme s'il est déjà ouvert.
-	local function basculerPaliers(): boolean
-		if MenuPaliers.estOuvert() then
-			return MenuPaliers.fermer()
-		end
-		if not (ecran and ecran.Enabled) then
-			return false
-		end
-		fermerMenu()
-		return MenuPaliers.ouvrir()
-	end
-	boutonPaliers.Activated:Connect(function()
-		basculerPaliers()
 	end)
 
 	Remotes.obtenir("EtatCourse").OnClientEvent:Connect(function(nouvel: Remotes.EtatCourse)
@@ -466,7 +442,7 @@ function Hud.monter()
 		afficherChrono()
 	end)
 
-	-- L'état de l'ascension : hauteur, record, paliers débloqués, début du chrono, tentative classable. Si le remote
+	-- L'état de l'ascension : hauteur, record, début du chrono, tentative classable. Si le remote
 	-- manquait quand même (`Composants.remote` renvoie nil), le HUD de la course reste tel quel.
 	local remoteAscension = Composants.remote("EtatAscension")
 	if remoteAscension then
@@ -478,7 +454,6 @@ function Hud.monter()
 				enAscension = recu.enAscension == true,
 				hauteur = if type(recu.hauteur) == "number" then recu.hauteur else 0,
 				meilleureHauteur = if type(recu.meilleureHauteur) == "number" then recu.meilleureHauteur else 0,
-				paliers = if type(recu.paliers) == "table" then recu.paliers else {},
 				debut = if type(recu.debut) == "number" then recu.debut else nil,
 				classable = recu.classable ~= false,
 			}
@@ -486,12 +461,6 @@ function Hud.monter()
 				dernierChronoAscension = nil -- une nouvelle tentative repart de zéro
 			end
 			ascension = nouvel
-			MenuPaliers.definirPaliers(nouvel.paliers)
-			peutPaliers = MenuPaliers.disponible()
-			majEntrees()
-			if not peutPaliers then
-				MenuPaliers.fermer()
-			end
 			afficherEtape()
 			afficherChrono()
 		end)
@@ -597,10 +566,6 @@ function Hud.monter()
 		Enum.KeyCode.ButtonY
 	)
 	ContextActionService:BindAction("HudMenu", action(basculerMenu), false, Enum.KeyCode.M, Enum.KeyCode.ButtonX)
-	-- P : le menu des paliers. Select (manette) : le referme, et laisse passer la touche quand il est fermé. Pas B :
-	-- B lance le dash (Capacites.luau) ; le bouton « Fermer » du menu reste sélectionnable à la manette.
-	ContextActionService:BindAction("HudPaliers", action(basculerPaliers), false, Enum.KeyCode.P)
-	ContextActionService:BindAction("HudPaliersFermer", action(MenuPaliers.fermer), false, Enum.KeyCode.ButtonSelect)
 
 	-- Le chrono s'affiche dix fois par seconde : assez fluide, sans travail à chaque image.
 	local cumul = 0
