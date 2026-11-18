@@ -33,8 +33,7 @@
 -- décidé ici (téléportation vers un palier, renvoi au pied) est suivi, dans la même image, de
 -- `Capacites.autoriserTeleportation` — sinon la surveillance le prendrait pour un déplacement impossible et
 -- ramènerait le joueur en arrière. Un départ du pied appelle `Capacites.nouvelleTentative` (la marque « suspect »
--- repart de zéro), et `Capacites.tentativeSuspecte` décide si la tentative reste classable. Ce module est chargé
--- avec un test d'existence : il arrive par une autre branche et le serveur doit tourner sans lui.
+-- repart de zéro), et `Capacites.tentativeSuspecte` décide si la tentative reste classable.
 --
 -- Le serveur fait autorité : le client ne demande qu'une téléportation, validée par la règle pure et testée
 -- src/partage/Ascension.luau. Rien d'autre ne vient du client.
@@ -45,6 +44,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Classement = require(script.Parent.Classement)
 local Donnees = require(script.Parent.Donnees)
 local Parcours = require(script.Parent.Parcours)
+-- Surveillance des déplacements (serveur/Capacites). Pas de cycle : Ascension -> Parcours -> Capacites -> Donnees,
+-- et le retour se fait par l'abonnement `Parcours.avantRecommencer`.
+local Surveillance = require(script.Parent.Capacites)
 local RegleAscension = require(ReplicatedStorage.Partage.Ascension)
 local Reglages = require(ReplicatedStorage.Partage.Reglages)
 local Regles = require(ReplicatedStorage.Partage.Regles)
@@ -57,6 +59,9 @@ local demanderTeleportPalier = Remotes.obtenir("DemanderTeleportPalier")
 local ATTRIBUT_EN_ASCENSION = "EnAscension"
 -- Écart toléré entre l'attribut HauteurRelative d'un palier et sa position réelle, avant avertissement (studs).
 local ECART_HAUTEUR_PALIER = 10
+-- Hors tentative, l'état de l'ascension est renvoyé toutes ces secondes : un client qui pose sa connexion après le
+-- chargement des données ne rate pas la liste de ses paliers (voir releverTous).
+local PERIODE_ETAT_REPOS = 2
 
 -- Une tentative en cours. Les trois premiers champs sont ceux de la règle pure (RegleAscension.Tentative).
 type Tentative = {
@@ -75,34 +80,18 @@ local pied: BasePart? = nil
 local paliersParts: { [number]: BasePart } = {}
 local paliersHauteur: { number } = {} -- hauteur du palier n (au-dessus du pied) en paliersHauteur[n]
 local etagesHauteur: { [number]: number } = {} -- hauteur du dessus de l'étage n (au-dessus du pied)
--- src/serveur/Capacites.luau (Gameplay A), s'il est là : surveillance des déplacements et placements autorisés.
-local capacites: any = nil
+-- Renvoi au pied en cours (chute sous la hauteur de garde) : pas deux à la fois pour le même joueur.
+local renvoiEnCours: { [Player]: boolean } = {}
+-- os.clock() du dernier EtatAscension envoyé à un joueur hors tentative (voir releverTous).
+local dernierEtatRepos: { [Player]: number } = {}
 
 local function maintenant(): number
 	return workspace:GetServerTimeNow()
 end
 
---- Appelle une fonction de serveur/Capacites si le module est là. Jamais fatal, mais une erreur se voit : sans
---- `autoriserTeleportation`, chaque placement décidé par le serveur serait pris pour de la triche.
-local function appelerCapacites(nom: string, joueur: Player)
-	local fonction = if capacites then capacites[nom] else nil
-	if typeof(fonction) ~= "function" then
-		return
-	end
-	local ok, erreur = pcall(fonction, joueur)
-	if not ok then
-		warn(`[Ascension] Capacites.{nom} en échec : {erreur}`)
-	end
-end
-
 --- La surveillance des déplacements a-t-elle vu quelque chose d'impossible dans cette tentative ?
 local function surveillanceAlerte(joueur: Player): boolean
-	local fonction = if capacites then capacites.tentativeSuspecte else nil
-	if typeof(fonction) ~= "function" then
-		return false
-	end
-	local ok, suspecte = pcall(fonction, joueur)
-	return ok and suspecte == true
+	return Surveillance.tentativeSuspecte(joueur)
 end
 
 --- Le joueur vivant derrière une pièce touchée, ou nil (même filtre que Parcours.luau).
@@ -171,7 +160,7 @@ local function placerSur(joueur: Player, part: BasePart): boolean
 	if racine and racine:IsA("BasePart") then
 		racine.AssemblyLinearVelocity = Vector3.zero
 	end
-	appelerCapacites("autoriserTeleportation", joueur)
+	Surveillance.autoriserTeleportation(joueur)
 	return true
 end
 
@@ -187,7 +176,7 @@ local function demarrerTentative(joueur: Player)
 		hauteurEnvoyee = 0,
 	}
 	joueur:SetAttribute(ATTRIBUT_EN_ASCENSION, true)
-	appelerCapacites("nouvelleTentative", joueur) -- la marque « suspect » de la surveillance repart de zéro
+	Surveillance.nouvelleTentative(joueur) -- la marque « suspect » de la surveillance repart de zéro
 	envoyerEtat(joueur)
 end
 
@@ -209,6 +198,22 @@ local function replacerAuPied(joueur: Player)
 		return
 	end
 	demarrerTentative(joueur)
+end
+
+--- Renvoi au pied après une chute, au plus un à la fois par joueur : `replacerAuPied` attend la racine (jusqu'à
+--- 5 s), et le relevé suivant verrait le joueur encore en bas et le renverrait une seconde fois.
+local function renvoyerApresChute(joueur: Player)
+	if renvoiEnCours[joueur] then
+		return
+	end
+	renvoiEnCours[joueur] = true
+	task.spawn(function()
+		local ok, erreur = pcall(replacerAuPied, joueur)
+		renvoiEnCours[joueur] = nil
+		if not ok then
+			warn(`[Ascension] renvoi au pied de {joueur.Name} en échec : {erreur}`)
+		end
+	end)
 end
 
 --- L'ascension n'est ouverte qu'au joueur qui a fini le tuto (`tutoFini`, sauvegardé). C'est la même fonction que
@@ -363,6 +368,14 @@ local function relever(joueur: Player, tentative: Tentative)
 	if hauteur == nil or donnees == nil then
 		return
 	end
+	-- « Tomber renvoie au pied » : rien n'est mortel dans la tour, et une chute depuis un palier se termine sur le
+	-- toit de Sup de Vinci (10 studs sous le pied), où le joueur survivait avec sa tentative et son chrono — et où
+	-- retoucher le pied en remontant ne relançait rien (il était déjà sous ASCENSION_SEUIL_DEPART). Sous la hauteur
+	-- de garde, on le repose au pied et la tentative recommence.
+	if hauteur < Reglages.ASCENSION_HAUTEUR_GARDE then
+		renvoyerApresChute(joueur)
+		return
+	end
 	tentative.hauteur = hauteur
 	if surveillanceAlerte(joueur) then
 		tentative.alertes += 1 -- la tentative n'est plus classable (anti-triche, serveur/Capacites)
@@ -379,8 +392,16 @@ local function relever(joueur: Player, tentative: Tentative)
 	end
 end
 
---- Le tour de tous les joueurs qui montent. Chacun dans son pcall : une erreur chez l'un n'éteint pas le suivi
---- pour tout le serveur (sinon plus de hauteur, plus de record, plus d'état envoyé jusqu'au redémarrage).
+--- Le tour de tous les joueurs. Ceux qui montent sont relevés à chaque tour ; les autres reçoivent l'état de
+--- l'ascension toutes les PERIODE_ETAT_REPOS secondes.
+--- Pourquoi ce rappel : hors tentative, l'état ne partait qu'une fois, au chargement des données — souvent avant
+--- que le client ait posé sa connexion (`Hud.monter` tourne après `Evenements.demarrer()` et `Capacites.demarrer()`).
+--- Le message était perdu et l'entrée « Paliers » n'apparaissait jamais pour un joueur de retour. Un envoi lent et
+--- répété plutôt qu'un envoi retardé : rien à deviner sur le moment où le client est prêt, et l'interface se
+--- rattrape aussi quand elle se reconstruit (changement de personnage, rechargement d'un bout de HUD). La charge
+--- est minuscule (six champs et la liste des paliers) et les joueurs en tentative, eux, ne passent pas par là.
+--- Chacun dans son pcall : une erreur chez l'un n'éteint pas le suivi pour tout le serveur (sinon plus de hauteur,
+--- plus de record, plus d'état envoyé jusqu'au redémarrage).
 local function releverTous()
 	for joueur, tentative in tentatives do
 		local ok, erreur = pcall(relever, joueur, tentative)
@@ -388,10 +409,23 @@ local function releverTous()
 			warn(`[Ascension] relevé de {joueur.Name} en échec : {erreur}`)
 		end
 	end
+	local instant = os.clock()
+	for _, joueur in Players:GetPlayers() do
+		if tentatives[joueur] == nil and instant - (dernierEtatRepos[joueur] or -math.huge) >= PERIODE_ETAT_REPOS then
+			dernierEtatRepos[joueur] = instant
+			local ok, erreur = pcall(envoyerEtat, joueur)
+			if not ok then
+				warn(`[Ascension] état hors tentative de {joueur.Name} en échec : {erreur}`)
+			end
+		end
+	end
 end
 
 --- Réapparition : au pied si le joueur est dans l'ascension, sinon on laisse Parcours.luau faire son travail.
 local function surPersonnage(joueur: Player)
+	-- Nouveau personnage : l'interface se reconstruit, l'état doit repartir tout de suite (les deux branches
+	-- ci-dessous l'envoient ; si les données ne sont pas encore chargées, c'est le rappel périodique qui le fera).
+	dernierEtatRepos[joueur] = nil
 	local donnees = Donnees.obtenir(joueur)
 	if not donnees then
 		return
@@ -406,24 +440,10 @@ end
 
 local function surChargement(joueur: Player)
 	tentatives[joueur] = nil
+	renvoiEnCours[joueur] = nil
+	dernierEtatRepos[joueur] = nil -- l'état repart au prochain tour, puis toutes les PERIODE_ETAT_REPOS secondes
 	joueur:SetAttribute(ATTRIBUT_EN_ASCENSION, false) -- on entre dans l'ascension en touchant son pied
 	envoyerEtat(joueur)
-end
-
---- serveur/Capacites arrive par une autre branche : on le charge s'il est là, et on s'en passe sinon (la tentative
---- est alors classable sans surveillance, et un placement du serveur n'est pas annoncé — rien ne casse).
-local function brancherCapacites()
-	local module = script.Parent:FindFirstChild("Capacites")
-	if not module then
-		warn("[Ascension] serveur/Capacites absent : pas de surveillance des déplacements")
-		return
-	end
-	local ok, charge = pcall(require, module)
-	if ok and typeof(charge) == "table" then
-		capacites = charge
-	else
-		warn(`[Ascension] serveur/Capacites illisible : {charge}`)
-	end
 end
 
 local function lirePied()
@@ -505,7 +525,6 @@ end
 local Ascension = {}
 
 function Ascension.demarrer()
-	brancherCapacites()
 	lirePied()
 	lirePaliers()
 	lireEtagesEtSommet()
@@ -528,6 +547,8 @@ function Ascension.demarrer()
 		Classement.envoyerHauteur(joueur) -- dernière hauteur connue, sans attendre le prochain lot
 		tentatives[joueur] = nil
 		derniereTeleport[joueur] = nil
+		renvoiEnCours[joueur] = nil
+		dernierEtatRepos[joueur] = nil
 	end)
 
 	demanderTeleportPalier.OnServerEvent:Connect(surDemandeTeleport)

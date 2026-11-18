@@ -2,7 +2,10 @@
 -- Tous les RemoteEvent du jeu, créés par le serveur et retrouvés par le client. Aucun n'est créé ailleurs.
 --
 -- Serveur → client
---   EtatCourse(etat: EtatCourse)      à chaque changement : étape, chrono, passages, record, aura, série
+--   EtatCourse(etat: EtatCourse)      à chaque changement : étape, chrono, passages, record, aura, série, capacités
+--                                     débloquées. La charge se construit par `Remotes.etatCourse`, fonction pure
+--                                     dont la forme est testée (tests/partage/Remotes.spec.luau) : un champ oublié
+--                                     ne casse aucune règle mais rend une information invisible au client.
 --   Arrivee(temps: number, classable: boolean, record: boolean, gainAura: number)
 --   CapaciteDebloquee(capacite: string)  une capacité vient d'être débloquée ("course", "doubleSaut" ou "dash")
 --   EtatAscension(etat: EtatAscension)  à chaque changement utile de l'ascension (pas à chaque image) : départ du
@@ -19,6 +22,8 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local Capacites = require(ReplicatedStorage.Partage.Capacites)
+
 export type EtatCourse = {
 	etape: number,
 	debut: number?,
@@ -27,7 +32,13 @@ export type EtatCourse = {
 	meilleurTemps: number,
 	aura: number,
 	serie: number,
+	capacites: { [string]: boolean }, -- capacités débloquées : seule source du client quand il arrive sur le serveur
 }
+
+-- Ce que `etatCourse` lit : les données sauvegardées du joueur (partage/Regles.Donnees) et sa course en cours
+-- (Regles.Course). Décrits par leur forme pour que ce module ne dépende de rien.
+export type DonneesCourse = { etape: number, meilleurTemps: number, aura: number }
+export type CourseEnCours = { debut: number?, passages: number, reprise: boolean, serie: number }
 
 export type EtatAscension = {
 	enAscension: boolean, -- le joueur est dans une tentative d'ascension (parti du pied)
@@ -69,6 +80,36 @@ local function dossier(): Instance
 end
 
 local Remotes = {}
+
+--- Construit la charge du remote EtatCourse. Pure et testée : c'est le contrat entre le serveur et le client, et
+--- un champ oublié ne se voit dans aucun test de règle (c'est comme ça que `capacites` en avait disparu, laissant
+--- un joueur de retour avec ses capacités sauvegardées mais inutilisables jusqu'à son prochain déblocage).
+--- `capacites` est recopié : seules les capacités connues et vraiment débloquées partent, et le client ne reçoit
+--- jamais la table du serveur.
+function Remotes.etatCourse(
+	donnees: DonneesCourse,
+	course: CourseEnCours,
+	capacites: { [string]: boolean }?
+): EtatCourse
+	local debloquees: { [string]: boolean } = {}
+	if typeof(capacites) == "table" then
+		for nom, valeur in capacites :: { [string]: boolean } do
+			if valeur == true and Capacites.estCapacite(nom) then
+				debloquees[nom] = true
+			end
+		end
+	end
+	return {
+		etape = donnees.etape,
+		debut = course.debut,
+		passages = course.passages,
+		reprise = course.reprise,
+		meilleurTemps = donnees.meilleurTemps,
+		aura = donnees.aura,
+		serie = course.serie,
+		capacites = debloquees,
+	}
+end
 
 function Remotes.obtenir(nom: string): RemoteEvent
 	assert(table.find(NOMS, nom), `Remote inconnu : {nom}`)

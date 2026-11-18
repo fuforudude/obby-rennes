@@ -194,4 +194,96 @@ return function()
 			expect(Capacites.evaluerDeplacement(COURSE, 12 + 4, 0, 0.5)).never.to.be.ok()
 		end)
 	end)
+
+	describe("fenêtre glissante (tampon de relevés)", function()
+		local FENETRE = Reglages.SURVEILLANCE_FENETRE
+		local PERIODE = Reglages.SURVEILLANCE_PERIODE
+
+		--- Un tampon rempli d'un relevé toutes les PERIODE secondes, de 0 à `duree`, le joueur montant de
+		--- `monteeParSeconde` studs/s et avançant de `avanceParSeconde` studs/s.
+		local function tamponConstant(duree: number, monteeParSeconde: number, avanceParSeconde: number)
+			local tampon = {}
+			local instant = 0
+			while instant <= duree + 1e-9 do
+				Capacites.empiler(tampon, instant, instant * avanceParSeconde, instant * monteeParSeconde, 0, FENETRE)
+				instant += PERIODE
+			end
+			return tampon
+		end
+
+		it("oublie les relevés trop vieux mais garde la référence qui couvre toute la fenêtre", function()
+			local tampon = tamponConstant(10, 0, 0)
+			local mesure = Capacites.deplacementFenetre(tampon)
+			expect(mesure).to.be.ok()
+			-- La fenêtre comparée couvre au moins FENETRE, et au plus une période de plus.
+			expect(mesure.duree >= FENETRE).to.equal(true)
+			expect(mesure.duree < FENETRE + PERIODE).to.equal(true)
+			expect(#tampon <= math.ceil(FENETRE / PERIODE) + 1).to.equal(true)
+		end)
+
+		it("mesure du plus vieux relevé gardé au plus récent", function()
+			local tampon = {}
+			Capacites.empiler(tampon, 0, 0, 0, 0, FENETRE)
+			Capacites.empiler(tampon, 0.5, 3, 10, 4, FENETRE)
+			local mesure = Capacites.deplacementFenetre(tampon)
+			expect(mesure.horizontal).to.equal(5) -- 3 et 4 sur le plan
+			expect(mesure.montee).to.equal(10)
+			expect(mesure.duree).to.equal(0.5)
+		end)
+
+		it("un seul relevé : pas de mesure, donc aucun verdict (rien n'est refusé au démarrage)", function()
+			local tampon = {}
+			Capacites.empiler(tampon, 0, 0, 0, 0, FENETRE)
+			expect(Capacites.deplacementFenetre(tampon)).never.to.be.ok()
+			expect(Capacites.evaluerFenetre(TOUTES, tampon)).never.to.be.ok()
+			expect(Capacites.evaluerFenetre(TOUTES, {})).never.to.be.ok()
+		end)
+
+		it("accepte une montée tenable tenue sur toute la fenêtre (26 studs/s, sauts enchaînés)", function()
+			expect(Capacites.evaluerFenetre(TOUTES, tamponConstant(10, 26, 0))).never.to.be.ok()
+		end)
+
+		it("refuse un vol vertical à 50 studs/s, que la fenêtre de 0,5 s acceptait", function()
+			expect(Capacites.evaluerFenetre(TOUTES, tamponConstant(10, 50, 0))).to.equal("vertical")
+			-- La même vitesse mesurée sur 0,5 s seulement passait : c'est le trou que la fenêtre longue ferme.
+			expect(Capacites.evaluerDeplacement(TOUTES, 0, 25, 0.5)).never.to.be.ok()
+		end)
+
+		it("refuse un vol horizontal à 60 studs/s, que la fenêtre de 0,5 s acceptait", function()
+			expect(Capacites.evaluerFenetre(TOUTES, tamponConstant(10, 0, 60))).to.equal("horizontal")
+			expect(Capacites.evaluerDeplacement(TOUTES, 30, 0, 0.5)).never.to.be.ok()
+		end)
+
+		it("le plafond vertical de la fenêtre est près de deux fois plus serré que celui de 0,5 s", function()
+			local function plafondParSeconde(duree: number): number
+				local max = Capacites.monteeMax(TOUTES, duree)
+				return (max * Reglages.SURVEILLANCE_MARGE + Reglages.SURVEILLANCE_TOLERANCE) / duree
+			end
+			expect(plafondParSeconde(FENETRE) < plafondParSeconde(PERIODE) / 1.8).to.equal(true)
+			-- Et il reste au-dessus de ce qu'un joueur tient vraiment (26,6 studs/s), marge comprise.
+			expect(plafondParSeconde(FENETRE) > 26.6).to.equal(true)
+		end)
+
+		it("accepte une course avec dashs enchaînés tenue sur toute la fenêtre", function()
+			-- Le mieux possible : course (24 studs/s) plus un dash par envol (0,54 s).
+			local parSeconde = Capacites.distanceMax(TOUTES, FENETRE) / FENETRE
+			expect(Capacites.evaluerFenetre(TOUTES, tamponConstant(10, 0, parSeconde))).never.to.be.ok()
+		end)
+
+		it("ne refuse pas un joueur porté par une plateforme mobile (4 studs/s) qui saute et avance", function()
+			expect(Capacites.evaluerFenetre(TOUTES, tamponConstant(10, 26.6 + 4, 24 + 4))).never.to.be.ok()
+		end)
+
+		it("ne refuse jamais une chute, même longue", function()
+			expect(Capacites.evaluerFenetre(AUCUNE, tamponConstant(10, -300, 0))).never.to.be.ok()
+		end)
+
+		it("une fenêtre nulle ou absurde ne garde que le dernier relevé, donc ne refuse rien", function()
+			local tampon = {}
+			Capacites.empiler(tampon, 0, 0, 0, 0, 0 / 0)
+			Capacites.empiler(tampon, 0.5, 0, 0, 0, 0 / 0)
+			expect(#tampon).to.equal(1)
+			expect(Capacites.evaluerFenetre(AUCUNE, tampon)).never.to.be.ok()
+		end)
+	end)
 end

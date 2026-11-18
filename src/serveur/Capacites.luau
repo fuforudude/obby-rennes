@@ -5,8 +5,10 @@
 -- n'expulse jamais : un déplacement impossible est corrigé (retour à la dernière position valide) et la tentative
 -- d'ascension en cours est marquée non classable (Capacites.tentativeSuspecte, lu par serveur/Ascension).
 --
--- Surveillance : toutes les SURVEILLANCE_PERIODE secondes, la position de la racine du personnage est comparée à celle
--- de la mesure précédente ; la règle est pure et testée (partage/Capacites.evaluerDeplacement). Les déplacements que
+-- Surveillance : la position de la racine du personnage est relevée toutes les SURVEILLANCE_PERIODE secondes, et
+-- comparée à celle d'il y a SURVEILLANCE_FENETRE secondes — une fenêtre glissante, et non le relevé précédent :
+-- sur une demi-seconde, le terme fixe du maximum (la hauteur d'un envol) laissait passer un script de vol.
+-- La règle est pure et testée (partage/Capacites : empiler, evaluerFenetre). Les déplacements que
 -- le serveur décide lui-même (réapparition, étape passée, téléportation vers un palier, renvoi au pied) ne sont pas
 -- de la triche : le code qui téléporte un joueur appelle `Capacites.autoriserTeleportation(joueur)` au même moment
 -- (la réapparition est déjà couverte ici). Sans cet appel, la téléportation serait prise pour un déplacement
@@ -29,12 +31,12 @@ local DELAI_CORRECTION = 1 -- après un retour en arrière : le temps que le cli
 
 local capaciteDebloquee = Remotes.obtenir("CapaciteDebloquee")
 
--- Suivi d'un joueur : la mesure précédente, la dernière position valide (au sol), et l'état de la tentative.
+-- Suivi d'un joueur : les relevés de la fenêtre glissante, la dernière position valide (au sol), et l'état de la
+-- tentative.
 type Suivi = {
-	derniere: Vector3?, -- position à la mesure précédente (nil : à reprendre à la prochaine mesure)
-	instant: number, -- os.clock() de cette mesure
+	tampon: Mouvement.Tampon, -- relevés de la fenêtre (vide : elle se reconstruit, aucun verdict possible)
 	valide: Vector3?, -- dernière position valide, au sol
-	ignorerJusqua: number, -- os.clock() : pas de comparaison avant (on reprend seulement la position)
+	ignorerJusqua: number, -- os.clock() : avant cet instant, on ne relève rien (position pas fiable)
 	suspect: boolean, -- un déplacement impossible a été vu pendant cette tentative
 	alertes: number,
 }
@@ -68,8 +70,7 @@ end
 
 local function nouveauSuivi(maintenant: number, delaiIgnore: number): Suivi
 	return {
-		derniere = nil,
-		instant = maintenant,
+		tampon = {},
 		valide = nil,
 		ignorerJusqua = maintenant + delaiIgnore,
 		suspect = false,
@@ -135,51 +136,50 @@ local function mesurer(joueur: Player, suivi: Suivi, maintenant: number)
 		or not racine:IsA("BasePart")
 		or not donnees
 	then
-		suivi.derniere = nil -- mort ou pas encore chargé : on repartira de la prochaine position
+		table.clear(suivi.tampon) -- mort ou pas encore chargé : la fenêtre se reconstruira
 		return
 	end
 
 	local position = racine.Position
 	local auSol = humanoide.FloorMaterial ~= Enum.Material.Air
-	if suivi.derniere == nil or maintenant < suivi.ignorerJusqua then
-		suivi.derniere = position
-		suivi.instant = maintenant
+	if maintenant < suivi.ignorerJusqua then
+		-- Apparition, téléportation décidée par le serveur, correction : la position répliquée n'est pas fiable.
+		-- On ne garde aucun relevé : un relevé pris maintenant servirait de référence fausse à la fenêtre suivante
+		-- et ferait refuser un déplacement légitime.
+		table.clear(suivi.tampon)
 		if auSol then
 			suivi.valide = position
 		end
 		return
 	end
 
-	local delta = position - suivi.derniere
-	local horizontal = Vector3.new(delta.X, 0, delta.Z).Magnitude
-	local verdict = Mouvement.evaluerDeplacement(capacitesDe(donnees), horizontal, delta.Y, maintenant - suivi.instant)
-	if verdict == nil then
-		suivi.derniere = position
-		suivi.instant = maintenant
+	Mouvement.empiler(suivi.tampon, maintenant, position.X, position.Y, position.Z, Reglages.SURVEILLANCE_FENETRE)
+	local verdict, mesure = Mouvement.evaluerFenetre(capacitesDe(donnees), suivi.tampon)
+	if verdict == nil or mesure == nil then
 		if auSol then
 			suivi.valide = position
 		end
 		return
 	end
 
-	-- Déplacement impossible : retour à la dernière position valide, sans autre sanction.
+	-- Déplacement impossible sur toute la fenêtre : retour à la dernière position valide, sans autre sanction.
 	suivi.suspect = true
 	suivi.alertes += 1
-	local cible = suivi.valide or suivi.derniere
+	local debut = suivi.tampon[1]
+	local cible = suivi.valide or Vector3.new(debut.x, debut.y, debut.z)
 	warn(
 		string.format(
 			"[Capacites] %s : déplacement impossible (%s, %.0f studs sur le plan, %.0f de montée en %.2f s), ramené en arrière",
 			joueur.Name,
 			verdict,
-			horizontal,
-			delta.Y,
-			maintenant - suivi.instant
+			mesure.horizontal,
+			mesure.montee,
+			mesure.duree
 		)
 	)
 	personnage:PivotTo(CFrame.new(cible) * racine.CFrame.Rotation)
 	racine.AssemblyLinearVelocity = Vector3.zero
-	suivi.derniere = cible
-	suivi.instant = maintenant
+	table.clear(suivi.tampon)
 	suivi.ignorerJusqua = maintenant + DELAI_CORRECTION
 end
 
@@ -226,7 +226,7 @@ end
 function Capacites.autoriserTeleportation(joueur: Player)
 	local suivi = suivis[joueur]
 	if suivi then
-		suivi.derniere = nil
+		table.clear(suivi.tampon) -- la fenêtre repart du placement, pas d'avant
 		suivi.ignorerJusqua = math.max(suivi.ignorerJusqua, os.clock() + DELAI_TELEPORTATION)
 	end
 end
