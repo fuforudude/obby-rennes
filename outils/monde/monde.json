@@ -10,5 +10,11 @@
     "sortie": "monde/Evenements.rbxm",
     "auteur": "claude",
     "note": "Événements des quatre descentes (chutes des balcons, rames, drones, trafic), balanciers du parcours et panneaux d'anecdotes des 16 checkpoints. Contrôle : outils/monde/verifier-evenements.luau."
+  },
+  "Ascension": {
+    "generateur": "outils/monde/Ascension.luau",
+    "sortie": "monde/Ascension.rbxm",
+    "auteur": "claude",
+    "note": "L'ascension chaotique qui flotte au-dessus de Sup de Vinci : accès depuis la salle de partiel, pied avec ses deux tableaux de classement, 258 studs de montée en spirale, 4 paliers, 17 étages, sommet. Contrôle : outils/monde/verifier-ascension.luau."
   }
 }
