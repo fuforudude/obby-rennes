@@ -6,12 +6,16 @@
 --
 -- Commandes
 --   Course     : maintenir Maj gauche, la gâchette gauche (ButtonL2) ou le bouton tactile « COURIR ».
---   Double saut: appuyer sur saut en l'air (touche, manette ou bouton de saut tactile).
+--   Double saut: appuyer sur saut en l'air (touche, manette ou bouton de saut tactile). Un appui NEUF est exigé : tenir
+--                la touche enfoncée ne le déclenche pas (voir « Double saut » plus bas).
 --   Dash       : touche Q (la touche marquée A sur un clavier français : KeyCode.Q), ButtonB, ou bouton tactile « DASH ».
 --
 -- Boutons tactiles : une rangée en bas à droite, AU-DESSUS du bouton de saut de Roblox (qui occupe les ~110 studs du
 -- bas) et loin du joystick (bas gauche) : « DASH » à droite, « COURIR » à sa gauche. Visibles seulement sur un appareil
 -- tactile et seulement une fois la capacité débloquée. Les icônes d'état (recharge...) sont à l'interface (Interface/).
+--
+-- Recharges : l'état « double saut prêt » et « dash prêt » est publié en attributs booléens du joueur
+-- (`CapaciteDoubleSautPrete`, `CapaciteDashPrete`) à chaque changement ; l'interface (IconesCapacites) les lit.
 --
 -- Une seule connexion par image au plus : RenderStepped n'est connecté que pendant les 0,45 s d'une vrille.
 -- Toutes les connexions d'un personnage sont coupées à CharacterRemoving.
@@ -29,6 +33,12 @@ local TOUCHE_DASH = Enum.KeyCode.Q -- la touche marquée A sur un clavier franç
 local TOUCHE_COURSE = Enum.KeyCode.LeftShift
 local DUREE_FOV = 0.2 -- secondes : le champ de vision s'élargit et revient en douceur
 local TAILLE_BOUTON = 64 -- pixels
+local ATTRIBUT_DOUBLE_SAUT = "CapaciteDoubleSautPrete"
+local ATTRIBUT_DASH = "CapaciteDashPrete"
+-- Silence minimal entre deux JumpRequest pour que le second compte comme un appui neuf. Tant que la touche est tenue,
+-- JumpRequest se répète à chaque image (16 à 100 ms selon la fréquence d'images) : 0,15 s sépare sûrement un appui
+-- maintenu d'un relâchement suivi d'un nouvel appui.
+local SILENCE_NOUVEL_APPUI = 0.15
 
 type Vrille = {
 	articulation: Motor6D,
@@ -68,6 +78,25 @@ local session: Session? = nil
 local compteurDash = 0
 local boutons: { course: TextButton?, dash: TextButton? } = {}
 local demarre = false
+local dernierSautDemande = -math.huge -- os.clock() du dernier JumpRequest reçu (répétitions comprises)
+
+-- Recharges publiées -----------------------------------------------------------------------------------------------
+
+--- Change « le double saut est prêt » et le publie (attribut du joueur, lu par l'interface). Rien ne bouge si inchangé.
+local function definirDoubleDispo(s: Session, pret: boolean)
+	s.doubleDispo = pret
+	if joueur:GetAttribute(ATTRIBUT_DOUBLE_SAUT) ~= pret then
+		joueur:SetAttribute(ATTRIBUT_DOUBLE_SAUT, pret)
+	end
+end
+
+--- Pareil pour le dash.
+local function definirDashDispo(s: Session, pret: boolean)
+	s.dashDispo = pret
+	if joueur:GetAttribute(ATTRIBUT_DASH) ~= pret then
+		joueur:SetAttribute(ATTRIBUT_DASH, pret)
+	end
+end
 
 -- Course ---------------------------------------------------------------------------------------------------------
 
@@ -174,6 +203,13 @@ local function lancerVrille(s: Session)
 end
 
 -- Double saut ----------------------------------------------------------------------------------------------------
+-- Appui neuf : JumpRequest n'est pas « une fois par appui », il se répète tant que la touche de saut est tenue. Sans
+-- précaution, un joueur qui garde Espace enfoncé (le geste naturel) consommerait son double saut au ras du sol. Méthode :
+-- on note l'instant de chaque JumpRequest ; une demande ne compte que si la précédente date de plus de
+-- SILENCE_NOUVEL_APPUI (donc après un relâchement). Elle vaut pour toutes les entrées d'un coup (clavier, manette et
+-- bouton de saut tactile) parce qu'elle ne regarde que le flux de JumpRequest, que ces trois sources produisent de la
+-- même façon, sans deviner quel bouton tactile est « le saut » ni dépendre de l'ordre InputBegan / JumpRequest.
+-- Limite assumée : relâcher puis ré-appuyer en moins de 0,15 s est pris pour un appui maintenu.
 
 --- Le personnage de référence de ce Humanoid, pour calculer la vitesse de son saut (JumpPower ou JumpHeight).
 local function physiqueDe(humanoide: Humanoid): Mouvement.Physique
@@ -196,7 +232,7 @@ local function tenterDoubleSaut()
 	if etat ~= Enum.HumanoidStateType.Freefall and etat ~= Enum.HumanoidStateType.Jumping then
 		return
 	end
-	s.doubleDispo = false
+	definirDoubleDispo(s, false)
 	-- Impulsion verticale : on impose la vitesse verticale du saut (FACTEUR x celle d'un saut simple), sans toucher à la
 	-- vitesse horizontale. On pose la vitesse de l'assemblage plutôt que d'appliquer une force sur la racine, qui
 	-- ferait aussi tourner le personnage (la racine n'est pas à son centre de masse).
@@ -204,6 +240,15 @@ local function tenterDoubleSaut()
 	local cible = Mouvement.vitesseSaut(physiqueDe(humanoide)) * Reglages.SAUT_DOUBLE_FACTEUR
 	s.racine.AssemblyLinearVelocity = Vector3.new(vitesse.X, math.max(vitesse.Y, cible), vitesse.Z)
 	lancerVrille(s)
+end
+
+local function surDemandeSaut()
+	local maintenant = os.clock()
+	local neuf = maintenant - dernierSautDemande > SILENCE_NOUVEL_APPUI
+	dernierSautDemande = maintenant -- aussi pour une demande refusée : une pression tenue reste « maintenue »
+	if neuf then
+		tenterDoubleSaut()
+	end
 end
 
 -- Dash -----------------------------------------------------------------------------------------------------------
@@ -243,7 +288,7 @@ local function finirDash(s: Session, id: number)
 	if s.humanoide.FloorMaterial ~= Enum.Material.Air then
 		task.delay(Reglages.DASH_RECHARGE_SOL, function()
 			if s.actif and s.dash == nil and s.humanoide.FloorMaterial ~= Enum.Material.Air then
-				s.dashDispo = true
+				definirDashDispo(s, true)
 			end
 		end)
 	end
@@ -261,7 +306,7 @@ local function lancerDash()
 	if not direction then
 		return
 	end
-	s.dashDispo = false
+	definirDashDispo(s, false)
 	compteurDash += 1
 	local id = compteurDash
 
@@ -348,6 +393,8 @@ local function ouvrirSession(personnage: Model)
 		vrille = nil,
 	}
 	session = s
+	definirDoubleDispo(s, true) -- un nouveau personnage repart avec les deux capacités prêtes
+	definirDashDispo(s, true)
 
 	-- Recharge : au contact du sol. Landed = atterrissage après un envol (recharge double saut et dash) ;
 	-- Running = au sol (recharge le double saut ; le dash lancé au sol a son propre délai).
@@ -355,10 +402,10 @@ local function ouvrirSession(personnage: Model)
 		s.connexions,
 		humanoide.StateChanged:Connect(function(_, nouvel)
 			if nouvel == Enum.HumanoidStateType.Landed then
-				s.doubleDispo = true
-				s.dashDispo = true
+				definirDoubleDispo(s, true)
+				definirDashDispo(s, true)
 			elseif nouvel == Enum.HumanoidStateType.Running or nouvel == Enum.HumanoidStateType.RunningNoPhysics then
-				s.doubleDispo = true
+				definirDoubleDispo(s, true)
 			end
 		end)
 	)
@@ -469,11 +516,6 @@ end
 
 local Capacites = {}
 
---- Les capacités débloquées côté client (copie), pour l'interface.
-function Capacites.debloquees(): { [string]: boolean }
-	return table.clone(debloquees)
-end
-
 function Capacites.demarrer()
 	if demarre then
 		return
@@ -506,7 +548,7 @@ function Capacites.demarrer()
 		table.clear(sourcesCourse)
 		appliquerCourse()
 	end)
-	UserInputService.JumpRequest:Connect(tenterDoubleSaut)
+	UserInputService.JumpRequest:Connect(surDemandeSaut)
 
 	if UserInputService.TouchEnabled then
 		task.spawn(creerBoutonsTactiles)

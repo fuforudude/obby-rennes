@@ -5,6 +5,7 @@ local TweenService = game:GetService("TweenService")
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Ascension = require(ReplicatedStorage.Partage.Ascension)
 local Remotes = require(ReplicatedStorage.Partage.Remotes)
 
 local Composants = {}
@@ -91,7 +92,7 @@ function Composants.bouton(parent: Instance, texte: string, couleur: Color3, ray
 	return b
 end
 
---- Un RemoteEvent du jeu, ou `nil` s'il n'est pas (encore) déclaré dans Remotes.luau : l'interface reste alors
+--- Un RemoteEvent du jeu, ou `nil` s'il n'est pas déclaré dans Remotes.luau : l'interface reste alors
 --- muette sur cette fonction au lieu de s'arrêter.
 function Composants.remote(nom: string): RemoteEvent?
 	local ok, resultat = pcall(Remotes.obtenir, nom)
@@ -102,25 +103,9 @@ function Composants.remote(nom: string): RemoteEvent?
 	return nil
 end
 
-local formateurHauteur: ((number) -> string)? = nil
-
---- « 182 m » : la hauteur en studs, mise en forme par `Ascension.formaterHauteur` (partage/Ascension.luau). Si ce
---- module manque (il vient d'une autre tâche), un arrondi équivalent (1 stud = 0,28 m) évite d'arrêter l'interface.
+--- « 182 m » : la hauteur en studs, mise en forme par `Ascension.formaterHauteur` (partage/Ascension.luau).
 function Composants.formaterHauteur(studs: number): string
-	if formateurHauteur == nil then
-		local ok, module: any = pcall(function()
-			return require(ReplicatedStorage.Partage.Ascension)
-		end)
-		if ok and type(module) == "table" and type(module.formaterHauteur) == "function" then
-			formateurHauteur = module.formaterHauteur
-		else
-			warn("Interface : Ascension.formaterHauteur introuvable, arrondi de secours")
-			formateurHauteur = function(s: number): string
-				return `{math.floor(math.max(0, s) * 0.28 + 0.5)} m`
-			end
-		end
-	end
-	return (formateurHauteur :: (number) -> string)(studs)
+	return Ascension.formaterHauteur(studs)
 end
 
 return Composants
