@@ -4,6 +4,7 @@
 -- Serveur → client
 --   EtatCourse(etat: EtatCourse)      à chaque changement : étape, chrono, passages, record, aura, série
 --   Arrivee(temps: number, classable: boolean, record: boolean, gainAura: number)
+--   CapaciteDebloquee(capacite: string)  une capacité vient d'être débloquée ("course", "doubleSaut" ou "dash")
 -- Client → serveur
 --   DemanderRecommencer()             repartir de la coloc, chrono à zéro
 --   ToucheParEvenement(objet: Instance)  « cet événement (tag Evenement) m'a touché » : le serveur vérifie que le
@@ -22,7 +23,7 @@ export type EtatCourse = {
 	serie: number,
 }
 
-local NOMS = { "EtatCourse", "Arrivee", "DemanderRecommencer", "ToucheParEvenement" }
+local NOMS = { "EtatCourse", "Arrivee", "DemanderRecommencer", "ToucheParEvenement", "CapaciteDebloquee" }
 local NOM_DOSSIER = "Remotes"
 
 local function dossier(): Instance

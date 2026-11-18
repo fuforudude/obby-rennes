@@ -37,6 +37,32 @@ local Reglages = {
 	EVENEMENT_DISTANCE_MAX = 40,
 	EVENEMENT_DELAI_MIN = 0.5,
 
+	-- Capacités de déplacement (Capacites.luau). Référence : personnage Roblox par défaut, marche 16 studs/s, saut de
+	-- 7,2 studs de haut (JumpHeight 7.2, gravité 196,2) : un saut dure ~0,54 s et porte à ~8,7 studs en marchant.
+	-- Course : la vitesse de marche est multipliée par COURSE_FACTEUR (16 -> 24 studs/s) ; le champ de vision gagne
+	-- COURSE_FOV_BONUS degrés tant qu'on court (70 -> 80 par défaut).
+	COURSE_FACTEUR = 1.5,
+	COURSE_FOV_BONUS = 10,
+	-- Dash : pendant DASH_DUREE secondes, vitesse horizontale imposée de DASH_VITESSE studs/s. 70 x 0,2 = 14 studs
+	-- parcourus, contre 3,2 (marche) ou 4,8 (course) sans dash : un saut s'allonge de 10,8 ou 9,2 studs (visé : 8 à 12).
+	DASH_VITESSE = 70,
+	DASH_DUREE = 0.2,
+	-- Dash lancé au sol : il se recharge après ce délai (s) si le joueur est resté au sol ; en l'air, à l'atterrissage.
+	-- Empêche d'enchaîner des dash au sol en continu (14 studs toutes les 0,2 s = 70 studs/s en permanence).
+	DASH_RECHARGE_SOL = 0.6,
+	-- Double saut : l'impulsion du second saut vaut SAUT_DOUBLE_FACTEUR x celle du premier. 1 = un second saut aussi
+	-- haut que le premier (7,2 + 7,2 = 14,4 studs au total au mieux, en le lançant au sommet du premier).
+	SAUT_DOUBLE_FACTEUR = 1,
+	-- Durée (s) du tour complet du personnage pendant le double saut (rotation calculée par le code).
+	VRILLE_DUREE = 0.45,
+	-- Surveillance serveur : toutes les SURVEILLANCE_PERIODE secondes, le déplacement de chaque joueur est comparé à ce
+	-- que ses capacités permettent. Au-delà de (maximum x SURVEILLANCE_MARGE + SURVEILLANCE_TOLERANCE studs), il est
+	-- ramené à sa dernière position valide. La tolérance fixe absorbe le retard de réplication, les plateformes
+	-- mobiles et les bousculades des obstacles ; la marge relative, l'écart entre le modèle et la physique réelle.
+	SURVEILLANCE_PERIODE = 0.5,
+	SURVEILLANCE_MARGE = 1.3,
+	SURVEILLANCE_TOLERANCE = 6,
+
 	TAILLE_CLASSEMENT = 10,
 	DELAI_RAFRAICHIR_CLASSEMENT = 60, -- secondes
 	DELAI_MIN_ENTRE_DEMANDES = 1, -- secondes, pour « Recommencer »
