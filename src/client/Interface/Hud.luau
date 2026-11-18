@@ -3,6 +3,10 @@
 -- étape (7/15), chrono, aura avec la série, bouton « Recommencer ». Le nom de la zone n'apparaît que 2 secondes à
 -- chaque nouveau checkpoint ; les anecdotes sont dans le décor (Panneaux.luau). « Passer l'étape » est dans un petit
 -- menu en coin. Le record et « non classé » ne se voient qu'à l'arrivée.
+-- Ascension (après Sup de Vinci) : « 7/15 » devient la hauteur (« 182 m »), le chrono est celui de l'ascension, une
+-- ligne discrète dessous donne le record de hauteur et « non classé ». S'y ajoutent, montés ici et dans le même écran :
+-- les capacités débloquées (IconesCapacites, en bas au centre), l'annonce d'un déblocage (AnnonceCapacite, au centre)
+-- et le menu des paliers (MenuPaliers, entrée « Paliers » du menu en coin).
 -- Tout ce qui s'affiche vient de l'état envoyé par le serveur ; le serveur seul décide (le bouton envoie une demande).
 -- Tailles en proportions de l'écran, bornées par des contraintes ; boutons d'au moins 44 px ; animations < 0,3 s.
 local ContextActionService = game:GetService("ContextActionService")
@@ -11,7 +15,6 @@ local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 
 local Affichage = require(ReplicatedStorage.Partage.Affichage)
 local Etapes = require(ReplicatedStorage.Partage.Etapes)
@@ -19,88 +22,26 @@ local Reglages = require(ReplicatedStorage.Partage.Reglages)
 local Remotes = require(ReplicatedStorage.Partage.Remotes)
 local Vannes = require(ReplicatedStorage.Partage.Vannes)
 
+local AnnonceCapacite = require(script.Parent.AnnonceCapacite)
+local Composants = require(script.Parent.Composants)
+local IconesCapacites = require(script.Parent.IconesCapacites)
+local MenuPaliers = require(script.Parent.MenuPaliers)
 local Panneaux = require(script.Parent.Panneaux)
 local Textes = require(script.Parent.Textes)
 
 local joueur = Players.LocalPlayer
 
-local COULEURS = {
-	fond = Color3.fromRGB(20, 24, 34),
-	texte = Color3.fromRGB(255, 255, 255),
-	discret = Color3.fromRGB(170, 180, 200),
-	vinci = Color3.fromRGB(30, 90, 170),
-	alerte = Color3.fromRGB(220, 70, 60),
-	or_ = Color3.fromRGB(240, 190, 50),
-	aura = Color3.fromRGB(255, 120, 220),
-	gain = Color3.fromRGB(110, 240, 130),
-}
+local COULEURS = Composants.COULEURS
+local creer = Composants.creer
+local arrondir = Composants.arrondir
+local libelle = Composants.libelle
+local jouer = Composants.jouer
+local bouton = Composants.bouton
 local DUREE_ZONE = 2 -- le nom de la zone, à chaque nouveau checkpoint
 local DUREE_CHUTE = 1.5 -- le message de chute
-local DUREE_FONDU = 0.15 -- toutes les animations restent sous 0,3 s
+local DUREE_FONDU = Composants.DUREE_FONDU -- toutes les animations restent sous 0,3 s
 local DUREE_COULEUR_AURA = 1.2 -- l'aura reste verte ou rouge un instant après un gain ou une perte
 local DUREE_CONFIRMATION = 3
-
-local function creer(classe: string, proprietes: { [string]: any }, parent: Instance?): any
-	local objet = Instance.new(classe)
-	for nom, valeur in proprietes do
-		(objet :: any)[nom] = valeur
-	end
-	if parent then
-		objet.Parent = parent
-	end
-	return objet
-end
-
-local function arrondir(objet: Instance, rayon: number?)
-	creer("UICorner", { CornerRadius = UDim.new(0, rayon or 10) }, objet)
-end
-
-local function libelle(parent: Instance, proprietes: { [string]: any }): TextLabel
-	local base: { [string]: any } = {
-		BackgroundTransparency = 1,
-		TextColor3 = COULEURS.texte,
-		Font = Enum.Font.GothamBold,
-		TextScaled = true,
-	}
-	for nom, valeur in proprietes do
-		if nom ~= "TailleMax" then -- notre option à nous, pas une propriété Roblox
-			base[nom] = valeur
-		end
-	end
-	local l = creer("TextLabel", base, parent)
-	creer("UITextSizeConstraint", { MaxTextSize = proprietes.TailleMax or 22, MinTextSize = 10 }, l)
-	return l
-end
-
-local function jouer(objet: Instance, duree: number, proprietes: { [string]: any }): Tween
-	local t =
-		TweenService:Create(objet, TweenInfo.new(duree, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), proprietes)
-	t:Play()
-	return t
-end
-
---- Un bouton plein, sélectionnable à la manette. La taille est donnée par l'appelant (échelle + contraintes).
-local function bouton(parent: Instance, texte: string, couleur: Color3, rayon: number): TextButton
-	local b = creer("TextButton", {
-		BackgroundColor3 = couleur,
-		TextColor3 = COULEURS.texte,
-		Font = Enum.Font.GothamBold,
-		TextScaled = true,
-		TextWrapped = true,
-		Text = texte,
-		AutoButtonColor = true,
-		Selectable = true,
-	}, parent)
-	arrondir(b, rayon)
-	creer("UITextSizeConstraint", { MaxTextSize = 18, MinTextSize = 10 }, b)
-	creer("UIPadding", {
-		PaddingLeft = UDim.new(0, 6),
-		PaddingRight = UDim.new(0, 6),
-		PaddingTop = UDim.new(0, 3),
-		PaddingBottom = UDim.new(0, 3),
-	}, b)
-	return b
-end
 
 local Hud = {}
 
@@ -144,15 +85,15 @@ function Hud.monter()
 	}, groupe)
 	local texteEtape = libelle(stats, {
 		Name = "Etape",
-		Size = UDim2.fromScale(0.3, 0.5),
+		Size = UDim2.fromScale(0.36, 0.5), -- « 7/15 », ou la hauteur « 182 m » pendant l'ascension
 		Text = Textes.chargement,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextColor3 = COULEURS.or_,
 	})
 	local texteChrono = libelle(stats, {
 		Name = "Chrono",
-		Position = UDim2.fromScale(0.3, 0),
-		Size = UDim2.fromScale(0.7, 0.5),
+		Position = UDim2.fromScale(0.36, 0),
+		Size = UDim2.fromScale(0.64, 0.5),
 		Text = Affichage.chrono(nil, 0, nil),
 		Font = Enum.Font.Code,
 		TextXAlignment = Enum.TextXAlignment.Right,
@@ -188,6 +129,20 @@ function Hud.monter()
 		TextColor3 = COULEURS.or_,
 		Font = Enum.Font.GothamBlack,
 		TailleMax = 28,
+	})
+
+	-- Pendant l'ascension : une ligne discrète sous le groupe, « Record 245 m  ·  non classé » (rien de plus). Le nom
+	-- de zone ne s'affiche pas alors, donc les deux ne se superposent jamais.
+	local texteAscension = libelle(groupe, {
+		Name = "Ascension",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 1, 4),
+		Size = UDim2.fromScale(1.3, 0.4),
+		Text = "",
+		TextColor3 = COULEURS.discret,
+		TextStrokeTransparency = 0.6,
+		Visible = false,
+		TailleMax = 16,
 	})
 
 	-- Le message de chute : petit, au tiers de la hauteur, 1,5 seconde.
@@ -231,13 +186,32 @@ function Hud.monter()
 		}, icone)
 		arrondir(barre, 4)
 	end
-	local boutonPasser = bouton(icone, Textes.passerEtape, COULEURS.vinci, 8)
+	-- La liste du menu, à droite de l'icône : 4,2 fois sa largeur (185 à 235 px), deux entrées de la hauteur de l'icône
+	-- l'une sous l'autre : « Passer l'étape » (en haut, s'il existe) et « Paliers » (s'il y a un palier débloqué).
+	local liste = creer("Frame", {
+		Name = "Liste",
+		Position = UDim2.new(1, 6, 0, 0),
+		Size = UDim2.fromScale(4.2, 2.1),
+		BackgroundTransparency = 1,
+		Visible = false,
+	}, icone)
+	creer("UIListLayout", {
+		FillDirection = Enum.FillDirection.Vertical,
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding = UDim.new(0.06, 0),
+	}, liste)
+	local boutonPasser = bouton(liste, Textes.passerEtape, COULEURS.vinci, 8)
 	boutonPasser.Name = "PasserEtape"
-	boutonPasser.AnchorPoint = Vector2.new(0, 0.5)
-	boutonPasser.Position = UDim2.new(1, 6, 0.5, 0)
-	boutonPasser.Size = UDim2.fromScale(4.2, 1) -- 4,2 fois l'icône : 185 à 235 px de large, même hauteur
+	boutonPasser.LayoutOrder = 1
+	boutonPasser.Size = UDim2.fromScale(1, 0.47)
 	boutonPasser.Visible = false
 	boutonPasser.SelectionOrder = 3
+	local boutonPaliers = bouton(liste, Textes.paliers, COULEURS.vinci, 8)
+	boutonPaliers.Name = "Paliers"
+	boutonPaliers.LayoutOrder = 2
+	boutonPaliers.Size = UDim2.fromScale(1, 0.47)
+	boutonPaliers.Visible = false
+	boutonPaliers.SelectionOrder = 4
 
 	-- Écran d'arrivée : compact, au centre. Conservé : temps, aura gagnée, record, non classé.
 	local fin = creer("Frame", {
@@ -296,17 +270,28 @@ function Hud.monter()
 	fermer.Size = UDim2.fromScale(0.45, 0.2)
 	creer("UISizeConstraint", { MinSize = Vector2.new(120, 44) }, fermer)
 
+	-- Les composants de l'ascension, dans le même écran : capacités, annonce de déblocage, menu des paliers.
+	IconesCapacites.monter(gui)
+	AnnonceCapacite.monter(gui)
+	MenuPaliers.monter(gui, icone)
+
 	gui.Parent = joueur:WaitForChild("PlayerGui")
 
 	-- État reçu du serveur.
 	local etat: Remotes.EtatCourse? = nil
+	local ascension: Affichage.EtatAscension? = nil -- nil tant que le serveur n'a rien envoyé
+	local dernierChronoAscension: number? = nil -- le chrono de l'ascension s'arrête au sommet
 	local derniereEtapeVue = -1
 	local dernierTemps: number? = nil
+
+	local function enAscension(): boolean
+		return ascension ~= nil and ascension.enAscension
+	end
 
 	local jetonZone = 0
 	local function montrerZone(numero: number)
 		local etape = Etapes.obtenir(numero)
-		if not etape then
+		if not etape or enAscension() then
 			return
 		end
 		texteZone.Text = etape.zone
@@ -375,32 +360,70 @@ function Hud.monter()
 		task.spawn(suivrePersonnage, joueur.Character)
 	end
 
+	-- Le chrono : celui de la course, ou celui de l'ascension pendant une tentative (il garde sa dernière valeur
+	-- quand le serveur arrête la tentative au sommet).
 	local function afficherChrono()
+		local maintenant = workspace:GetServerTimeNow()
+		if ascension and ascension.enAscension then
+			if ascension.debut then
+				dernierChronoAscension = maintenant - ascension.debut
+			end
+			texteChrono.Text = Affichage.chrono(ascension.debut, maintenant, dernierChronoAscension)
+			return
+		end
 		local debut = if etat then etat.debut else nil
-		texteChrono.Text = Affichage.chrono(debut, workspace:GetServerTimeNow(), dernierTemps)
+		texteChrono.Text = Affichage.chrono(debut, maintenant, dernierTemps)
 	end
 
-	-- Le menu en coin.
+	-- À gauche du groupe : l'étape « 7/15 » ; pendant l'ascension, la hauteur « 182 m », et dessous le record en petit
+	-- et « non classé » si la tentative ne compte plus.
+	local function afficherEtape()
+		if ascension and ascension.enAscension then
+			local resume = Affichage.ascension(ascension, Composants.formaterHauteur)
+			texteEtape.Text = resume.hauteur
+			texteAscension.Text = Textes.ascensionInfo(resume.record, resume.nonClasse)
+			texteAscension.Visible = texteAscension.Text ~= ""
+		else
+			texteAscension.Visible = false
+			if etat then
+				texteEtape.Text = Affichage.etape(etat.etape, Reglages.NB_ETAPES)
+			end
+		end
+	end
+
+	-- Le menu en coin : « Passer l'étape » (si le produit existe et qu'il reste une étape) et « Paliers » (dès qu'un
+	-- palier est débloqué). L'icône n'existe que s'il y a au moins une entrée.
+	local peutPasser = false
+	local peutPaliers = false
 	local function fermerMenu()
-		if boutonPasser.Visible then
-			boutonPasser.Visible = false
-			if GuiService.SelectedObject == boutonPasser then
+		if liste.Visible then
+			liste.Visible = false
+			local selection = GuiService.SelectedObject
+			if selection ~= nil and selection:IsDescendantOf(liste) then
 				GuiService.SelectedObject = icone -- à la manette, on ne perd pas le curseur
 			end
 		end
 	end
-	--- Ouvre ou ferme le menu. Rend `false` (sans rien faire) quand il n'existe pas : produit à 0, dernière étape,
-	--- ou interface cachée.
+	local function majEntrees()
+		boutonPasser.Visible = peutPasser
+		boutonPaliers.Visible = peutPaliers
+		icone.Visible = peutPasser or peutPaliers
+		if not icone.Visible then
+			fermerMenu()
+		end
+	end
+	--- Ouvre ou ferme le menu. Rend `false` (sans rien faire) quand il n'existe pas : ni « Passer l'étape » ni palier
+	--- débloqué, ou interface cachée.
 	local function basculerMenu(): boolean
 		if not icone.Visible or not (ecran and ecran.Enabled) then
 			return false
 		end
-		if boutonPasser.Visible then
+		if liste.Visible then
 			fermerMenu()
 		else
-			boutonPasser.Visible = true
+			liste.Visible = true
 			if GuiService.SelectedObject == icone then
-				GuiService.SelectedObject = boutonPasser
+				GuiService.SelectedObject = if boutonPasser.Visible then boutonPasser else boutonPaliers
 			end
 		end
 		return true
@@ -408,11 +431,27 @@ function Hud.monter()
 	icone.Activated:Connect(function()
 		basculerMenu()
 	end)
+	--- Ouvre le menu des paliers (entrée « Paliers » ou touche P) ; le ferme s'il est déjà ouvert.
+	local function basculerPaliers(): boolean
+		if MenuPaliers.estOuvert() then
+			return MenuPaliers.fermer()
+		end
+		if not (ecran and ecran.Enabled) then
+			return false
+		end
+		fermerMenu()
+		return MenuPaliers.ouvrir()
+	end
+	boutonPaliers.Activated:Connect(function()
+		basculerPaliers()
+	end)
 
 	Remotes.obtenir("EtatCourse").OnClientEvent:Connect(function(nouvel: Remotes.EtatCourse)
 		afficherAura(nouvel.aura, nouvel.serie) -- avant `etat = nouvel` : la première réception n'est pas un gain
 		etat = nouvel
-		texteEtape.Text = Affichage.etape(nouvel.etape, Reglages.NB_ETAPES)
+		-- Les capacités débloquées : nouveau champ d'EtatCourse, absent tant que le serveur ne l'envoie pas.
+		IconesCapacites.definir((nouvel :: any).capacites)
+		afficherEtape()
 		if nouvel.etape ~= derniereEtapeVue then
 			if nouvel.etape > derniereEtapeVue or nouvel.etape == 0 then
 				montrerZone(nouvel.etape)
@@ -422,12 +461,41 @@ function Hud.monter()
 		if nouvel.debut then
 			dernierTemps = nil
 		end
-		icone.Visible = Affichage.passerVisible(Reglages.PRODUIT_PASSER_ETAPE, nouvel.etape, Reglages.NB_ETAPES)
-		if not icone.Visible then
-			fermerMenu()
-		end
+		peutPasser = Affichage.passerVisible(Reglages.PRODUIT_PASSER_ETAPE, nouvel.etape, Reglages.NB_ETAPES)
+		majEntrees()
 		afficherChrono()
 	end)
+
+	-- L'état de l'ascension : hauteur, record, paliers débloqués, début du chrono, tentative classable. Remote absent
+	-- (tâche du gameplay pas encore fusionnée) : le HUD de la course reste tel quel.
+	local remoteAscension = Composants.remote("EtatAscension")
+	if remoteAscension then
+		remoteAscension.OnClientEvent:Connect(function(recu: any)
+			if type(recu) ~= "table" then
+				return
+			end
+			local nouvel: Affichage.EtatAscension = {
+				enAscension = recu.enAscension == true,
+				hauteur = if type(recu.hauteur) == "number" then recu.hauteur else 0,
+				meilleureHauteur = if type(recu.meilleureHauteur) == "number" then recu.meilleureHauteur else 0,
+				paliers = if type(recu.paliers) == "table" then recu.paliers else {},
+				debut = if type(recu.debut) == "number" then recu.debut else nil,
+				classable = recu.classable ~= false,
+			}
+			if not nouvel.enAscension or not enAscension() then
+				dernierChronoAscension = nil -- une nouvelle tentative repart de zéro
+			end
+			ascension = nouvel
+			MenuPaliers.definirPaliers(nouvel.paliers)
+			peutPaliers = MenuPaliers.disponible()
+			majEntrees()
+			if not peutPaliers then
+				MenuPaliers.fermer()
+			end
+			afficherEtape()
+			afficherChrono()
+		end)
+	end
 
 	Remotes.obtenir("Arrivee").OnClientEvent
 		:Connect(function(temps: number, classable: boolean, record: boolean, gainAura: number)
@@ -529,6 +597,9 @@ function Hud.monter()
 		Enum.KeyCode.ButtonY
 	)
 	ContextActionService:BindAction("HudMenu", action(basculerMenu), false, Enum.KeyCode.M, Enum.KeyCode.ButtonX)
+	-- P : le menu des paliers. B (manette) : le referme, et laisse passer la touche quand il est fermé.
+	ContextActionService:BindAction("HudPaliers", action(basculerPaliers), false, Enum.KeyCode.P)
+	ContextActionService:BindAction("HudPaliersFermer", action(MenuPaliers.fermer), false, Enum.KeyCode.ButtonB)
 
 	-- Le chrono s'affiche dix fois par seconde : assez fluide, sans travail à chaque image.
 	local cumul = 0
