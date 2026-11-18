@@ -58,6 +58,10 @@ Prises par l'utilisateur le 2026-11-18.
 | Dash | Sol et air, 1 par envol ; sol seulement ; air avec recharge à temps | **Sol et air, une fois par envol**, rechargé au sol | Ouvre de vraies trajectoires avec le double saut |
 | Double saut | Recharge au sol ; recharge aussi au mur | **Au sol seulement** | Règle attendue des joueurs, sauts lisibles |
 | Touche du dash | Touche marquée A (`KeyCode.Q`) ; E ou clic droit | **Touche marquée A**, soit `KeyCode.Q` | Ce que l'utilisateur voulait physiquement, sans gêner ZQSD |
+| Accès au pied de l'ascension (décision d'agent) | Verrière dans le toit de Sup de Vinci ; redescendre et ressortir par la porte | **Verrière dans le toit**, 3 ou 4 sauts depuis la mezzanine | On sort du partiel par le toit : bien plus fort après le climax du tuto |
+| « Recommencer » refermait l'ascension (décision d'agent) | Champ `tutoFini` sauvegardé ; porte élargie sans champ ; ne rien changer | **Champ `tutoFini`** posé par `Parcours.terminer`, rempli par `migrer` pour les joueurs existants | Un bouton du tuto ne doit pas fermer le jeu principal ; `etape` est remis à 0 par conception |
+| Aura après une téléportation (décision d'agent) | Rien du tout ; payer les étages au-dessus du palier d'arrivée | **Payer les étages au-dessus du palier d'arrivée** | Pas de ferme d'aura, mais grimper reste récompensé |
+| Attribut `Hauteur` des paliers (contrat ambigu) | Absolu ; au-dessus du pied | **`Hauteur` reste le Y absolu, `HauteurRelative` est la hauteur au-dessus du pied** ; l'interface et le serveur lisent `HauteurRelative` | La carte fournit déjà les deux ; c'est la hauteur gagnée qu'on montre au joueur |
 
 ## Contrats entre agents
 À respecter à la lettre : chaque agent code contre ces noms sans attendre les autres.
