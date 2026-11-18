@@ -144,9 +144,9 @@ local function mesurer(joueur: Player, suivi: Suivi, maintenant: number)
 	local auSol = humanoide.FloorMaterial ~= Enum.Material.Air
 	if maintenant < suivi.ignorerJusqua then
 		-- Apparition, téléportation décidée par le serveur, correction : la position répliquée n'est pas fiable.
-		-- On ne garde aucun relevé : un relevé pris maintenant servirait de référence fausse à la fenêtre suivante
-		-- et ferait refuser un déplacement légitime.
-		table.clear(suivi.tampon)
+		-- On ne prend aucun relevé : un relevé pris maintenant servirait de référence fausse à la fenêtre suivante
+		-- et ferait refuser un déplacement légitime. Le tampon, lui, n'est pas touché : il est vide, ou ne contient
+		-- que la destination posée par `autoriserTeleportation`, qui sert de référence au premier relevé d'après.
 		if auSol then
 			suivi.valide = position
 		end
@@ -225,9 +225,24 @@ end
 --- pied...), dans la même image que le `PivotTo` : le déplacement n'est pas comparé aux capacités.
 function Capacites.autoriserTeleportation(joueur: Player)
 	local suivi = suivis[joueur]
-	if suivi then
-		table.clear(suivi.tampon) -- la fenêtre repart du placement, pas d'avant
-		suivi.ignorerJusqua = math.max(suivi.ignorerJusqua, os.clock() + DELAI_TELEPORTATION)
+	if not suivi then
+		return
+	end
+	local maintenant = os.clock()
+	-- Le délai ne sert qu'à ignorer la position répliquée, pas fiable un instant : il ne suspend pas la surveillance.
+	-- Le tampon repart de la destination (la racine vient d'être placée, dans cette même image), et la première
+	-- mesure d'après le délai est comparée à elle : sans quoi un client qui redemande une téléportation toutes les
+	-- 2 s (PALIER_DELAI_TELEPORT) volerait en toute impunité 1,5 s sur 2. La destination est aussi la dernière
+	-- position valide : si une alerte tombe, on ramène le joueur là, pas là où il était avant d'être téléporté.
+	suivi.ignorerJusqua = math.max(suivi.ignorerJusqua, maintenant + DELAI_TELEPORTATION)
+	local personnage = joueur.Character
+	local racine = personnage and personnage:FindFirstChild("HumanoidRootPart")
+	if racine and racine:IsA("BasePart") then
+		local position = racine.Position
+		Mouvement.amorcer(suivi.tampon, maintenant, position.X, position.Y, position.Z)
+		suivi.valide = position
+	else
+		table.clear(suivi.tampon) -- personne à placer : la fenêtre se reconstruira
 	end
 end
 

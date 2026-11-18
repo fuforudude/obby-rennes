@@ -102,6 +102,13 @@ return function()
 			expect(Ascension.estRecordHauteur(80, 80)).to.equal(false)
 			expect(Ascension.estRecordHauteur(0, 0)).to.equal(false)
 		end)
+
+		it("le renvoi périodique de l'état ne vise que ceux qui ont un palier ou un record à montrer", function()
+			expect(Ascension.aQuelqueChoseAMontrer(0, 0)).to.equal(false) -- le tuto : rien à répéter
+			expect(Ascension.aQuelqueChoseAMontrer(1, 0)).to.equal(true)
+			expect(Ascension.aQuelqueChoseAMontrer(0, 120)).to.equal(true)
+			expect(Ascension.aQuelqueChoseAMontrer(3, 400)).to.equal(true)
+		end)
 	end)
 
 	describe(

@@ -449,8 +449,8 @@ function Hud.monter()
 	Remotes.obtenir("EtatCourse").OnClientEvent:Connect(function(nouvel: Remotes.EtatCourse)
 		afficherAura(nouvel.aura, nouvel.serie) -- avant `etat = nouvel` : la première réception n'est pas un gain
 		etat = nouvel
-		-- Les capacités débloquées : champ `capacites` d'EtatCourse (pas encore dans le type de Remotes.luau).
-		IconesCapacites.definir((nouvel :: any).capacites)
+		-- Les capacités débloquées : champ `capacites` d'EtatCourse.
+		IconesCapacites.definir(nouvel.capacites)
 		afficherEtape()
 		if nouvel.etape ~= derniereEtapeVue then
 			if nouvel.etape > derniereEtapeVue or nouvel.etape == 0 then

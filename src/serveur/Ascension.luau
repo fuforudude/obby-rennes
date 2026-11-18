@@ -393,7 +393,7 @@ local function relever(joueur: Player, tentative: Tentative)
 end
 
 --- Le tour de tous les joueurs. Ceux qui montent sont relevés à chaque tour ; les autres reçoivent l'état de
---- l'ascension toutes les PERIODE_ETAT_REPOS secondes.
+--- l'ascension toutes les PERIODE_ETAT_REPOS secondes, s'ils ont un palier ou un record à montrer.
 --- Pourquoi ce rappel : hors tentative, l'état ne partait qu'une fois, au chargement des données — souvent avant
 --- que le client ait posé sa connexion (`Hud.monter` tourne après `Evenements.demarrer()` et `Capacites.demarrer()`).
 --- Le message était perdu et l'entrée « Paliers » n'apparaissait jamais pour un joueur de retour. Un envoi lent et
@@ -412,10 +412,16 @@ local function releverTous()
 	local instant = os.clock()
 	for _, joueur in Players:GetPlayers() do
 		if tentatives[joueur] == nil and instant - (dernierEtatRepos[joueur] or -math.huge) >= PERIODE_ETAT_REPOS then
-			dernierEtatRepos[joueur] = instant
-			local ok, erreur = pcall(envoyerEtat, joueur)
-			if not ok then
-				warn(`[Ascension] état hors tentative de {joueur.Name} en échec : {erreur}`)
+			-- Rien à montrer (ni palier ni record, le cas de presque tout le monde pendant le tuto) : le premier
+			-- envoi de `surChargement` suffit, on ne répète pas. Les données pas encore chargées attendent aussi :
+			-- `surChargement` enverra l'état à leur arrivée.
+			local donnees = Donnees.obtenir(joueur)
+			if donnees and RegleAscension.aQuelqueChoseAMontrer(#donnees.paliers, donnees.meilleureHauteur) then
+				dernierEtatRepos[joueur] = instant
+				local ok, erreur = pcall(envoyerEtat, joueur)
+				if not ok then
+					warn(`[Ascension] état hors tentative de {joueur.Name} en échec : {erreur}`)
+				end
 			end
 		end
 	end

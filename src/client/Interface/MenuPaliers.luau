@@ -189,7 +189,10 @@ function MenuPaliers.monter(gui: ScreenGui, retourManette: GuiObject)
 end
 
 --- L'état d'ascension a changé : la liste des paliers débloqués (numéros).
+--- Le serveur renvoie l'état toutes les 2 s : on ne reconstruit les boutons que si la liste a réellement changé,
+--- sinon la grille clignote, un clic tombe pendant la reconstruction et la manette perd son curseur.
 function MenuPaliers.definirPaliers(paliers: any)
+	local change = not Affichage.memesPaliers(debloques, paliers)
 	debloques = {}
 	if type(paliers) == "table" then
 		for _, numero in paliers do
@@ -198,7 +201,7 @@ function MenuPaliers.definirPaliers(paliers: any)
 			end
 		end
 	end
-	if panneau and panneau.Visible then
+	if change and panneau and panneau.Visible then
 		reconstruire()
 	end
 end
