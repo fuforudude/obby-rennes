@@ -30,6 +30,18 @@ local partage = setmetatable({}, {
 })
 local faux = {
 	GetService = function(_, nom)
+		if nom == "RunService" then
+			-- partage/Remotes distingue le serveur du client pour créer ou retrouver les RemoteEvent. Hors Roblox on
+			-- n'est ni l'un ni l'autre : ses fonctions pures (etatCourse) se testent, `obtenir` non.
+			return {
+				IsServer = function()
+					return false
+				end,
+				IsClient = function()
+					return false
+				end,
+			}
+		end
 		assert(nom == "ReplicatedStorage", nom)
 		return { Partage = partage }
 	end,

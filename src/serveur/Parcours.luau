@@ -34,15 +34,10 @@ local function envoyerEtat(joueur: Player)
 	if not donnees or not course then
 		return
 	end
-	etatCourse:FireClient(joueur, {
-		etape = donnees.etape,
-		debut = course.debut,
-		passages = course.passages,
-		reprise = course.reprise,
-		meilleurTemps = donnees.meilleurTemps,
-		aura = donnees.aura,
-		serie = course.serie,
-	})
+	-- La forme de la charge est tenue par la fonction pure et testée `Remotes.etatCourse`. Les capacités débloquées
+	-- en font partie : c'est la seule source du client quand il arrive sur le serveur (le remote CapaciteDebloquee
+	-- ne part qu'à l'instant d'un déblocage, un joueur qui revient le lendemain ne le reçoit jamais).
+	etatCourse:FireClient(joueur, Remotes.etatCourse(donnees, course, Capacites.debloquees(joueur)))
 end
 
 --- Aura du joueur changée : liste des joueurs (leaderstats) et classement mondial (envoyé par lots).
@@ -93,6 +88,12 @@ local function placer(joueur: Player)
 	end
 	local position = cp.Position + Vector3.new(0, cp.Size.Y / 2 + 3, 0)
 	personnage:PivotTo(CFrame.lookAt(position, position + Vector3.xAxis))
+	-- Ce déplacement vient du serveur : la surveillance ne doit pas le prendre pour de la triche. L'appel est ici,
+	-- dans la même image que le PivotTo, et pas chez les appelants : deux d'entre eux arrivent après la fenêtre
+	-- d'apparition de 3 s (`surChargement` quand le chargement des données a traîné — reconnexion rapide, verrou de
+	-- session — et `Parcours.placerAuCheckpoint` après le WaitForChild de 5 s ci-dessus), et le joueur serait alors
+	-- ramené au point d'apparition de Roblox, hors du parcours, et marqué suspect.
+	Capacites.autoriserTeleportation(joueur)
 end
 
 local function terminer(joueur: Player)
@@ -238,9 +239,7 @@ function Parcours.passerEtape(joueur: Player): boolean
 	donnees.etape += 1
 	course.passages += 1
 	course.serie = 0 -- une étape achetée ne rapporte pas d'aura et casse la série
-	placer(joueur)
-	-- Ce déplacement vient du serveur : la surveillance ne doit pas le prendre pour un déplacement impossible.
-	Capacites.autoriserTeleportation(joueur)
+	placer(joueur) -- prévient la surveillance lui-même
 	if donnees.etape == Reglages.NB_ETAPES then
 		terminer(joueur)
 	end
@@ -267,6 +266,10 @@ function Parcours.demarrer()
 	end
 
 	Donnees.surChargement(surChargement)
+	-- Un déblocage change l'état de la course (`capacites`) : on le renvoie, sans attendre le prochain checkpoint.
+	Capacites.surDeblocage(function(joueur)
+		envoyerEtat(joueur)
+	end)
 
 	local function suivre(joueur: Player)
 		joueur.CharacterAdded:Connect(function(personnage)
