@@ -3,6 +3,12 @@
 -- tests/partage/Capacites.spec.luau. Le client s'en sert pour savoir ce qui est permis, le serveur pour surveiller :
 -- il compare le déplacement réel d'un joueur à ce que ses capacités autorisent au maximum (voir evaluerDeplacement).
 --
+-- La comparaison se fait sur une **fenêtre glissante** de SURVEILLANCE_FENETRE secondes (empiler / evaluerFenetre),
+-- relevée toutes les SURVEILLANCE_PERIODE secondes. Sur une fenêtre courte, le terme fixe du maximum (la hauteur
+-- d'un envol, 14,4 studs, qu'il faut autoriser parce que la fenêtre peut tomber pile sur un décollage) comptait
+-- autant que la montée elle-même : le plafond valait trois fois ce qu'un joueur tient vraiment. Étalé sur 2,5 s,
+-- ce terme pèse cinq fois moins et le plafond se resserre sans refuser un seul déplacement légitime.
+--
 -- Modèle physique : un personnage Roblox par défaut (marche 16 studs/s, saut de 7,2 studs de haut, gravité 196,2).
 -- Les valeurs des capacités elles-mêmes (facteur de course, dash, double saut, marge) sont dans Reglages.luau.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,6 +17,13 @@ local Reglages = require(ReplicatedStorage.Partage.Reglages)
 
 export type Capacite = "course" | "doubleSaut" | "dash"
 export type Debloquees = { [string]: boolean }
+
+-- Un relevé de position de la surveillance. Trois nombres plutôt qu'un Vector3 : ce module reste pur.
+export type Releve = { instant: number, x: number, y: number, z: number }
+-- Les relevés récents d'un joueur, du plus vieux au plus récent (voir empiler).
+export type Tampon = { Releve }
+-- Le déplacement mesuré d'un bout à l'autre de la fenêtre.
+export type Deplacement = { horizontal: number, montee: number, duree: number }
 
 -- Le personnage de référence (valeurs par défaut de Roblox).
 export type Physique = {
@@ -149,6 +162,44 @@ function Capacites.evaluerDeplacement(
 		return "vertical"
 	end
 	return nil
+end
+
+--- Ajoute un relevé au tampon et oublie ce qui est plus vieux que `fenetre` secondes — en gardant un seul relevé
+--- au-delà : c'est lui la référence, pour que la fenêtre comparée couvre toujours `fenetre` entière (sinon elle
+--- rétrécirait jusqu'à une période et le plafond se relâcherait d'autant). Le tampon est modifié et rendu.
+function Capacites.empiler(tampon: Tampon, instant: number, x: number, y: number, z: number, fenetre: number?): Tampon
+	table.insert(tampon, { instant = instant, x = x, y = y, z = z })
+	local limite = instant - positifOuNul(if fenetre ~= nil then fenetre else Reglages.SURVEILLANCE_FENETRE)
+	while #tampon >= 2 and tampon[2].instant <= limite do
+		table.remove(tampon, 1)
+	end
+	return tampon
+end
+
+--- Le déplacement mesuré sur la fenêtre : du plus vieux relevé gardé au plus récent. nil s'il n'y a pas deux
+--- relevés à comparer (apparition, téléportation du serveur, correction : la fenêtre se reconstruit).
+function Capacites.deplacementFenetre(tampon: Tampon): Deplacement?
+	if #tampon < 2 then
+		return nil
+	end
+	local debut, fin = tampon[1], tampon[#tampon]
+	local dx, dz = fin.x - debut.x, fin.z - debut.z
+	return {
+		horizontal = math.sqrt(dx * dx + dz * dz),
+		montee = fin.y - debut.y,
+		duree = fin.instant - debut.instant,
+	}
+end
+
+--- Verdict de la surveillance sur toute la fenêtre du tampon : nil (rien d'anormal, ou pas assez de relevés),
+--- « horizontal » ou « vertical ». Rend aussi la mesure, pour le journal du serveur.
+function Capacites.evaluerFenetre(capacites: Debloquees?, tampon: Tampon, physique: Physique?): (string?, Deplacement?)
+	local mesure = Capacites.deplacementFenetre(tampon)
+	if mesure == nil then
+		return nil, nil
+	end
+	local m = mesure :: Deplacement
+	return Capacites.evaluerDeplacement(capacites, m.horizontal, m.montee, m.duree, physique), m
 end
 
 return Capacites

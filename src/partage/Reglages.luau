@@ -55,20 +55,31 @@ local Reglages = {
 	SAUT_DOUBLE_FACTEUR = 1,
 	-- Durée (s) du tour complet du personnage pendant le double saut (rotation calculée par le code).
 	VRILLE_DUREE = 0.45,
-	-- Surveillance serveur : toutes les SURVEILLANCE_PERIODE secondes, le déplacement de chaque joueur est comparé à ce
-	-- que ses capacités permettent. Au-delà de (maximum x SURVEILLANCE_MARGE + SURVEILLANCE_TOLERANCE studs), il est
-	-- ramené à sa dernière position valide. La tolérance fixe absorbe le retard de réplication, les plateformes
-	-- mobiles et les bousculades des obstacles ; la marge relative, l'écart entre le modèle et la physique réelle.
+	-- Surveillance serveur : la position de chaque joueur est relevée toutes les SURVEILLANCE_PERIODE secondes, et son
+	-- déplacement est comparé à ce que ses capacités permettent sur une **fenêtre glissante** de SURVEILLANCE_FENETRE
+	-- secondes (et non d'un relevé au suivant). Au-delà de (maximum x SURVEILLANCE_MARGE + SURVEILLANCE_TOLERANCE
+	-- studs) sur la fenêtre, le joueur est ramené à sa dernière position valide. La tolérance fixe absorbe le retard de
+	-- réplication, les plateformes mobiles et les bousculades des obstacles ; la marge relative, l'écart entre le
+	-- modèle et la physique réelle.
+	-- Pourquoi une fenêtre longue : le maximum contient un terme fixe (la hauteur d'un envol, 14,4 studs, qu'il faut
+	-- autoriser au cas où la fenêtre tombe pile sur un décollage). Sur 0,5 s il valait à lui seul plus que la montée
+	-- mesurée, et le plafond montait à 84 studs/s contre 26,6 réellement tenables : un script de vol passait. Étalé
+	-- sur 2,5 s, il pèse cinq fois moins : plafonds de 44,4 studs/s en montée et 57,5 studs/s sur le plan (contre 84
+	-- et 67,1), toujours au-dessus du mieux qu'un joueur fait vraiment (26,6 en montée, 42,4 sur le plan avec les
+	-- dashs enchaînés). Prix payé : jusqu'à SURVEILLANCE_FENETRE secondes avant la première alerte après une
+	-- apparition ou une téléportation décidée par le serveur, le temps que la fenêtre se remplisse.
 	SURVEILLANCE_PERIODE = 0.5,
+	SURVEILLANCE_FENETRE = 2.5,
 	SURVEILLANCE_MARGE = 1.3,
 	SURVEILLANCE_TOLERANCE = 6,
 
 	-- Ascension (au-dessus de Sup de Vinci). Aura d'un étage franchi : ASCENSION_AURA_BASE pour le premier étage,
 	-- puis ASCENSION_AURA_PAR_ETAGE de plus à chaque étage (étage n = BASE + PAR_ETAGE × (n − 1)). Monter haut est
-	-- le vrai gain : avec 100 et 40, l'étage 1 rapporte 100 et l'étage 25 en rapporte 1 060, dix fois plus.
-	-- Une ascension entière de 25 étages rapporte 14 500 d'aura (Ascension.auraAscension), à comparer aux 16 500
-	-- d'un tuto parfait (15 checkpoints en série, puis 1 000 + 5 000 à l'arrivée) : le tuto reste le gros coup
-	-- unique, l'ascension devient la raison de revenir. Un étage ne rapporte qu'une fois par tentative.
+	-- le vrai gain : avec 100 et 40, l'étage 1 rapporte 100 et l'étage 17 en rapporte 740, sept fois plus.
+	-- La tour en construit 17 (outils/monde/Ascension.luau, un étage tous les 15 studs sur 258) : une ascension
+	-- entière rapporte 7 140 d'aura (Ascension.auraAscension), à comparer aux 16 500 d'un tuto parfait (15
+	-- checkpoints en série, puis 1 000 + 5 000 à l'arrivée) : le tuto reste le gros coup unique, l'ascension
+	-- devient la raison de revenir (elle se refait, lui non). Un étage ne rapporte qu'une fois par tentative.
 	ASCENSION_AURA_BASE = 100,
 	ASCENSION_AURA_PAR_ETAGE = 40,
 	-- Téléportation vers un palier débloqué : pas plus d'une fois toutes les 2 secondes (anti-triche).
@@ -87,6 +98,12 @@ local Reglages = {
 	-- Hauteur (studs au-dessus du pied) en dessous de laquelle retoucher le pied ne relance pas le chrono : sans ça,
 	-- rester posé sur la plateforme de départ le remettrait à zéro sans arrêt.
 	ASCENSION_SEUIL_DEPART = 8,
+	-- Hauteur (studs au-dessus du pied, donc négative) sous laquelle un joueur en tentative est renvoyé au pied et
+	-- recommence. « Tomber renvoie au pied » : sans ça, une chute depuis un palier se terminait sur le toit de Sup de
+	-- Vinci (10 studs sous le pied, rien de mortel dans la tour), où le joueur survivait, gardait sa tentative et son
+	-- chrono, et où retoucher le pied en remontant ne relançait rien (il était déjà sous ASCENSION_SEUIL_DEPART).
+	-- −2 studs : juste sous le dessus du pied, assez bas pour qu'y marcher ne déclenche rien.
+	ASCENSION_HAUTEUR_GARDE = -2,
 
 	TAILLE_CLASSEMENT = 10,
 	DELAI_RAFRAICHIR_CLASSEMENT = 60, -- secondes
