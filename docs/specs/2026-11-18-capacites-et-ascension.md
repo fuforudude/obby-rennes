@@ -61,6 +61,7 @@ Prises par l'utilisateur le 2026-11-18.
 | Accès au pied de l'ascension (décision d'agent) | Verrière dans le toit de Sup de Vinci ; redescendre et ressortir par la porte | **Verrière dans le toit**, 3 ou 4 sauts depuis la mezzanine | On sort du partiel par le toit : bien plus fort après le climax du tuto |
 | « Recommencer » refermait l'ascension (décision d'agent) | Champ `tutoFini` sauvegardé ; porte élargie sans champ ; ne rien changer | **Champ `tutoFini`** posé par `Parcours.terminer`, rempli par `migrer` pour les joueurs existants | Un bouton du tuto ne doit pas fermer le jeu principal ; `etape` est remis à 0 par conception |
 | Aura après une téléportation (décision d'agent) | Rien du tout ; payer les étages au-dessus du palier d'arrivée | **Payer les étages au-dessus du palier d'arrivée** | Pas de ferme d'aura, mais grimper reste récompensé |
+| « Recommencer » pendant l'ascension (décision d'agent) | Renvoyer au tuto ; deux boutons séparés ; laisser tel quel | **Renvoyer au tuto** : ferme la tentative d'ascension et replace le joueur à la coloc | Cohérent avec le mot ; les paliers restent acquis |
 | Attribut `Hauteur` des paliers (contrat ambigu) | Absolu ; au-dessus du pied | **`Hauteur` reste le Y absolu, `HauteurRelative` est la hauteur au-dessus du pied** ; l'interface et le serveur lisent `HauteurRelative` | La carte fournit déjà les deux ; c'est la hauteur gagnée qu'on montre au joueur |
 
 ## Contrats entre agents
