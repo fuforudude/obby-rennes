@@ -113,8 +113,6 @@ local Reglages = {
 	-- devient la raison de revenir (elle se refait, lui non). Un étage ne rapporte qu'une fois par tentative.
 	ASCENSION_AURA_BASE = 100,
 	ASCENSION_AURA_PAR_ETAGE = 40,
-	-- Téléportation vers un palier débloqué : pas plus d'une fois toutes les 2 secondes (anti-triche).
-	PALIER_DELAI_TELEPORT = 2,
 	-- Une ascension plus rapide que ça est impossible à la main : son chrono n'entre pas au classement, comme
 	-- TEMPS_MIN_CLASSABLE pour le tuto. À recalibrer sur la tour réelle (au moins 250 studs) : avec le double
 	-- saut et le dash, un joueur très bon monte de l'ordre de 15 studs/s, donc jamais la tour en moins de 15 s.
@@ -123,18 +121,45 @@ local Reglages = {
 	-- renvoyé au client que si la hauteur a bougé d'au moins ASCENSION_PAS_ETAT studs (pas à chaque image).
 	ASCENSION_PERIODE_SUIVI = 0.25,
 	ASCENSION_PAS_ETAT = 2,
-	-- Après une téléportation vers un palier, les étages au-dessus du palier d'arrivée paient normalement, ceux en
-	-- dessous ne paient rien. Cette marge (studs) évite de payer l'étage posé sur la dalle même du palier.
-	ASCENSION_MARGE_PALIER = 2,
 	-- Hauteur (studs au-dessus du pied) en dessous de laquelle retoucher le pied ne relance pas le chrono : sans ça,
 	-- rester posé sur la plateforme de départ le remettrait à zéro sans arrêt.
 	ASCENSION_SEUIL_DEPART = 8,
 	-- Hauteur (studs au-dessus du pied, donc négative) sous laquelle un joueur en tentative est renvoyé au pied et
-	-- recommence. « Tomber renvoie au pied » : sans ça, une chute depuis un palier se terminait sur le toit de Sup de
-	-- Vinci (10 studs sous le pied, rien de mortel dans la tour), où le joueur survivait, gardait sa tentative et son
+	-- recommence. « Tomber renvoie au pied » : sans ça, une chute depuis la tour se terminait sur le toit de Sup de
+	-- Vinci (10 studs sous le pied, rien de mortel en dehors des lasers), où le joueur survivait, gardait sa tentative et son
 	-- chrono, et où retoucher le pied en remontant ne relançait rien (il était déjà sous ASCENSION_SEUIL_DEPART).
 	-- −2 studs : juste sous le dessus du pied, assez bas pour qu'y marcher ne déclenche rien.
 	ASCENSION_HAUTEUR_GARDE = -2,
+
+	-- Obstacles de la tour (src/serveur/Obstacles.luau ; règles pures et testées dans src/partage/Pieges.luau).
+	-- Les valeurs ci-dessous ne servent que quand la pièce de la carte ne porte pas l'attribut correspondant :
+	-- une carte peut toujours régler un piège plus dur ou plus doux que les autres.
+	--
+	-- Piège de mur : la pointe sort dès qu'un joueur vivant entre dans PIEGE_PORTEE studs de sa fente, rentre, puis
+	-- se repose PIEGE_REPOS secondes avant de pouvoir se redéclencher (sans ce repos, un joueur collé au mur serait
+	-- repoussé en boucle). Au contact la pointe ne tue pas : elle impose une vitesse horizontale de PIEGE_POUSSEE
+	-- studs/s dans sa direction. Pourquoi 60 : pendant la demi-seconde où le joueur reste en l'air, cela fait une
+	-- trentaine de studs parcourus, bien au-delà du plus grand vide de la tour (16 studs) — mal placé, on part
+	-- vraiment dans le vide. Et c'est moins que DASH_VITESSE (70 studs/s, vitesse imposée) : un dash lancé dans
+	-- l'autre sens reprend la main sur la poussée, et le double saut rend la hauteur. Au-delà de 70, plus rien ne
+	-- rattraperait la poussée : l'obstacle deviendrait une mort certaine, ce que la spec ne veut pas.
+	-- Un même joueur n'est repoussé qu'une fois par PIEGE_DELAI_POUSSEE secondes (Touched se déclenche plusieurs
+	-- fois pour un seul contact).
+	PIEGE_POUSSEE = 60,
+	PIEGE_PORTEE = 10,
+	PIEGE_REPOS = 1.2,
+	PIEGE_DELAI_POUSSEE = 0.4,
+	-- Les pièges cherchent un joueur à portée toutes les PIEGE_PERIODE_SCAN secondes (pas à chaque image : c'est
+	-- une distance par piège et par joueur). La pointe, elle, bouge bien à chaque image.
+	PIEGE_PERIODE_SCAN = 0.1,
+	-- Plateforme qui s'effondre : elle tombe EFFONDRABLE_DELAI secondes après le premier contact (le temps de la
+	-- traverser en courant), puis revient à sa place EFFONDRABLE_RETOUR secondes plus tard.
+	EFFONDRABLE_DELAI = 0.5,
+	EFFONDRABLE_RETOUR = 4,
+	-- Balancier : multiplicateur de force (attribut facultatif « Poussee », 1 par défaut) appliqué à la densité de
+	-- la pièce — une pancarte plus lourde emporte plus loin, sans changer sa trajectoire ni son horaire. Au-delà de
+	-- ce plafond la valeur est refusée : une densité absurde ferait traverser les murs aux joueurs.
+	BALANCIER_POUSSEE_MAX = 20,
 
 	TAILLE_CLASSEMENT = 10,
 	DELAI_RAFRAICHIR_CLASSEMENT = 60, -- secondes

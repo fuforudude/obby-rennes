@@ -127,10 +127,10 @@ return function()
 	end)
 
 	describe("capacités et ascension dans les données sauvegardées", function()
-		it("un joueur neuf n'a aucune capacité, aucun palier et aucun record d'ascension", function()
+		it("un joueur neuf n'a aucune capacité et aucun record d'ascension", function()
 			local d = Regles.donneesNeuves()
 			expect(next(d.capacites)).never.to.be.ok()
-			expect(#d.paliers).to.equal(0)
+			expect(d.paliers).never.to.be.ok() -- plus de paliers : le champ n'existe plus
 			expect(d.meilleureHauteur).to.equal(0)
 			expect(d.meilleurTempsAscension).to.equal(0)
 		end)
@@ -142,7 +142,6 @@ return function()
 			expect(d.aura).to.equal(4200)
 			expect(d.achats[1]).to.equal("a1")
 			expect(next(d.capacites)).never.to.be.ok()
-			expect(#d.paliers).to.equal(0)
 			expect(d.meilleureHauteur).to.equal(0)
 			expect(d.meilleurTempsAscension).to.equal(0)
 		end)
@@ -160,23 +159,26 @@ return function()
 			expect(next(Regles.migrer({ capacites = "course" }, 15).capacites)).never.to.be.ok()
 		end)
 
-		it("garde les paliers atteints, sans doublon et rangés", function()
-			local d = Regles.migrer({ paliers = { 3, 1, 3 } }, 15)
-			expect(#d.paliers).to.equal(2)
-			expect(d.paliers[1]).to.equal(1)
-			expect(d.paliers[2]).to.equal(3)
+		it("accepte sans planter d'anciennes données qui contiennent des paliers, et les ignore", function()
+			-- Les paliers ont disparu avec la tour exigeante : une sauvegarde d'avant se charge quand même, sans
+			-- rien perdre du reste, et le champ ne revient pas dans les données actuelles.
+			local d = Regles.migrer({
+				etape = 15,
+				tutoFini = true,
+				aura = 4200,
+				paliers = { 3, 1, 3 },
+				meilleureHauteur = 190,
+			}, 15)
+			expect(d.paliers).never.to.be.ok()
+			expect(d.etape).to.equal(15)
+			expect(d.aura).to.equal(4200)
+			expect(d.meilleureHauteur).to.equal(190)
 		end)
 
-		it("écarte un numéro de palier absurde (sans le ramener dans les bornes)", function()
-			local d = Regles.migrer({ paliers = { 0, 42, -2, 2.5, 0 / 0, "2", 4 } }, 15)
-			expect(#d.paliers).to.equal(1)
-			expect(d.paliers[1]).to.equal(4)
-		end)
-
-		it("garde un palier au-delà des cinq d'aujourd'hui (la carte décide, pas la sauvegarde)", function()
-			local d = Regles.migrer({ paliers = { 6 } }, 15)
-			expect(#d.paliers).to.equal(1)
-			expect(d.paliers[1]).to.equal(6)
+		it("accepte aussi un champ paliers abîmé d'une vieille sauvegarde", function()
+			expect(Regles.migrer({ paliers = "3", aura = 10 }, 15).aura).to.equal(10)
+			expect(Regles.migrer({ paliers = { 0, -2, 0 / 0 } }, 15).paliers).never.to.be.ok()
+			expect(Regles.migrer({ paliers = 7, etape = 4 }, 15).etape).to.equal(4)
 		end)
 
 		it("garde la meilleure hauteur et le meilleur temps d'ascension", function()
@@ -248,7 +250,6 @@ return function()
 			d.tutoFini = true
 			d.aura = 12345
 			d.meilleurTemps = 250
-			d.paliers = { 1, 2, 3 }
 			d.meilleureHauteur = 190
 			d.meilleurTempsAscension = 95
 			d.capacites = { course = true, doubleSaut = true }
@@ -262,7 +263,6 @@ return function()
 			expect(d.tutoFini).to.equal(true)
 			expect(d.aura).to.equal(12345)
 			expect(d.meilleurTemps).to.equal(250)
-			expect(#d.paliers).to.equal(3)
 			expect(d.meilleureHauteur).to.equal(190)
 			expect(d.meilleurTempsAscension).to.equal(95)
 			expect(d.capacites.doubleSaut).to.equal(true)
