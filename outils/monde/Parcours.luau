@@ -12,10 +12,19 @@
 -- Vilaine, on escalade le Parlement et on court sur son toit, on saute de cime en cime au Thabor, et on monte
 -- l'atrium de Sup de Vinci jusqu'à la salle de partiel. On avance globalement vers +X.
 -- Repères de saut (personnage par défaut) : on monte d'au plus 4 studs, on saute au plus 6 studs de vide.
--- Trois exceptions voulues, les passages d'apprentissage des capacités (spec 2026-11-18) : chacun est précédé de sa
--- dalle de déblocage et ne se franchit qu'avec la capacité qu'elle vient de donner. Dimensions dans les commentaires
--- de chaque zone ; outils/monde/verifier-sauts.luau applique les limites capacité par capacité et refuse une porte
--- qui se franchirait sans elle.
+-- Tant qu'aucune capacité n'est débloquée (étapes 0 à 2), c'est la règle sans exception : un nouveau joueur
+-- démarre avec le saut simple. Après chaque dalle de déblocage (spec 2026-11-18), le parcours exige vraiment la
+-- capacité qu'elle vient de donner, et pas seulement une fois :
+-- - après la course (dalle du métro) : des vides de 8 à 9 studs, sans descente, donc sans remise — plus que les
+--   6,5 d'un saut debout, moins que les 9,75 d'un saut en courant (cortège, auvents de la rue de la Soif, entrée
+--   de la Vilaine) ;
+-- - après le double saut (balcon de la tour) : des montées de 6 à 7 studs — plus que les 4,5 d'un saut simple,
+--   moins que les 9 des deux sauts enchaînés (corniches du Parlement, atrium de Sup de Vinci) ;
+-- - après le dash (ponton de la Vilaine) : des vides de 12 à 16 studs — plus que les 9,75 d'un saut en courant,
+--   moins que les 17,75 du même saut prolongé d'un dash (colonnade et toit du Parlement, Thabor).
+-- Dimensions dans les commentaires de chaque zone ; outils/monde/verifier-sauts.luau applique les limites capacité
+-- par capacité, refuse une porte d'apprentissage qui se franchirait sans elle, et refuse une capacité que moins de
+-- trois sauts exigent après son déblocage.
 --
 -- Ce que le jeu attend (contrats avec src/serveur) :
 -- - tag « Checkpoint » + attribut « Numero » (0 à 15) : les checkpoints ; le 0 est la SpawnLocation du départ ;
@@ -1545,11 +1554,13 @@ return function(R)
 		return mobile(b, deplacement, duree)
 	end
 	-- La première banderole est la cible du saut en courant du métro (8 studs de vide depuis la DalleDeLaCourse) :
-	-- large, elle pardonne l'approximation. Le reste du cortège se resserre derrière, jusqu'au checkpoint 5 (inchangé).
+	-- large, elle pardonne l'approximation. Durcissement (spec 2026-11-18) : les deux sauts suivants font eux aussi
+	-- 8 studs de vide (266 -> 274 puis 278 -> 286), chacun en montant de 2 studs, donc sans la remise de descente :
+	-- plus que les 6,5 d'un saut debout, moins que les 9,75 d'un saut en courant. La course sert trois fois d'affilée
+	-- en sortant du métro, au lieu d'une. Le checkpoint 5 ne bouge pas (4 studs de vide depuis la pancarte).
 	banderole(264, 15, "DES PRISES DANS LES AMPHIS", Vector3.new(0, 0, 8), 4)
-	dalle(cortege, "Pancarte", 2, 2, 271, 15, 0, couleurs.pancarte)
-	banderole(278, 17, "NON AUX PARTIELS À 8H", Vector3.new(0, 0, -8), 3)
-	dalle(cortege, "Pancarte", 2, 2, 286, 19, 0, couleurs.pancarte)
+	banderole(276, 17, "NON AUX PARTIELS À 8H", Vector3.new(0, 0, -8), 3)
+	dalle(cortege, "Pancarte", 2, 2, 287, 19, 0, couleurs.pancarte)
 	checkpoint(cortege, 5, 298, 19, 0, "Place de la République")
 	local sono = mobile(
 		bloc(cortege, "CamionSono", 8, 2, 8, 314, 19, 0, couleurs.camion, Enum.Material.Metal),
@@ -1805,9 +1816,11 @@ return function(R)
 	maisonChemin(soif, "Maison", 475, 0, 8, 30, hourdis[5], bois[4], true, "CHEZ GWENN")
 	maisonChemin(soif, "Maison", 488, 0, 12, 27, hourdis[4], bois[3], false, "LE RATTRAPAGE")
 	checkpoint(soif, 9, 488, 28, 0, "Rue de la Soif")
+	-- Durcissement (spec 2026-11-18) : deux auvents à la même hauteur au lieu de trois en escalier, séparés de
+	-- 8 studs de vide (501 -> 509) sans descente, donc sans remise : il faut courir. On tombe ensuite de 14 studs
+	-- sur la terrasse, une chute libre qui ne demande rien.
 	dalle(soif, "Auvent", 4, 6, 499, 24, 0, Color3.fromRGB(200, 40, 60), Enum.Material.Fabric)
-	dalle(soif, "Auvent", 4, 6, 505, 19, 0, Color3.fromRGB(40, 120, 200), Enum.Material.Fabric)
-	dalle(soif, "Auvent", 4, 6, 511, 14, 0, Color3.fromRGB(240, 180, 40), Enum.Material.Fabric)
+	dalle(soif, "Auvent", 4, 6, 511, 24, 0, Color3.fromRGB(240, 180, 40), Enum.Material.Fabric)
 	dalle(soif, "Terrasse", 30, 10, 532, 10, 0, couleurs.bois, Enum.Material.WoodPlanks)
 	tournant(bloc(soif, "EnseigneDeBar", 1.2, 2, 22, 532, 13, 0, Color3.fromRGB(220, 60, 140), Enum.Material.Neon), 1.6)
 	checkpoint(soif, 10, 559, 10, 0, "Le dernier bar avant le partiel")
@@ -1843,8 +1856,11 @@ return function(R)
 	local vilaine = dossier("6_LaVilaine", accents.vilaine)
 	local eau = mortel(boite(vilaine, "LaVilaine", 566, 680, 1, 2, -35, 35, couleurs.eau, Enum.Material.Glass))
 	eau.Transparency = 0.25
-	dalle(vilaine, "Quai", 4, 6, 570, 7, 0, couleurs.pierre, Enum.Material.Cobblestone)
-	dalle(vilaine, "Ponton", 4, 8, 577, 5, 0, couleurs.ponton, Enum.Material.WoodPlanks)
+	-- Durcissement (spec 2026-11-18) : le quai a été remplacé par un ponton avancé au-dessus de l'eau, à 9 studs de
+	-- vide du checkpoint 10 (565 -> 574). La descente de 3 studs donne 0,75 de remise, donc 7,25 à l'arrêt : il faut
+	-- courir (10,5 en courant). Le premier ponton intermédiaire disparaît ; la péniche et le ponton du balancier
+	-- « BomeDePeniche » (x 599) ne bougent pas.
+	dalle(vilaine, "Ponton", 4, 6, 576, 7, 0, couleurs.ponton, Enum.Material.WoodPlanks)
 	mobile(
 		dalle(vilaine, "PenicheALaDerive", 10, 6, 588, 5, 0, Color3.fromRGB(30, 80, 50), Enum.Material.Wood),
 		Vector3.new(0, 0, 10),
@@ -1887,10 +1903,15 @@ return function(R)
 	-- 13 · Le Parlement de Bretagne : colonnes, corniches de la façade, puis le toit d'ardoise (glissant, donc
 	-- mortel) qu'on traverse de lucarne en lucarne.
 	local parlement = dossier("7_Parlement", accents.parlement)
+	-- Durcissement (spec 2026-11-18) : la colonnade s'ouvre d'un coup après la première colonne. De son bord (659)
+	-- au gros tambour suivant (672) il y a 13 studs de vide en montant de 2 : plus que les 9,75 d'un saut en
+	-- courant, moins que les 17,75 du même saut prolongé d'un dash. Le tambour est large de 6 studs (on y arrive
+	-- sans viser) et il place la colonne d'après à 19 studs de la première : pas de raccourci en diagonale. De
+	-- cette dernière colonne (26) à la corniche basse (32, inchangée) il y a 6 studs de montée : plus que les 4,5
+	-- d'un saut simple, moins que les 9 des deux sauts enchaînés.
 	pilier(parlement, "Colonne", 4, 4, 657, 20, 0, couleurs.pierre, Enum.Material.Marble)
-	pilier(parlement, "Colonne", 3, 3, 664, 23, 0, couleurs.pierre, Enum.Material.Marble)
-	pilier(parlement, "Colonne", 3, 3, 671, 26, 0, couleurs.pierre, Enum.Material.Marble)
-	pilier(parlement, "Colonne", 2, 2, 677, 29, 0, couleurs.pierre, Enum.Material.Marble)
+	pilier(parlement, "Colonne", 6, 6, 675, 22, 0, couleurs.pierre, Enum.Material.Marble)
+	pilier(parlement, "Colonne", 3, 3, 679.5, 26, 0, couleurs.pierre, Enum.Material.Marble)
 	local tuffeau = Color3.fromRGB(250, 238, 205)
 	local granitParlement = Color3.fromRGB(150, 150, 162)
 	local ardoiseParlement = Color3.fromRGB(55, 68, 100)
@@ -1899,7 +1920,9 @@ return function(R)
 		fantome(boite(parlement, "Frise", 684.6, 685, 22, 25, -12, 12, tuffeau, Enum.Material.Limestone))
 	texte(Enum.NormalId.Left, "PARLEMENT DE BRETAGNE", Color3.fromRGB(150, 120, 40), tuffeau).Parent = frontonParlement
 	dalle(parlement, "Corniche", 4, 4, 683, 32, 0, couleurs.or_, Enum.Material.Marble)
-	dalle(parlement, "Corniche", 4, 4, 683, 35, 6, couleurs.or_, Enum.Material.Marble)
+	-- 36 et non 35 : depuis la dernière colonne (26), la corniche du milieu serait à 9 studs pile, juste à la
+	-- limite des deux sauts enchaînés. À 36 elle est hors de portée et la diagonale se monte corniche par corniche.
+	dalle(parlement, "Corniche", 4, 4, 683, 36, 6, couleurs.or_, Enum.Material.Marble)
 	dalle(parlement, "Corniche", 4, 4, 683, 38, 12, couleurs.or_, Enum.Material.Marble)
 	mortel(
 		boite(
@@ -1919,7 +1942,11 @@ return function(R)
 	-- atterrit depuis la dernière corniche, bien au-dessus de l'ardoise (qui ne commence qu'à X = 690).
 	boite(parlement, "Gouttiere", 685, 690, 40, 41.5, -15, 15, couleurs.pierre, Enum.Material.Marble)
 	-- On monte la façade en diagonale (corniches de Z = 0 à Z = 12), puis on revient vers l'axe de lucarne en lucarne.
-	local lucarnes = { { 692, 8 }, { 697, 0 }, { 705, 0 }, { 723, 0 }, { 731, 0 }, { 739, 0 } }
+	-- Durcissement (spec 2026-11-18) : les deux lucarnes du début du toit (692 et 697) ont disparu. Du bord de la
+	-- gouttière (690) à la première lucarne (702) il y a 12 studs de vide à plat, au-dessus de l'ardoise mortelle :
+	-- plus que les 9,75 d'un saut en courant, moins que les 17,75 avec le dash. Les lucarnes d'après le
+	-- checkpoint 13 ne bougent pas.
+	local lucarnes = { { 704, 0 }, { 723, 0 }, { 731, 0 }, { 739, 0 } }
 	for _, l in lucarnes do
 		bloc(parlement, "Lucarne", 4, 2, 4, l[1], 42, l[2], couleurs.pierre, Enum.Material.Marble)
 		-- Vitre sur la face avant (fantôme, collée, sans rien au-dessus de la dalle où l'on marche).
@@ -2233,8 +2260,10 @@ return function(R)
 		bloc(thabor, "Cime", 6, 3, 6, c[1], c[2], c[3], couleurs.feuillage, Enum.Material.Grass)
 		decor(bloc(thabor, "Tronc", 1.5, c[2] - 3 - SOL, 1.5, c[1], c[2] - 3, c[3], couleurs.tronc, Enum.Material.Wood))
 	end
-	bloc(thabor, "Haie", 4, 3, 8, 782, 16, -3, couleurs.haie, Enum.Material.Grass)
-	bloc(thabor, "Haie", 4, 3, 8, 790, 17, 4, couleurs.haie, Enum.Material.Grass)
+	-- Durcissement (spec 2026-11-18) : une haie de moins et la suivante repoussée. De la dernière cime (777) à la
+	-- haie (789) il y a 12 studs de vide à plat, au-dessus de la pelouse mortelle : plus que les 9,75 d'un saut en
+	-- courant, moins que les 17,75 avec le dash. La haie de l'arroseur à bras (x 798) ne bouge pas.
+	bloc(thabor, "Haie", 4, 3, 8, 791, 18, 4, couleurs.haie, Enum.Material.Grass)
 	bloc(thabor, "Haie", 4, 3, 8, 798, 18, 0, couleurs.haie, Enum.Material.Grass)
 	checkpoint(thabor, 14, 810, 18, 0, "Le Thabor")
 	local pancarte = fantome(bloc(thabor, "PancartePelouse", 0.4, 3, 8, 760, 18, 14, Color3.fromRGB(25, 25, 30)))
@@ -2296,9 +2325,19 @@ return function(R)
 		)
 	)
 	dalle(vinci, "Accueil", 6, 8, 829, 18, 0, couleurs.beton, Enum.Material.Concrete)
-	local paliers = { { 837, -10 }, { 845, -11 }, { 853, -11 }, { 860, -5 }, { 860, 4 }, { 853, 11 }, { 845, 11 } }
+	-- Durcissement (spec 2026-11-18) : l'atrium ne monte plus de 3 studs par palier mais par volées de 7, séparées
+	-- par un palier de plain-pied : 18 -> 25 -> 25 -> 32 -> 32 -> 39 -> 39 -> 42. Les trois montées de 7 studs
+	-- dépassent les 4,5 d'un saut simple et restent sous les 9 des deux sauts enchaînés : on ne sort pas de
+	-- l'atrium sans le double saut, et il faut le refaire trois fois. Les deux paliers du fond passent de X = 860
+	-- à X = 861 pour que la mezzanine (checkpoint 15, bord à X = 840) reste hors de portée d'un dash (18,5 studs
+	-- de vide, au-delà des 17,75) : on finit forcément par les deux derniers paliers. Ces deux-là passent de
+	-- Z = 11 à Z = 12, pour que la traversée en diagonale de l'atrium (du palier 3 au palier 6, 18 studs de vide)
+	-- reste elle aussi hors de portée : la montée se fait palier par palier.
+	local paliers = { { 837, -10 }, { 845, -11 }, { 853, -11 }, { 861, -5 }, { 861, 4 }, { 853, 12 }, { 845, 12 } }
+	local hauteursPaliers = { 25, 25, 32, 32, 39, 39, 42 }
 	for i, pos in paliers do
-		local p = dalle(vinci, "Palier", 5, 5, pos[1], 18 + 3 * i, pos[2], couleurs.beton, Enum.Material.Concrete)
+		local p =
+			dalle(vinci, "Palier", 5, 5, pos[1], hauteursPaliers[i], pos[2], couleurs.beton, Enum.Material.Concrete)
 		if i == 3 then
 			fragile(p)
 		end
