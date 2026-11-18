@@ -14,7 +14,8 @@
 -- Signale aussi les plafonds trop bas (moins de 5,5 studs au-dessus d'une plateforme, sur la même emprise),
 -- les pièces mortelles collées à une plateforme de départ de saut (voir « mortels trop proches ») et les portes
 -- d'apprentissage sans effet (une capacité dont le retrait ne rend aucun checkpoint inatteignable : le passage
--- censé l'enseigner se franchit sans elle, le joueur n'apprend rien).
+-- censé l'enseigner se franchit sans elle, le joueur n'apprend rien) et les capacités qui ne servent qu'une fois
+-- (après sa dalle, chaque capacité doit être exigée par au moins trois sauts : voir `exigences`).
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
@@ -250,6 +251,96 @@ print(
 		BONUS_DESCENTE
 	)
 )
+-- Combien de fois le joueur est-il *obligé* de se servir de la capacité `c` ? Une capacité qui ne sert qu'au
+-- passage d'apprentissage est un gadget : la spec veut qu'elle reste nécessaire ensuite.
+--
+-- Un saut a -> b « exige `c` » s'il est possible avec les capacités dont on dispose en a mais impossible sans `c`.
+-- On cherche la route du départ au dernier checkpoint qui en compte le moins : ce minimum est le nombre de sauts
+-- que *personne* ne peut éviter, quel que soit le chemin pris. Compter les sauts exigeants d'un seul chemin ne
+-- prouverait rien (il suffirait d'un détour facile à côté) ; le minimum, lui, se prouve.
+--
+-- Parcours à moindre coût (0-1 BFS) sur les états (plateforme, capacités en main) : le coût d'une arête vaut 1 si
+-- elle exige `c`, 0 sinon, et une arête de coût 0 passe en tête de file. Avant la dalle de `c` aucune arête ne
+-- peut coûter 1 (on n'a pas `c`) : on mesure donc bien ce qui est exigé *après* le déblocage.
+local MIN_EXIGENCES = 3
+local dernierCp = 0
+for _, p in plateformes do
+	if p.cp and p.cp > dernierCp then
+		dernierCp = p.cp
+	end
+end
+
+type Etape = { avant: number, depuis: number, vers: number, exigeant: boolean }
+local function exigences(c: number): (number, { string })
+	local cout: { [number]: number } = {}
+	local venant: { [number]: Etape } = {}
+	-- File à deux bouts : `tete` (arrivées par une arête gratuite, en pile) puis `queue` (arêtes à 1, en file).
+	local tete, queue = {}, {}
+	local function poser(k: number, c0: number, etape: Etape?, gratuit: boolean)
+		if cout[k] and cout[k] <= c0 then
+			return
+		end
+		cout[k] = c0
+		venant[k] = etape
+		table.insert(if gratuit then tete else queue, k)
+	end
+	local depuisDepart = depart * 8 + bit32.bor(acquises, plateformes[depart].donne or 0)
+	poser(depuisDepart, 0, nil, true)
+	while #tete > 0 or #queue > 0 do
+		local k = if #tete > 0 then table.remove(tete) else table.remove(queue, 1)
+		local caps = k % 8
+		local i = (k - caps) // 8
+		local c0 = cout[k]
+		for j, q in plateformes do
+			if j == i or not sautPossible(plateformes[i], q, caps) then
+				continue
+			end
+			local exigeant = not sautPossible(plateformes[i], q, bit32.band(caps, bit32.bnot(c)))
+			local suivant = j * 8 + bit32.bor(caps, q.donne or 0)
+			poser(
+				suivant,
+				c0 + (if exigeant then 1 else 0),
+				{ avant = k, depuis = i, vers = j, exigeant = exigeant },
+				not exigeant
+			)
+		end
+	end
+	local arrivee, coutArrivee = nil, math.huge
+	for k, c0 in cout do
+		if plateformes[(k - k % 8) // 8].cp == dernierCp and c0 < coutArrivee then
+			arrivee, coutArrivee = k, c0
+		end
+	end
+	if not arrivee then
+		return -1, {} -- le dernier checkpoint n'est pas atteignable : signalé ailleurs
+	end
+	-- Les sauts exigeants de cette route la moins exigeante, du départ à l'arrivée.
+	local sauts, k = {}, arrivee
+	while venant[k] do
+		local e = venant[k]
+		if e.exigeant then
+			local a, b = plateformes[e.depuis], plateformes[e.vers]
+			table.insert(
+				sauts,
+				1,
+				string.format(
+					"%s (x %.0f, haut %.1f) -> %s (x %.0f, haut %.1f) : vide %.2f, montée %+.1f",
+					a.nom,
+					(a.x1 + a.x2) / 2,
+					a.haut,
+					b.nom,
+					(b.x1 + b.x2) / 2,
+					b.haut,
+					vide(a, b),
+					b.haut - a.haut
+				)
+			)
+		end
+		k = e.avant
+	end
+	return coutArrivee, sauts
+end
+
 for _, nom in ORDRE do
 	if not posees[nom] then
 		continue
@@ -271,6 +362,20 @@ for _, nom in ORDRE do
 	if #manquants == 0 and #sans == 0 then
 		print(`  DÉFAUT : le passage d'apprentissage de {nom} se franchit sans elle (porte sans effet)`)
 		defauts += 1
+	end
+	-- Une capacité ne doit pas servir qu'une fois : après sa dalle, le parcours doit l'exiger encore.
+	if #manquants == 0 then
+		local combien, sauts = exigences(CAPACITES[nom])
+		print(`    {combien} saut(s) exigent {nom} sur la route la moins exigeante (minimum {MIN_EXIGENCES}) :`)
+		for _, n in sauts do
+			print(`      {n}`)
+		end
+		if combien < MIN_EXIGENCES then
+			print(
+				`  DÉFAUT : {nom} n'est exigée que par {combien} saut(s) après son déblocage, il en faut {MIN_EXIGENCES}`
+			)
+			defauts += 1
+		end
 	end
 end
 
