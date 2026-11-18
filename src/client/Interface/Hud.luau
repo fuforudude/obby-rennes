@@ -449,7 +449,7 @@ function Hud.monter()
 	Remotes.obtenir("EtatCourse").OnClientEvent:Connect(function(nouvel: Remotes.EtatCourse)
 		afficherAura(nouvel.aura, nouvel.serie) -- avant `etat = nouvel` : la première réception n'est pas un gain
 		etat = nouvel
-		-- Les capacités débloquées : nouveau champ d'EtatCourse, absent tant que le serveur ne l'envoie pas.
+		-- Les capacités débloquées : champ `capacites` d'EtatCourse (pas encore dans le type de Remotes.luau).
 		IconesCapacites.definir((nouvel :: any).capacites)
 		afficherEtape()
 		if nouvel.etape ~= derniereEtapeVue then
@@ -466,8 +466,8 @@ function Hud.monter()
 		afficherChrono()
 	end)
 
-	-- L'état de l'ascension : hauteur, record, paliers débloqués, début du chrono, tentative classable. Remote absent
-	-- (tâche du gameplay pas encore fusionnée) : le HUD de la course reste tel quel.
+	-- L'état de l'ascension : hauteur, record, paliers débloqués, début du chrono, tentative classable. Si le remote
+	-- manquait quand même (`Composants.remote` renvoie nil), le HUD de la course reste tel quel.
 	local remoteAscension = Composants.remote("EtatAscension")
 	if remoteAscension then
 		remoteAscension.OnClientEvent:Connect(function(recu: any)
@@ -597,9 +597,10 @@ function Hud.monter()
 		Enum.KeyCode.ButtonY
 	)
 	ContextActionService:BindAction("HudMenu", action(basculerMenu), false, Enum.KeyCode.M, Enum.KeyCode.ButtonX)
-	-- P : le menu des paliers. B (manette) : le referme, et laisse passer la touche quand il est fermé.
+	-- P : le menu des paliers. Select (manette) : le referme, et laisse passer la touche quand il est fermé. Pas B :
+	-- B lance le dash (Capacites.luau) ; le bouton « Fermer » du menu reste sélectionnable à la manette.
 	ContextActionService:BindAction("HudPaliers", action(basculerPaliers), false, Enum.KeyCode.P)
-	ContextActionService:BindAction("HudPaliersFermer", action(MenuPaliers.fermer), false, Enum.KeyCode.ButtonB)
+	ContextActionService:BindAction("HudPaliersFermer", action(MenuPaliers.fermer), false, Enum.KeyCode.ButtonSelect)
 
 	-- Le chrono s'affiche dix fois par seconde : assez fluide, sans travail à chaque image.
 	local cumul = 0
