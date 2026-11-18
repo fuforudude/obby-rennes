@@ -37,6 +37,74 @@ local Reglages = {
 	EVENEMENT_DISTANCE_MAX = 40,
 	EVENEMENT_DELAI_MIN = 0.5,
 
+	-- Capacités de déplacement (Capacites.luau). Référence : personnage Roblox par défaut, marche 16 studs/s, saut de
+	-- 7,2 studs de haut (JumpHeight 7.2, gravité 196,2) : un saut dure ~0,54 s et porte à ~8,7 studs en marchant.
+	-- Course : la vitesse de marche est multipliée par COURSE_FACTEUR (16 -> 24 studs/s) ; le champ de vision gagne
+	-- COURSE_FOV_BONUS degrés tant qu'on court (70 -> 80 par défaut).
+	COURSE_FACTEUR = 1.5,
+	COURSE_FOV_BONUS = 10,
+	-- Dash : pendant DASH_DUREE secondes, vitesse horizontale imposée de DASH_VITESSE studs/s. 70 x 0,2 = 14 studs
+	-- parcourus, contre 3,2 (marche) ou 4,8 (course) sans dash : un saut s'allonge de 10,8 ou 9,2 studs (visé : 8 à 12).
+	DASH_VITESSE = 70,
+	DASH_DUREE = 0.2,
+	-- Dash lancé au sol : il se recharge après ce délai (s) si le joueur est resté au sol ; en l'air, à l'atterrissage.
+	-- Empêche d'enchaîner des dash au sol en continu (14 studs toutes les 0,2 s = 70 studs/s en permanence).
+	DASH_RECHARGE_SOL = 0.6,
+	-- Double saut : l'impulsion du second saut vaut SAUT_DOUBLE_FACTEUR x celle du premier. 1 = un second saut aussi
+	-- haut que le premier (7,2 + 7,2 = 14,4 studs au total au mieux, en le lançant au sommet du premier).
+	SAUT_DOUBLE_FACTEUR = 1,
+	-- Durée (s) du tour complet du personnage pendant le double saut (rotation calculée par le code).
+	VRILLE_DUREE = 0.45,
+	-- Surveillance serveur : la position de chaque joueur est relevée toutes les SURVEILLANCE_PERIODE secondes, et son
+	-- déplacement est comparé à ce que ses capacités permettent sur une **fenêtre glissante** de SURVEILLANCE_FENETRE
+	-- secondes (et non d'un relevé au suivant). Au-delà de (maximum x SURVEILLANCE_MARGE + SURVEILLANCE_TOLERANCE
+	-- studs) sur la fenêtre, le joueur est ramené à sa dernière position valide. La tolérance fixe absorbe le retard de
+	-- réplication, les plateformes mobiles et les bousculades des obstacles ; la marge relative, l'écart entre le
+	-- modèle et la physique réelle.
+	-- Pourquoi une fenêtre longue : le maximum contient un terme fixe (la hauteur d'un envol, 14,4 studs, qu'il faut
+	-- autoriser au cas où la fenêtre tombe pile sur un décollage). Sur 0,5 s il valait à lui seul plus que la montée
+	-- mesurée, et le plafond montait à 84 studs/s contre 26,6 réellement tenables : un script de vol passait. Étalé
+	-- sur 2,5 s, il pèse cinq fois moins : plafonds de 44,4 studs/s en montée et 57,5 studs/s sur le plan (contre 84
+	-- et 67,1), toujours au-dessus du mieux qu'un joueur fait vraiment (26,6 en montée, 42,4 sur le plan avec les
+	-- dashs enchaînés). Prix payé : jusqu'à SURVEILLANCE_FENETRE secondes avant la première alerte après une
+	-- apparition ou une téléportation décidée par le serveur, le temps que la fenêtre se remplisse.
+	SURVEILLANCE_PERIODE = 0.5,
+	SURVEILLANCE_FENETRE = 2.5,
+	SURVEILLANCE_MARGE = 1.3,
+	SURVEILLANCE_TOLERANCE = 6,
+
+	-- Ascension (au-dessus de Sup de Vinci). Aura d'un étage franchi : ASCENSION_AURA_BASE pour le premier étage,
+	-- puis ASCENSION_AURA_PAR_ETAGE de plus à chaque étage (étage n = BASE + PAR_ETAGE × (n − 1)). Monter haut est
+	-- le vrai gain : avec 100 et 40, l'étage 1 rapporte 100 et l'étage 17 en rapporte 740, sept fois plus.
+	-- La tour en construit 17 (outils/monde/Ascension.luau, un étage tous les 15 studs sur 258) : une ascension
+	-- entière rapporte 7 140 d'aura (Ascension.auraAscension), à comparer aux 16 500 d'un tuto parfait (15
+	-- checkpoints en série, puis 1 000 + 5 000 à l'arrivée) : le tuto reste le gros coup unique, l'ascension
+	-- devient la raison de revenir (elle se refait, lui non). Un étage ne rapporte qu'une fois par tentative.
+	ASCENSION_AURA_BASE = 100,
+	ASCENSION_AURA_PAR_ETAGE = 40,
+	-- Téléportation vers un palier débloqué : pas plus d'une fois toutes les 2 secondes (anti-triche).
+	PALIER_DELAI_TELEPORT = 2,
+	-- Une ascension plus rapide que ça est impossible à la main : son chrono n'entre pas au classement, comme
+	-- TEMPS_MIN_CLASSABLE pour le tuto. À recalibrer sur la tour réelle (au moins 250 studs) : avec le double
+	-- saut et le dash, un joueur très bon monte de l'ordre de 15 studs/s, donc jamais la tour en moins de 15 s.
+	ASCENSION_TEMPS_MIN_CLASSABLE = 15,
+	-- Suivi de la hauteur pendant l'ascension : relevé toutes les ASCENSION_PERIODE_SUIVI secondes, et l'état n'est
+	-- renvoyé au client que si la hauteur a bougé d'au moins ASCENSION_PAS_ETAT studs (pas à chaque image).
+	ASCENSION_PERIODE_SUIVI = 0.25,
+	ASCENSION_PAS_ETAT = 2,
+	-- Après une téléportation vers un palier, les étages au-dessus du palier d'arrivée paient normalement, ceux en
+	-- dessous ne paient rien. Cette marge (studs) évite de payer l'étage posé sur la dalle même du palier.
+	ASCENSION_MARGE_PALIER = 2,
+	-- Hauteur (studs au-dessus du pied) en dessous de laquelle retoucher le pied ne relance pas le chrono : sans ça,
+	-- rester posé sur la plateforme de départ le remettrait à zéro sans arrêt.
+	ASCENSION_SEUIL_DEPART = 8,
+	-- Hauteur (studs au-dessus du pied, donc négative) sous laquelle un joueur en tentative est renvoyé au pied et
+	-- recommence. « Tomber renvoie au pied » : sans ça, une chute depuis un palier se terminait sur le toit de Sup de
+	-- Vinci (10 studs sous le pied, rien de mortel dans la tour), où le joueur survivait, gardait sa tentative et son
+	-- chrono, et où retoucher le pied en remontant ne relançait rien (il était déjà sous ASCENSION_SEUIL_DEPART).
+	-- −2 studs : juste sous le dessus du pied, assez bas pour qu'y marcher ne déclenche rien.
+	ASCENSION_HAUTEUR_GARDE = -2,
+
 	TAILLE_CLASSEMENT = 10,
 	DELAI_RAFRAICHIR_CLASSEMENT = 60, -- secondes
 	DELAI_MIN_ENTRE_DEMANDES = 1, -- secondes, pour « Recommencer »
@@ -47,6 +115,8 @@ local Reglages = {
 	STORE_JOUEURS = "Joueurs_v1",
 	STORE_CLASSEMENT = "MeilleursTemps_v1",
 	STORE_AURA = "Aura_v1",
+	STORE_HAUTEUR = "HauteurAscension_v1",
+	STORE_ASCENSION = "TempsAscension_v1",
 }
 
 return table.freeze(Reglages)

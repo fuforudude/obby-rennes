@@ -6,6 +6,7 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Capacites = require(script.Parent.Capacites)
 local Classement = require(script.Parent.Classement)
 local Donnees = require(script.Parent.Donnees)
 local Reglages = require(ReplicatedStorage.Partage.Reglages)
@@ -19,6 +20,9 @@ local demanderRecommencer = Remotes.obtenir("DemanderRecommencer")
 local checkpoints: { [number]: BasePart } = {}
 local courses: { [Player]: Regles.Course } = {}
 local derniereDemande: { [Player]: number } = {}
+-- Services qui doivent lâcher le joueur quand il clique « Recommencer » (src/serveur/Ascension.luau y abandonne la
+-- tentative d'ascension). Un abonnement plutôt qu'un require : Ascension requiert déjà Parcours.
+local avantRecommencer: { (Player) -> () } = {}
 
 local function maintenant(): number
 	return workspace:GetServerTimeNow()
@@ -30,15 +34,10 @@ local function envoyerEtat(joueur: Player)
 	if not donnees or not course then
 		return
 	end
-	etatCourse:FireClient(joueur, {
-		etape = donnees.etape,
-		debut = course.debut,
-		passages = course.passages,
-		reprise = course.reprise,
-		meilleurTemps = donnees.meilleurTemps,
-		aura = donnees.aura,
-		serie = course.serie,
-	})
+	-- La forme de la charge est tenue par la fonction pure et testée `Remotes.etatCourse`. Les capacités débloquées
+	-- en font partie : c'est la seule source du client quand il arrive sur le serveur (le remote CapaciteDebloquee
+	-- ne part qu'à l'instant d'un déblocage, un joueur qui revient le lendemain ne le reçoit jamais).
+	etatCourse:FireClient(joueur, Remotes.etatCourse(donnees, course, Capacites.debloquees(joueur)))
 end
 
 --- Aura du joueur changée : liste des joueurs (leaderstats) et classement mondial (envoyé par lots).
@@ -64,11 +63,23 @@ local function creerLeaderstats(joueur: Player, donnees: Regles.Donnees)
 	stats.Parent = joueur
 end
 
+--- Cette réapparition est-elle celle de l'ascension ? Un joueur qui a fini le tuto et qui est dans l'ascension
+--- (attribut `EnAscension` posé par src/serveur/Ascension.luau) est placé par ce service-là, au pied de
+--- l'ascension, pas ici. « A fini le tuto » vient de `Regles.ascensionOuverte` (donc `donnees.tutoFini`), la même
+--- fonction que l'ouverture de l'ascension côté src/serveur/Ascension.luau : les deux services doivent toujours dire
+--- la même chose, sinon ils se disputent la réapparition.
+local function placeParAscension(joueur: Player, donnees: Regles.Donnees): boolean
+	return Regles.placeParAscension(joueur:GetAttribute("EnAscension") == true, donnees)
+end
+
 --- Pose le personnage sur son dernier checkpoint, tourné vers la suite du parcours (+X).
 local function placer(joueur: Player)
 	local donnees = Donnees.obtenir(joueur)
 	local personnage = joueur.Character
 	if not donnees or not personnage then
+		return
+	end
+	if placeParAscension(joueur, donnees) then
 		return
 	end
 	local cp = checkpoints[donnees.etape]
@@ -77,6 +88,12 @@ local function placer(joueur: Player)
 	end
 	local position = cp.Position + Vector3.new(0, cp.Size.Y / 2 + 3, 0)
 	personnage:PivotTo(CFrame.lookAt(position, position + Vector3.xAxis))
+	-- Ce déplacement vient du serveur : la surveillance ne doit pas le prendre pour de la triche. L'appel est ici,
+	-- dans la même image que le PivotTo, et pas chez les appelants : deux d'entre eux arrivent après la fenêtre
+	-- d'apparition de 3 s (`surChargement` quand le chargement des données a traîné — reconnexion rapide, verrou de
+	-- session — et `Parcours.placerAuCheckpoint` après le WaitForChild de 5 s ci-dessus), et le joueur serait alors
+	-- ramené au point d'apparition de Roblox, hors du parcours, et marqué suspect.
+	Capacites.autoriserTeleportation(joueur)
 end
 
 local function terminer(joueur: Player)
@@ -87,6 +104,7 @@ local function terminer(joueur: Player)
 	end
 	local duree = maintenant() - (course.debut :: number)
 	course.debut = nil -- le chrono s'arrête
+	donnees.tutoFini = true -- arrivée atteinte : l'ascension s'ouvre, pour toujours (« Recommencer » n'y change rien)
 	local classable = Regles.estClassable(course, duree, Reglages.TEMPS_MIN_CLASSABLE)
 	local record = classable and Regles.estRecord(donnees.meilleurTemps, duree)
 	if record then
@@ -135,7 +153,8 @@ end
 local function surChute(joueur: Player)
 	local donnees = Donnees.obtenir(joueur)
 	local course = courses[joueur]
-	if not donnees or not course or donnees.etape >= Reglages.NB_ETAPES then
+	-- Pas de perte d'aura à l'arrivée, ni dans l'ascension.
+	if not donnees or not course or donnees.etape >= Reglages.NB_ETAPES or placeParAscension(joueur, donnees) then
 		return
 	end
 	course.serie = 0
@@ -169,13 +188,46 @@ local function recommencer(joueur: Player)
 		return
 	end
 	derniereDemande[joueur] = instant
-	donnees.etape = 0
+	-- D'abord on ferme la tentative d'ascension en cours (attribut EnAscension à false) : sans ça, le joueur serait
+	-- remis au pied de l'ascension et non au départ du tuto. Aucune aura n'est touchée, rien n'est classé.
+	for _, fonction in avantRecommencer do
+		local ok, erreur = pcall(fonction, joueur)
+		if not ok then
+			warn(`[Parcours] abandon avant « Recommencer » en échec : {erreur}`)
+		end
+	end
+	Regles.recommencer(donnees)
 	courses[joueur] = Regles.nouvelleCourse(maintenant())
 	joueur:LoadCharacter() -- le nouveau personnage est posé au départ par CharacterAdded
 	envoyerEtat(joueur)
 end
 
 local Parcours = {}
+
+--- Abonne un service à « Recommencer » : `fonction(joueur)` est appelée avant que le joueur soit renvoyé au départ.
+function Parcours.avantRecommencer(fonction: (Player) -> ())
+	table.insert(avantRecommencer, fonction)
+end
+
+--- Replace le joueur sur son dernier checkpoint. Sert à src/serveur/Ascension.luau, qui rend la main quand il n'a
+--- pas réussi à poser le joueur au pied de l'ascension : sans ça, plus personne ne le placerait.
+function Parcours.placerAuCheckpoint(joueur: Player)
+	placer(joueur)
+end
+
+--- Ajoute de l'aura au joueur et la fait suivre partout : liste des joueurs, classement (par lots) et état du
+--- client. Même chemin que l'aura des checkpoints. Sert aux étages de l'ascension (src/serveur/Ascension.luau).
+--- Rend false si les données ne sont pas chargées ou si le gain est nul.
+function Parcours.ajouterAura(joueur: Player, gain: number): boolean
+	local donnees = Donnees.obtenir(joueur)
+	if not donnees or gain <= 0 then
+		return false
+	end
+	donnees.aura += math.floor(gain)
+	majAura(joueur, donnees)
+	envoyerEtat(joueur)
+	return true
+end
 
 --- Avance le joueur d'une étape (achat Robux). Rend false s'il n'y a plus d'étape à passer.
 function Parcours.passerEtape(joueur: Player): boolean
@@ -187,7 +239,7 @@ function Parcours.passerEtape(joueur: Player): boolean
 	donnees.etape += 1
 	course.passages += 1
 	course.serie = 0 -- une étape achetée ne rapporte pas d'aura et casse la série
-	placer(joueur)
+	placer(joueur) -- prévient la surveillance lui-même
 	if donnees.etape == Reglages.NB_ETAPES then
 		terminer(joueur)
 	end
@@ -214,6 +266,10 @@ function Parcours.demarrer()
 	end
 
 	Donnees.surChargement(surChargement)
+	-- Un déblocage change l'état de la course (`capacites`) : on le renvoie, sans attendre le prochain checkpoint.
+	Capacites.surDeblocage(function(joueur)
+		envoyerEtat(joueur)
+	end)
 
 	local function suivre(joueur: Player)
 		joueur.CharacterAdded:Connect(function(personnage)

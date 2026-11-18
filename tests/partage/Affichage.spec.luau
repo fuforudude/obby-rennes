@@ -83,4 +83,209 @@ return function()
 			expect(r.record).to.equal(nil)
 		end)
 	end)
+
+	-- Un formateur de hauteur de test : « 182 m » vient d'Ascension.formaterHauteur, que ce module ne connaît pas.
+	local function metres(studs: number): string
+		return `{math.floor(studs * 0.28 + 0.5)} m`
+	end
+
+	describe("les capacités", function()
+		it("reconnaît les trois capacités et rien d'autre", function()
+			expect(Affichage.capacite("course")).to.equal("course")
+			expect(Affichage.capacite("doubleSaut")).to.equal("doubleSaut")
+			expect(Affichage.capacite("dash")).to.equal("dash")
+			expect(Affichage.capacite("vol")).to.equal(nil)
+			expect(Affichage.capacite(12)).to.equal(nil)
+			expect(Affichage.capacite(nil)).to.equal(nil)
+		end)
+	end)
+
+	describe("les icônes des capacités", function()
+		it("n'en montre aucune tant que rien n'est débloqué", function()
+			expect(#Affichage.icones({}, nil, nil)).to.equal(0)
+			expect(#Affichage.icones(nil, nil, nil)).to.equal(0)
+			expect(#Affichage.icones("n'importe quoi", nil, nil)).to.equal(0)
+		end)
+		it("ne montre que les capacités débloquées, dans l'ordre course, double saut, dash", function()
+			local icones = Affichage.icones({ dash = true, course = true, doubleSaut = false }, nil, nil)
+			expect(#icones).to.equal(2)
+			expect(icones[1].capacite).to.equal("course")
+			expect(icones[2].capacite).to.equal("dash")
+		end)
+		it("ignore une capacité inconnue ou une valeur qui n'est pas vraie", function()
+			local icones = Affichage.icones({ vol = true, course = "oui" }, nil, nil)
+			expect(#icones).to.equal(0)
+		end)
+		it("les montre disponibles quand les attributs du contrôleur n'existent pas encore", function()
+			local icones = Affichage.icones({ course = true, doubleSaut = true, dash = true }, nil, nil)
+			expect(#icones).to.equal(3)
+			for _, icone in icones do
+				expect(icone.disponible).to.equal(true)
+			end
+		end)
+		it("grise le double saut ou le dash consommé, pas la course", function()
+			local tout = { course = true, doubleSaut = true, dash = true }
+			local icones = Affichage.icones(tout, false, true)
+			expect(icones[1].disponible).to.equal(true)
+			expect(icones[2].disponible).to.equal(false)
+			expect(icones[3].disponible).to.equal(true)
+			icones = Affichage.icones(tout, true, false)
+			expect(icones[2].disponible).to.equal(true)
+			expect(icones[3].disponible).to.equal(false)
+		end)
+		it("ne montre pas de capacité non débloquée, même consommée", function()
+			local icones = Affichage.icones({ course = true }, false, false)
+			expect(#icones).to.equal(1)
+			expect(icones[1].disponible).to.equal(true)
+		end)
+	end)
+
+	describe("l'annonce d'un déblocage", function()
+		it("donne la touche au clavier : Maj, Espace, A", function()
+			expect((Affichage.annonce("course", false) :: any).touche).to.equal("Maj")
+			expect((Affichage.annonce("doubleSaut", false) :: any).touche).to.equal("Espace")
+			expect((Affichage.annonce("dash", false) :: any).touche).to.equal("A")
+		end)
+		it("ne donne pas de touche sur mobile (on parle du bouton)", function()
+			local annonce = Affichage.annonce("dash", true) :: any
+			expect(annonce.capacite).to.equal("dash")
+			expect(annonce.touche).to.equal(nil)
+		end)
+		it("ignore une capacité inconnue", function()
+			expect(Affichage.annonce("vol", false)).to.equal(nil)
+			expect(Affichage.annonce(nil, true)).to.equal(nil)
+		end)
+	end)
+
+	describe("la hauteur et le record", function()
+		local etat =
+			{ enAscension = true, hauteur = 650, meilleureHauteur = 900, paliers = {}, debut = 10, classable = true }
+		it("met la hauteur et le record en forme avec le formateur d'Ascension", function()
+			local r = Affichage.ascension(etat, metres)
+			expect(r.hauteur).to.equal("182 m")
+			expect(r.record).to.equal("252 m")
+			expect(r.nonClasse).to.equal(false)
+		end)
+		it("n'a pas de record avant une première hauteur", function()
+			local r = Affichage.ascension({
+				enAscension = true,
+				hauteur = 10,
+				meilleureHauteur = 0,
+				paliers = {},
+				debut = nil,
+				classable = true,
+			}, metres)
+			expect(r.record).to.equal(nil)
+		end)
+		it("signale une tentative non classable", function()
+			local r = Affichage.ascension({
+				enAscension = true,
+				hauteur = 10,
+				meilleureHauteur = 5,
+				paliers = { 1 },
+				debut = 4,
+				classable = false,
+			}, metres)
+			expect(r.nonClasse).to.equal(true)
+		end)
+		it("ne rend jamais une hauteur négative", function()
+			local r = Affichage.ascension({
+				enAscension = true,
+				hauteur = -40,
+				meilleureHauteur = 0,
+				paliers = {},
+				debut = nil,
+				classable = true,
+			}, metres)
+			expect(r.hauteur).to.equal("0 m")
+		end)
+	end)
+
+	describe("le menu des paliers", function()
+		it("n'existe qu'à partir d'un palier débloqué", function()
+			expect(Affichage.paliersDisponibles({})).to.equal(false)
+			expect(Affichage.paliersDisponibles(nil)).to.equal(false)
+			expect(Affichage.paliersDisponibles({ 1 })).to.equal(true)
+		end)
+		it("reconnaît deux listes de paliers identiques : rien à reconstruire", function()
+			expect(Affichage.memesPaliers({ 1, 2, 3 }, { 1, 2, 3 })).to.equal(true)
+			expect(Affichage.memesPaliers({}, {})).to.equal(true)
+		end)
+		it(
+			"ne voit pas de changement quand seul l'ordre ou les doublons diffèrent (le menu affiche pareil)",
+			function()
+				expect(Affichage.memesPaliers({ 3, 1, 2 }, { 1, 2, 3 })).to.equal(true)
+				expect(Affichage.memesPaliers({ 1, 1, 2 }, { 2, 1 })).to.equal(true)
+			end
+		)
+		it("voit un palier ajouté", function()
+			expect(Affichage.memesPaliers({ 1, 2 }, { 1, 2, 3 })).to.equal(false)
+			expect(Affichage.memesPaliers({}, { 1 })).to.equal(false)
+		end)
+		it("voit un palier retiré (le retour à zéro après une remise à neuf)", function()
+			expect(Affichage.memesPaliers({ 1, 2, 3 }, { 1, 3 })).to.equal(false)
+			expect(Affichage.memesPaliers({ 1 }, {})).to.equal(false)
+		end)
+		it("voit un palier remplacé par un autre de même nombre", function()
+			expect(Affichage.memesPaliers({ 1, 2 }, { 1, 3 })).to.equal(false)
+		end)
+		it("traite nil et une liste invalide comme une liste vide", function()
+			expect(Affichage.memesPaliers(nil, {})).to.equal(true)
+			expect(Affichage.memesPaliers(nil, nil)).to.equal(true)
+			expect(Affichage.memesPaliers("x", { 99, -1 })).to.equal(true)
+			expect(Affichage.memesPaliers(nil, { 1 })).to.equal(false)
+			expect(Affichage.memesPaliers({ 2 }, nil)).to.equal(false)
+		end)
+		it("liste 5 paliers tant que la carte n'est pas connue, dont les non débloqués", function()
+			local lignes = Affichage.lignesPaliers({ 1, 2 }, {}, metres)
+			expect(#lignes).to.equal(5)
+			expect(lignes[1].debloque).to.equal(true)
+			expect(lignes[2].debloque).to.equal(true)
+			expect(lignes[3].debloque).to.equal(false)
+			expect(lignes[5].numero).to.equal(5)
+			expect(lignes[1].hauteur).to.equal(nil)
+		end)
+		it("donne la hauteur du palier quand la carte la connaît", function()
+			local lignes = Affichage.lignesPaliers({ 2 }, { [1] = 214, [2] = 430 }, metres)
+			expect(#lignes).to.equal(2)
+			expect(lignes[1].hauteur).to.equal("60 m")
+			expect(lignes[1].debloque).to.equal(false)
+			expect(lignes[2].hauteur).to.equal("120 m")
+			expect(lignes[2].debloque).to.equal(true)
+		end)
+		it("lit la hauteur d'un palier au-dessus du pied : HauteurRelative d'abord", function()
+			expect(Affichage.hauteurPalier(180, 246, 66)).to.equal(180)
+			expect(Affichage.hauteurPalier(0, 66, 66)).to.equal(0)
+			-- HauteurRelative prime même si Hauteur (Y absolu) dit autre chose
+			expect(Affichage.hauteurPalier(60, 126, 0)).to.equal(60)
+		end)
+		it("se replie sur Hauteur moins le pied, sans jamais rendre le Y absolu", function()
+			expect(Affichage.hauteurPalier(nil, 246, 66)).to.equal(180)
+			expect(Affichage.hauteurPalier("x", 126, 66)).to.equal(60)
+			expect(Affichage.hauteurPalier(nil, 246, nil)).to.equal(nil)
+			expect(Affichage.hauteurPalier(nil, nil, 66)).to.equal(nil)
+		end)
+		it("n'affiche pas de hauteur plutôt qu'un chiffre faux", function()
+			expect(Affichage.hauteurPalier(nil, nil, nil)).to.equal(nil)
+			expect(Affichage.hauteurPalier(-5, nil, nil)).to.equal(nil)
+			expect(Affichage.hauteurPalier(0 / 0, 100, 200)).to.equal(nil) -- NaN ; Hauteur sous le pied
+			expect(Affichage.hauteurPalier(math.huge, nil, nil)).to.equal(nil)
+		end)
+		it("va jusqu'au plus haut palier connu", function()
+			expect(Affichage.nombrePaliers({ 1 }, { [4] = 800 })).to.equal(4)
+			expect(Affichage.nombrePaliers({ 3 }, { [1] = 100 })).to.equal(3)
+			expect(Affichage.nombrePaliers({}, {})).to.equal(Affichage.PALIERS_PAR_DEFAUT)
+		end)
+		it("ignore les numéros qui n'ont pas de sens, les doublons et l'ordre", function()
+			local lignes = Affichage.lignesPaliers({ 3, 3, 0, -1, 1.5, 99, "2", 1 }, { [3] = 300 }, metres)
+			expect(#lignes).to.equal(3)
+			expect(lignes[1].debloque).to.equal(true)
+			expect(lignes[2].debloque).to.equal(false)
+			expect(lignes[3].debloque).to.equal(true)
+		end)
+		it("ne casse pas sur une liste invalide", function()
+			expect(#Affichage.lignesPaliers(nil, {}, metres)).to.equal(5)
+			expect(#Affichage.lignesPaliers("x", {}, metres)).to.equal(5)
+		end)
+	end)
 end

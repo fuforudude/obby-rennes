@@ -1,13 +1,18 @@
 --!strict
--- Les deux classements mondiaux, chacun dans un OrderedDataStore et sur ses panneaux de la carte :
--- - meilleurs temps (millisecondes, le plus petit gagne), panneaux tagués « TableauClassement » ;
--- - plus grosse aura (aura totale, la plus grande gagne), panneaux tagués « TableauAura ».
--- L'aura change à chaque checkpoint : elle n'est pas écrite à chaque fois, mais envoyée par lots (budget DataStore).
+-- Les classements mondiaux, chacun dans un OrderedDataStore et sur ses panneaux de la carte :
+-- - meilleurs temps du tuto (millisecondes, le plus petit gagne), panneaux tagués « TableauClassement » ;
+-- - plus grosse aura (aura totale, la plus grande gagne), panneaux tagués « TableauAura » ;
+-- - plus grande hauteur atteinte dans l'ascension (studs, la plus grande gagne), panneaux « TableauHauteur » ;
+-- - meilleur chrono de l'ascension (millisecondes, le plus petit gagne), panneaux « TableauAscension ».
+-- Une valeur qui bouge sans arrêt (l'aura à chaque checkpoint, la hauteur à chaque relevé) n'est pas écrite à
+-- chaque fois : elle est notée dans `enAttente` et envoyée par lots, ou tout de suite au départ du joueur
+-- (budget DataStore). Un record rare (une arrivée, un sommet) est écrit au moment où il est soumis.
 local CollectionService = game:GetService("CollectionService")
 local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Ascension = require(ReplicatedStorage.Partage.Ascension)
 local Reglages = require(ReplicatedStorage.Partage.Reglages)
 local Regles = require(ReplicatedStorage.Partage.Regles)
 
@@ -17,6 +22,8 @@ type Tableau = {
 	croissant: boolean, -- true : le plus petit en tête (temps)
 	formater: (number) -> string,
 	vide: string,
+	-- UserId → valeur notée pas encore écrite, pour les tableaux envoyés par lots. nil : écriture à la soumission.
+	enAttente: { [number]: number }?,
 }
 
 local tableauTemps: Tableau = {
@@ -35,10 +42,32 @@ local tableauAura: Tableau = {
 	croissant = false,
 	formater = Regles.formaterAura,
 	vide = "Aucune aura pour l'instant.\nVa la chercher.",
+	enAttente = {},
 }
 
+local tableauHauteur: Tableau = {
+	store = nil,
+	tag = "TableauHauteur",
+	croissant = false,
+	formater = Ascension.formaterHauteur,
+	vide = "Personne n'est encore monté.\nLève la tête.",
+	enAttente = {},
+}
+
+local tableauAscension: Tableau = {
+	store = nil,
+	tag = "TableauAscension",
+	croissant = true,
+	formater = function(ms: number): string
+		return Regles.formaterTemps(ms / 1000)
+	end,
+	vide = "Personne n'a encore touché le sommet.\nVas-y.",
+}
+
+-- Tous les tableaux, dans l'ordre où ils s'affichent et s'envoient.
+local tableaux: { Tableau } = { tableauTemps, tableauAura, tableauHauteur, tableauAscension }
+
 local noms: { [number]: string } = {}
-local auraEnAttente: { [number]: number } = {} -- UserId → dernière aura pas encore écrite
 
 local function nomDe(idJoueur: number): string
 	if noms[idJoueur] then
@@ -65,6 +94,9 @@ local function afficher(tableau: Tableau, texte: string, centre: boolean)
 end
 
 local function rafraichirTableau(tableau: Tableau)
+	if #CollectionService:GetTagged(tableau.tag) == 0 then
+		return -- aucun panneau de ce tableau dans la carte : rien à écrire, et pas de lecture DataStore pour rien
+	end
 	local store = tableau.store
 	if not store then
 		afficher(tableau, "Classement indisponible", true)
@@ -116,48 +148,87 @@ local function ecrire(tableau: Tableau, idJoueur: number, valeur: number): boole
 	return ok
 end
 
-local Classement = {}
-
---- Relit les deux classements et met les panneaux à jour.
-function Classement.rafraichir()
-	rafraichirTableau(tableauTemps)
-	rafraichirTableau(tableauAura)
-end
-
---- Enregistre un temps (en secondes) s'il bat celui déjà classé pour ce joueur. Ne bloque pas l'appelant.
-function Classement.soumettre(joueur: Player, secondes: number)
+--- Soumet une valeur à un tableau : écrite tout de suite si elle bat celle déjà classée. Ne bloque pas l'appelant.
+local function soumettre(tableau: Tableau, joueur: Player, valeur: number)
 	local id = joueur.UserId
 	task.spawn(function()
-		if ecrire(tableauTemps, id, Regles.versMillisecondes(secondes)) then
-			rafraichirTableau(tableauTemps)
+		if ecrire(tableau, id, valeur) then
+			rafraichirTableau(tableau)
 		end
 	end)
 end
 
+--- Note une valeur qui bouge souvent : elle partira au prochain lot (ou au départ du joueur).
+local function signaler(tableau: Tableau, joueur: Player, valeur: number)
+	local attente = tableau.enAttente
+	if attente then
+		attente[joueur.UserId] = math.floor(valeur)
+	end
+end
+
+--- Écrit tout de suite la valeur en attente de ce joueur (à son départ). Ne bloque pas l'appelant.
+local function envoyerMaintenant(tableau: Tableau, joueur: Player)
+	local attente = tableau.enAttente
+	local id = joueur.UserId
+	local valeur = if attente then attente[id] else nil
+	if not attente or valeur == nil then
+		return
+	end
+	attente[id] = nil
+	task.spawn(ecrire, tableau, id, valeur)
+end
+
+local function envoyerLot(tableau: Tableau)
+	local lot = tableau.enAttente
+	if not lot then
+		return
+	end
+	local suite: { [number]: number } = {}
+	tableau.enAttente = suite
+	for id, valeur in lot do
+		if valeur > 0 and not ecrire(tableau, id, valeur) and suite[id] == nil then
+			suite[id] = valeur -- échec : on réessaiera au prochain lot
+		end
+	end
+end
+
+local Classement = {}
+
+--- Relit tous les classements et met les panneaux à jour.
+function Classement.rafraichir()
+	for _, tableau in tableaux do
+		rafraichirTableau(tableau)
+	end
+end
+
+--- Enregistre un temps de parcours (en secondes) s'il bat celui déjà classé pour ce joueur.
+function Classement.soumettre(joueur: Player, secondes: number)
+	soumettre(tableauTemps, joueur, Regles.versMillisecondes(secondes))
+end
+
+--- Enregistre un chrono d'ascension (en secondes) s'il bat celui déjà classé pour ce joueur.
+function Classement.soumettreAscension(joueur: Player, secondes: number)
+	soumettre(tableauAscension, joueur, Regles.versMillisecondes(secondes))
+end
+
 --- Note la nouvelle aura du joueur ; elle partira au prochain lot (ou à son départ).
 function Classement.signalerAura(joueur: Player, aura: number)
-	auraEnAttente[joueur.UserId] = math.floor(aura)
+	signaler(tableauAura, joueur, aura)
 end
 
 --- Écrit tout de suite l'aura en attente de ce joueur (à son départ). Ne bloque pas l'appelant.
 function Classement.envoyerAura(joueur: Player)
-	local id = joueur.UserId
-	local aura = auraEnAttente[id]
-	if aura == nil then
-		return
-	end
-	auraEnAttente[id] = nil
-	task.spawn(ecrire, tableauAura, id, aura)
+	envoyerMaintenant(tableauAura, joueur)
 end
 
-local function envoyerLot()
-	local lot = auraEnAttente
-	auraEnAttente = {}
-	for id, aura in lot do
-		if aura > 0 and not ecrire(tableauAura, id, aura) and auraEnAttente[id] == nil then
-			auraEnAttente[id] = aura -- échec : on réessaiera au prochain lot
-		end
-	end
+--- Note la nouvelle hauteur maximale du joueur (en studs) ; elle partira au prochain lot (ou à son départ).
+function Classement.signalerHauteur(joueur: Player, studs: number)
+	signaler(tableauHauteur, joueur, studs)
+end
+
+--- Écrit tout de suite la hauteur en attente de ce joueur (à son départ). Ne bloque pas l'appelant.
+function Classement.envoyerHauteur(joueur: Player)
+	envoyerMaintenant(tableauHauteur, joueur)
 end
 
 local function ouvrir(nom: string): OrderedDataStore?
@@ -172,9 +243,13 @@ end
 function Classement.demarrer()
 	tableauTemps.store = ouvrir(Reglages.STORE_CLASSEMENT)
 	tableauAura.store = ouvrir(Reglages.STORE_AURA)
+	tableauHauteur.store = ouvrir(Reglages.STORE_HAUTEUR)
+	tableauAscension.store = ouvrir(Reglages.STORE_ASCENSION)
 	task.spawn(function()
 		while true do
-			envoyerLot()
+			for _, tableau in tableaux do
+				envoyerLot(tableau)
+			end
 			Classement.rafraichir()
 			task.wait(Reglages.DELAI_RAFRAICHIR_CLASSEMENT)
 		end

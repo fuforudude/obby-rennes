@@ -126,6 +126,185 @@ return function()
 		end)
 	end)
 
+	describe("capacités et ascension dans les données sauvegardées", function()
+		it("un joueur neuf n'a aucune capacité, aucun palier et aucun record d'ascension", function()
+			local d = Regles.donneesNeuves()
+			expect(next(d.capacites)).never.to.be.ok()
+			expect(#d.paliers).to.equal(0)
+			expect(d.meilleureHauteur).to.equal(0)
+			expect(d.meilleurTempsAscension).to.equal(0)
+		end)
+
+		it("un joueur existant reçoit les nouveaux champs vides sans rien perdre", function()
+			local d = Regles.migrer({ etape = 9, meilleurTemps = 300, aura = 4200, achats = { "a1" } }, 15)
+			expect(d.etape).to.equal(9)
+			expect(d.meilleurTemps).to.equal(300)
+			expect(d.aura).to.equal(4200)
+			expect(d.achats[1]).to.equal("a1")
+			expect(next(d.capacites)).never.to.be.ok()
+			expect(#d.paliers).to.equal(0)
+			expect(d.meilleureHauteur).to.equal(0)
+			expect(d.meilleurTempsAscension).to.equal(0)
+		end)
+
+		it("garde les capacités débloquées", function()
+			local d = Regles.migrer({ capacites = { course = true, dash = true } }, 15)
+			expect(d.capacites.course).to.equal(true)
+			expect(d.capacites.dash).to.equal(true)
+			expect(d.capacites.doubleSaut).never.to.be.ok()
+		end)
+
+		it("n'invente pas une capacité à partir de données abîmées", function()
+			local d = Regles.migrer({ capacites = { course = false, dash = "oui", [7] = true } }, 15)
+			expect(next(d.capacites)).never.to.be.ok()
+			expect(next(Regles.migrer({ capacites = "course" }, 15).capacites)).never.to.be.ok()
+		end)
+
+		it("garde les paliers atteints, sans doublon et rangés", function()
+			local d = Regles.migrer({ paliers = { 3, 1, 3 } }, 15)
+			expect(#d.paliers).to.equal(2)
+			expect(d.paliers[1]).to.equal(1)
+			expect(d.paliers[2]).to.equal(3)
+		end)
+
+		it("écarte un numéro de palier absurde (sans le ramener dans les bornes)", function()
+			local d = Regles.migrer({ paliers = { 0, 42, -2, 2.5, 0 / 0, "2", 4 } }, 15)
+			expect(#d.paliers).to.equal(1)
+			expect(d.paliers[1]).to.equal(4)
+		end)
+
+		it("garde un palier au-delà des cinq d'aujourd'hui (la carte décide, pas la sauvegarde)", function()
+			local d = Regles.migrer({ paliers = { 6 } }, 15)
+			expect(#d.paliers).to.equal(1)
+			expect(d.paliers[1]).to.equal(6)
+		end)
+
+		it("garde la meilleure hauteur et le meilleur temps d'ascension", function()
+			local d = Regles.migrer({ meilleureHauteur = 182.7, meilleurTempsAscension = 73.5 }, 15)
+			expect(d.meilleureHauteur).to.equal(182)
+			expect(d.meilleurTempsAscension).to.equal(73.5)
+		end)
+
+		it("écarte une hauteur ou un temps d'ascension abîmés", function()
+			expect(Regles.migrer({ meilleureHauteur = -40 }, 15).meilleureHauteur).to.equal(0)
+			expect(Regles.migrer({ meilleureHauteur = 0 / 0 }, 15).meilleureHauteur).to.equal(0)
+			expect(Regles.migrer({ meilleureHauteur = math.huge }, 15).meilleureHauteur).to.equal(0)
+			expect(Regles.migrer({ meilleurTempsAscension = "73" }, 15).meilleurTempsAscension).to.equal(0)
+			expect(Regles.migrer({ meilleurTempsAscension = -1 }, 15).meilleurTempsAscension).to.equal(0)
+		end)
+	end)
+
+	describe("le tuto fini ouvre l'ascension, et « Recommencer » ne la referme pas (tutoFini)", function()
+		it("un joueur neuf n'a pas fini le tuto", function()
+			expect(Regles.donneesNeuves().tutoFini).to.equal(false)
+		end)
+
+		it("un joueur existant arrivé au bout du tuto le reçoit à true", function()
+			expect(Regles.migrer({ etape = 15 }, 15).tutoFini).to.equal(true)
+			expect(Regles.migrer({ etape = 99 }, 15).tutoFini).to.equal(true) -- étape abîmée, ramenée à 15
+		end)
+
+		it("un joueur existant en route le reçoit à false", function()
+			expect(Regles.migrer({ etape = 14 }, 15).tutoFini).to.equal(false)
+			expect(Regles.migrer({ etape = 0 }, 15).tutoFini).to.equal(false)
+			expect(Regles.migrer({}, 15).tutoFini).to.equal(false)
+			expect(Regles.migrer(nil, 15).tutoFini).to.equal(false)
+		end)
+
+		it("garde tutoFini quand l'étape est repartie à 0 après « Recommencer »", function()
+			local d = Regles.migrer({ etape = 0, tutoFini = true }, 15)
+			expect(d.tutoFini).to.equal(true)
+			expect(d.etape).to.equal(0)
+		end)
+
+		it("n'invente pas tutoFini à partir d'une valeur abîmée", function()
+			expect(Regles.migrer({ etape = 3, tutoFini = "oui" }, 15).tutoFini).to.equal(false)
+			expect(Regles.migrer({ etape = 3, tutoFini = 1 }, 15).tutoFini).to.equal(false)
+			expect(Regles.migrer({ etape = 3, tutoFini = {} }, 15).tutoFini).to.equal(false)
+		end)
+
+		it("un tutoFini à false ne referme pas l'ascension d'un joueur arrivé au bout", function()
+			expect(Regles.migrer({ etape = 15, tutoFini = false }, 15).tutoFini).to.equal(true)
+		end)
+
+		it(
+			"l'ascension est ouverte exactement quand tutoFini est vrai (une seule règle pour les deux services)",
+			function()
+				local fini = Regles.donneesNeuves()
+				fini.tutoFini = true
+				fini.etape = 0 -- « Recommencer » : l'étape repart à 0, l'ascension reste ouverte
+				expect(Regles.ascensionOuverte(fini)).to.equal(true)
+				local enRoute = Regles.donneesNeuves()
+				enRoute.etape = 15 -- l'étape ne décide plus de rien
+				expect(Regles.ascensionOuverte(enRoute)).to.equal(false)
+			end
+		)
+	end)
+
+	describe("« Recommencer » renvoie au tuto sans rien retirer au joueur", function()
+		local function joueurAvance()
+			local d = Regles.donneesNeuves()
+			d.etape = 15
+			d.tutoFini = true
+			d.aura = 12345
+			d.meilleurTemps = 250
+			d.paliers = { 1, 2, 3 }
+			d.meilleureHauteur = 190
+			d.meilleurTempsAscension = 95
+			d.capacites = { course = true, doubleSaut = true }
+			return d
+		end
+
+		it("remet l'étape à 0 et rien d'autre", function()
+			local d = joueurAvance()
+			Regles.recommencer(d)
+			expect(d.etape).to.equal(0)
+			expect(d.tutoFini).to.equal(true)
+			expect(d.aura).to.equal(12345)
+			expect(d.meilleurTemps).to.equal(250)
+			expect(#d.paliers).to.equal(3)
+			expect(d.meilleureHauteur).to.equal(190)
+			expect(d.meilleurTempsAscension).to.equal(95)
+			expect(d.capacites.doubleSaut).to.equal(true)
+		end)
+
+		it("l'ascension reste ouverte après « Recommencer » : on peut se retéléporter", function()
+			local d = joueurAvance()
+			Regles.recommencer(d)
+			expect(Regles.ascensionOuverte(d)).to.equal(true)
+		end)
+
+		it("un joueur qui n'a pas fini le tuto n'ouvre rien en recommençant", function()
+			local d = Regles.donneesNeuves()
+			d.etape = 7
+			Regles.recommencer(d)
+			expect(d.etape).to.equal(0)
+			expect(Regles.ascensionOuverte(d)).to.equal(false)
+		end)
+
+		it("la réapparition est celle de l'ascension seulement pendant une tentative, tuto fini", function()
+			local d = joueurAvance()
+			expect(Regles.placeParAscension(true, d)).to.equal(true)
+			-- Tentative abandonnée (attribut EnAscension à false) : Parcours replace au checkpoint 0.
+			expect(Regles.placeParAscension(false, d)).to.equal(false)
+			-- Tuto pas fini : jamais placé par l'ascension, même avec l'attribut.
+			expect(Regles.placeParAscension(true, Regles.donneesNeuves())).to.equal(false)
+		end)
+
+		it(
+			"après « Recommencer » depuis l'ascension, Parcours place au tuto (attribut retombé à false)",
+			function()
+				local d = joueurAvance()
+				local enAscension = true
+				expect(Regles.placeParAscension(enAscension, d)).to.equal(true)
+				enAscension = false -- le service d'ascension a abandonné la tentative
+				Regles.recommencer(d)
+				expect(Regles.placeParAscension(enAscension, d)).to.equal(false)
+				expect(d.etape).to.equal(0) -- le checkpoint 0 du tuto
+			end
+		)
+	end)
+
 	describe("un achat n'est jamais donné deux fois", function()
 		it("reconnaît un achat déjà traité", function()
 			local achats = {}
