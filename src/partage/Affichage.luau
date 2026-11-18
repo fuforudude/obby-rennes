@@ -213,6 +213,23 @@ function Affichage.nombrePaliers(debloques: any, hauteurs: { [number]: number })
 	return math.max(vu, debloque)
 end
 
+--- La hauteur d'un palier AU-DESSUS DU PIED de l'ascension, en studs (le repère de `EtatAscension.hauteur`).
+--- `relative` : attribut `HauteurRelative` de la carte, à préférer. À défaut, `absolue` (attribut `Hauteur`, le Y de
+--- la carte) moins `piedAbsolu` (le `Hauteur` du pied). Rend nil si rien de fiable : mieux vaut ne rien afficher
+--- qu'un chiffre faux. Un nombre négatif ou infini n'est pas une hauteur.
+function Affichage.hauteurPalier(relative: any, absolue: any, piedAbsolu: any): number?
+	local function valide(v: any): boolean
+		return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge
+	end
+	if valide(relative) and relative >= 0 then
+		return relative
+	end
+	if valide(absolue) and valide(piedAbsolu) and absolue >= piedAbsolu then
+		return absolue - piedAbsolu
+	end
+	return nil
+end
+
 --- Une ligne du menu : le numéro, la hauteur du palier (si la carte l'a donnée) et s'il est débloqué.
 function Affichage.lignePalier(
 	numero: number,
@@ -223,7 +240,7 @@ function Affichage.lignePalier(
 	return { numero = numero, hauteur = if hauteur then formater(hauteur) else nil, debloque = debloque }
 end
 
---- Toutes les lignes du menu, de 1 au dernier palier connu ; `hauteurs` : numéro du palier -> hauteur en studs.
+--- Toutes les lignes du menu, de 1 au dernier palier connu ; `hauteurs` : numéro du palier -> hauteur en studs au-dessus du pied.
 function Affichage.lignesPaliers(
 	debloques: any,
 	hauteurs: { [number]: number },

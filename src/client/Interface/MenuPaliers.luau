@@ -4,8 +4,9 @@
 -- de deux colonnes avec un bouton par palier (« Palier 3 · 182 m »), et « Fermer ». Un palier débloqué est un bouton
 -- bleu qui envoie l'intention `DemanderTeleportPalier(numero)` ; un palier non débloqué est grisé et ne fait rien.
 -- Le serveur décide (palier réellement débloqué, délai de 2 s) : le client ne se déplace jamais lui-même.
--- La hauteur de chaque palier vient de la carte (tag `Palier`, attributs `Numero` et `Hauteur`) ; elle est mémorisée
--- dès que le palier est vu, car le streaming peut le retirer ensuite.
+-- La hauteur de chaque palier vient de la carte (tag `Palier`, attributs `Numero` et `HauteurRelative`, la hauteur AU-DESSUS DU
+-- PIED, comme `EtatAscension.hauteur`) ; elle est mémorisée dès que le palier est vu, car le streaming peut le retirer
+-- ensuite. `Hauteur` (le Y absolu de la carte) n'est lu qu'en secours, moins celui du `PiedAscension`.
 local CollectionService = game:GetService("CollectionService")
 local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -19,6 +20,7 @@ local COULEURS = Composants.COULEURS
 local creer = Composants.creer
 
 local TAG_PALIER = "Palier"
+local TAG_PIED = "PiedAscension"
 
 local MenuPaliers = {}
 
@@ -28,14 +30,36 @@ local boutonFermer: TextButton? = nil
 local retour: GuiObject? = nil -- où remettre le curseur de la manette en fermant
 local remoteTeleport: RemoteEvent? = nil
 local debloques: { number } = {}
-local hauteurs: { [number]: number } = {} -- numéro du palier -> hauteur en studs, lue sur la carte
+local hauteurs: { [number]: number } = {} -- numéro du palier -> hauteur en studs AU-DESSUS DU PIED, lue sur la carte
+local avertiHauteur = false -- un seul avertissement par session
 
---- Lit la hauteur d'un palier de la carte (attributs `Numero` et `Hauteur`).
+--- Le Y absolu du pied de l'ascension (son attribut `Hauteur`), s'il est chargé : repère du secours.
+local function hauteurDuPied(): number?
+	for _, objet in CollectionService:GetTagged(TAG_PIED) do
+		local valeur = objet:GetAttribute("Hauteur")
+		if type(valeur) == "number" then
+			return valeur
+		end
+	end
+	return nil
+end
+
+--- Lit la hauteur d'un palier de la carte : `HauteurRelative`, sinon `Hauteur` moins celle du pied, sinon rien (le
+--- bouton affiche « — » plutôt qu'un chiffre faux).
 local function lirePalier(objet: Instance)
 	local numero = objet:GetAttribute("Numero")
-	local hauteur = objet:GetAttribute("Hauteur")
-	if type(numero) == "number" and type(hauteur) == "number" then
+	if type(numero) ~= "number" then
+		return
+	end
+	local relative = objet:GetAttribute("HauteurRelative")
+	local hauteur = Affichage.hauteurPalier(relative, objet:GetAttribute("Hauteur"), hauteurDuPied())
+	if hauteur ~= nil then
 		hauteurs[numero] = hauteur
+	end
+	if type(relative) ~= "number" and not avertiHauteur then
+		avertiHauteur = true
+		local suite = if hauteur ~= nil then "secours : Hauteur moins celle du pied" else "hauteur non affichée"
+		warn(`Interface : palier {objet:GetFullName()} sans HauteurRelative ({suite}), carte à régénérer`)
 	end
 end
 
