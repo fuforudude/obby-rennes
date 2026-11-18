@@ -1,20 +1,25 @@
--- Usage : lune run outils/monde/verifier-ascension.luau [fichier.rbxm] (défaut monde/Ascension.rbxm ;
--- après lune run outils/monde/generer.luau Ascension).
+-- Usage : lune run outils/monde/verifier-ascension.luau [ascension.rbxm] [parcours.rbxm] (défauts
+-- monde/Ascension.rbxm et monde/Parcours.rbxm ; après lune run outils/monde/generer.luau).
 --
 -- Contrôle l'ascension construite par outils/monde/Ascension.luau :
 -- - un chemin existe du « PiedAscension » au « SommetAscension » en ne franchissant que des sauts possibles avec les
 --   trois capacités (course, double saut, dash) : montée d'au plus 9 studs, vide d'au plus 16 studs à plat, les deux
 --   étant liés (plus on monte, moins on avance) ; le sommet est à au moins 250 studs au-dessus du pied ;
--- - le pied est atteignable depuis la salle de partiel : un chemin existe de la dalle marquée « DepartAcces » (sous
---   le checkpoint 15) au pied, en passant par les deux dalles du Parcours qui encadrent la porte de Sup de Vinci
---   (déclarées ci-dessous : elles ne sont pas dans ce .rbxm) ;
+-- - le pied est atteignable depuis la salle de partiel : un chemin existe de la dalle du checkpoint 15 (cherchée
+--   dans Parcours.rbxm, elle n'est pas dans ce .rbxm) au pied, en 4 sauts au plus, dont le premier pose sur la dalle
+--   marquée « DepartAcces » (l'accès passe par la verrière du toit) et dont aucun ne dépasse 75 % des limites de
+--   saut : l'accès est une transition, pas une épreuve ;
 -- - les paliers (tag « Palier ») sont numérotés 1..N sans trou, 4 ou 5, étagés d'environ 60 studs, portent l'attribut
 --   « Hauteur » juste et un enfant « Boutique » (Model) ;
 -- - les étages (tag « EtageAscension ») sont numérotés 1..M sans trou, de hauteur croissante, espacés d'environ
 --   15 studs ;
+-- - toute pièce qui porte « HauteurRelative » (ce que lisent le serveur et l'interface) porte aussi « Hauteur »
+--   (le Y absolu) et vaut exactement « Hauteur » moins la hauteur du pied, qui est à 0 ;
 -- - aucune pièce mortelle à portée d'un saut (ici : aucune pièce mortelle du tout, la chute est détectée par le
 --   « Mortel » de la ville) ;
--- - aucun plafond trop bas (moins de 5,5 studs de pièce solide au-dessus d'une plateforme) ;
+-- - aucun plafond trop bas (moins de 5,5 studs de pièce solide au-dessus d'une plateforme), dans l'ascension comme
+--   entre les deux cartes (une pièce du tuto au-dessus d'une dalle de l'accès, une pièce de l'ascension au-dessus
+--   d'une plateforme du tuto) ;
 -- - toutes les plateformes sont ancrées et horizontales (une dalle penchée fausserait tout le reste) ;
 -- - tous les TextLabel de SurfaceGui sont à taille fixe (jamais TextScaled), de 12 à 100 px, et leur texte tient
 --   dans son label (pire cas des tableaux : 10 lignes de classement) ; le bloc TEXTE_PUR d'Ascension.luau est
@@ -62,13 +67,9 @@ type Plateforme = {
 	part: any?,
 }
 
--- Les deux dalles du Parcours (outils/monde/Parcours.luau, zone 9_SupDeVinci) qui encadrent la porte de la fac :
--- l'accès de la salle de partiel au pied de l'ascension les emprunte, de plain-pied, comme à l'aller. Elles ne sont
--- pas dans Ascension.rbxm : si Parcours.luau les déplace, c'est ici qu'il faut le reporter.
-local RELAIS: { Plateforme } = {
-	{ nom = "Parcours/Accueil", x1 = 826, x2 = 832, z1 = -4, z2 = 4, haut = 18, bas = 17 },
-	{ nom = "Parcours/Marche", x1 = 818, x2 = 822, z1 = -2, z2 = 2, haut = 18, bas = 17 },
-}
+-- Nombre de sauts et difficulté tolérés pour l'accès (de la salle de partiel au pied, par la verrière du toit) :
+-- c'est une transition, pas une épreuve.
+local ACCES_SAUTS_MAX, ACCES_DIFFICULTE_MAX = 4, 0.75
 
 -- Boîte alignée sur les axes d'une pièce, quelle que soit son orientation.
 local function emprise(part)
@@ -94,6 +95,7 @@ local etages, paliers = {}, {}
 local pied, sommet
 local depart -- la dalle marquée DepartAcces (sortie de la salle de partiel)
 local tableaux = {}
+local hauteurs: { Plateforme } = {} -- les pièces qui portent l'attribut « HauteurRelative »
 local pieces = 0
 
 for _, d in modele:GetDescendants() do
@@ -157,6 +159,9 @@ for _, d in modele:GetDescendants() do
 		end
 		table.insert(etages, { boite = boite, numero = d:GetAttribute("Numero") })
 	end
+	if d:GetAttribute("HauteurRelative") ~= nil then
+		table.insert(hauteurs, boite)
+	end
 	for _, tag in { "TableauHauteur", "TableauAscension" } do
 		if d:HasTag(tag) then
 			tableaux[tag] = (tableaux[tag] or 0) + 1
@@ -165,6 +170,62 @@ for _, d in modele:GetDescendants() do
 end
 
 print(`{chemin} : {pieces} pièces, {#plateformes} plateformes, {#etages} étages, {#paliers} paliers`)
+
+---------------------------------------------------------------------------------------------------------------
+-- Le tuto (outils/monde/Parcours.luau), chargé lui aussi, pour deux raisons :
+-- - la dalle du checkpoint 15 (la salle de partiel) est le départ de l'accès, et elle n'est pas dans ce .rbxm ;
+-- - l'accès traverse la verrière ouverte dans le toit de Sup de Vinci : il faut vérifier qu'aucune pièce du tuto ne
+--   fait plafond bas au-dessus d'une dalle de l'accès, ni aucune pièce de l'ascension au-dessus d'une plateforme du
+--   tuto. On ne redéclare donc plus ici de coordonnées du Parcours : elles sont lues dans son .rbxm.
+local cheminParcours = process.args[2] or "monde/Parcours.rbxm"
+assert(
+	fs.isFile(cheminParcours),
+	`{cheminParcours} absent : lancer « lune run outils/monde/generer.luau » avant ce contrôle`
+)
+local salle: Plateforme?
+local solidesParcours: { Plateforme } = {}
+local plateformesParcours: { Plateforme } = {}
+for _, d in roblox.deserializeModel(fs.readFile(cheminParcours))[1]:GetDescendants() do
+	if not d:IsA("BasePart") then
+		continue
+	end
+	local mn, mx = emprise(d)
+	local boite: Plateforme = {
+		nom = "Parcours/" .. d.Name,
+		x1 = mn.X,
+		x2 = mx.X,
+		z1 = mn.Z,
+		z2 = mx.Z,
+		haut = mx.Y,
+		bas = mn.Y,
+		part = d,
+	}
+	if d.CanCollide and d.Transparency < 1 then
+		table.insert(solidesParcours, boite)
+	end
+	if d.CanCollide and d.CanQuery and d.Transparency < 1 and not d:HasTag("Mortel") then
+		table.insert(plateformesParcours, boite)
+	end
+	if d:HasTag("Checkpoint") and d:GetAttribute("Numero") == 15 then
+		salle = boite
+	end
+end
+assert(salle, `aucune dalle taguée Checkpoint de Numero 15 dans {cheminParcours} (la salle de partiel)`)
+print(
+	string.format(
+		"%s : %d pièces solides, %d plateformes ; salle de partiel %s (x %.0f..%.0f, z %.0f..%.0f, dessus %.0f)",
+		cheminParcours,
+		#solidesParcours,
+		#plateformesParcours,
+		salle.nom,
+		salle.x1,
+		salle.x2,
+		salle.z1,
+		salle.z2,
+		salle.haut
+	)
+)
+
 if pieces > 1500 then
 	defaut(`{pieces} pièces > budget 1 500`)
 end
@@ -176,6 +237,36 @@ end
 assert(pied, "aucune pièce taguée PiedAscension")
 assert(sommet, "aucune pièce taguée SommetAscension")
 assert(depart, "aucune dalle avec l'attribut DepartAcces (le départ de l'accès depuis le checkpoint 15)")
+
+---------------------------------------------------------------------------------------------------------------
+-- Hauteurs annoncées au jeu : « Hauteur » est le Y absolu de la marche, « HauteurRelative » la hauteur gagnée
+-- depuis le pied (c'est elle que lisent le serveur et l'interface). Le pied porte les deux, à 0.
+local hauteurPied = pied.part:GetAttribute("Hauteur")
+if typeof(hauteurPied) ~= "number" or math.abs(hauteurPied - pied.haut) > 0.01 then
+	defaut(string.format("le pied : attribut Hauteur %s, dessus réel %.2f", tostring(hauteurPied), pied.haut))
+	hauteurPied = pied.haut
+end
+if pied.part:GetAttribute("HauteurRelative") ~= 0 then
+	defaut(`le pied : HauteurRelative {tostring(pied.part:GetAttribute("HauteurRelative"))} (0 attendu)`)
+end
+for _, b in hauteurs do
+	local h, hr = b.part:GetAttribute("Hauteur"), b.part:GetAttribute("HauteurRelative")
+	if typeof(h) ~= "number" then
+		defaut(`{b.nom} : HauteurRelative sans attribut Hauteur`)
+	elseif typeof(hr) ~= "number" or math.abs(hr - (h - hauteurPied)) > 0.01 then
+		defaut(
+			string.format(
+				"%s : HauteurRelative %s, %.2f attendu (Hauteur %.2f moins le pied %.2f)",
+				b.nom,
+				tostring(hr),
+				h - hauteurPied,
+				h,
+				hauteurPied
+			)
+		)
+	end
+end
+print(`attributs HauteurRelative : {#hauteurs} (pied à {hauteurPied})`)
 
 ---------------------------------------------------------------------------------------------------------------
 -- Le chemin : du pied au sommet, saut par saut.
@@ -318,21 +409,54 @@ if inatteignables > 0 then
 end
 
 ---------------------------------------------------------------------------------------------------------------
--- L'accès depuis la salle de partiel : de la dalle DepartAcces au pied, en comptant les deux relais du Parcours.
-local avecRelais = table.clone(plateformes)
-for _, r in RELAIS do
-	table.insert(avecRelais, r)
-end
-local meilleurAcces, viaAcces = goulot(avecRelais, depart)
+-- L'accès depuis la salle de partiel : de la dalle du checkpoint 15 au pied, par la verrière du toit. Court et
+-- facile (ACCES_SAUTS_MAX sauts au plus, chacun sous ACCES_DIFFICULTE_MAX des limites), et il passe bien par la
+-- dalle marquée DepartAcces.
+local avecSalle = table.clone(plateformes)
+table.insert(avecSalle, salle)
+local meilleurAcces, viaAcces = goulot(avecSalle, salle)
 if (meilleurAcces[pied] or math.huge) == math.huge then
-	defaut(`aucun chemin de {depart.nom} (sortie de la salle de partiel) au pied de l'ascension`)
+	defaut(`aucun chemin de {salle.nom} (la salle de partiel) au pied de l'ascension`)
 else
-	local suite = remonter(viaAcces, depart, pied)
+	local suite = remonter(viaAcces, salle, pied)
 	local noms = {}
-	for _, p in suite do
+	for i, p in suite do
 		table.insert(noms, string.format("%s (%.0f)", p.nom:match("[^.]+$") or p.nom, p.haut))
+		if i == 1 then
+			continue
+		end
+		local a, b = suite[i - 1], p
+		local d = difficulte(a, b)
+		print(
+			string.format(
+				"  saut d'accès %d : vide %.1f, montée %.1f (%d %% des limites)",
+				i - 1,
+				vide(a, b),
+				b.haut - a.haut,
+				math.floor(100 * d + 0.5)
+			)
+		)
+		if d > ACCES_DIFFICULTE_MAX then
+			defaut(
+				string.format(
+					"saut d'accès %s -> %s à %d %% des limites (%d %% au plus : l'accès est une transition)",
+					a.nom:match("[^.]+$") or a.nom,
+					b.nom:match("[^.]+$") or b.nom,
+					math.floor(100 * d + 0.5),
+					math.floor(100 * ACCES_DIFFICULTE_MAX + 0.5)
+				)
+			)
+		end
 	end
 	print(`accès salle de partiel -> pied : {#suite - 1} sauts : ` .. table.concat(noms, " -> "))
+	if #suite - 1 > ACCES_SAUTS_MAX then
+		defaut(`accès en {#suite - 1} sauts ({ACCES_SAUTS_MAX} au plus attendus)`)
+	end
+	if suite[2] ~= depart then
+		defaut(
+			`l'accès ne commence pas par la dalle marquée DepartAcces ({depart.nom}) mais par {suite[2] and suite[2].nom}`
+		)
+	end
 end
 
 ---------------------------------------------------------------------------------------------------------------
@@ -418,22 +542,39 @@ print(`pièces mortelles : {#mortels} (dont {proches} à portée d'un saut)`)
 
 ---------------------------------------------------------------------------------------------------------------
 -- Plafonds trop bas : une pièce solide à moins de 5,5 studs au-dessus d'une plateforme, sur la même emprise.
-local bas = 0
-for _, p in plateformes do
-	for _, s in solides do
-		if s.nom == p.nom then
-			continue
-		end
-		local chevauche = math.min(p.x2, s.x2) - math.max(p.x1, s.x1) > 0.5
-			and math.min(p.z2, s.z2) - math.max(p.z1, s.z1) > 0.5
-		if chevauche and s.bas > p.haut + 0.01 and s.bas < p.haut + HAUTEUR_LIBRE then
-			bas += 1
-			defaut(
-				string.format("plafond bas : %s (haut %.1f) sous %s (à %.1f)", p.nom, p.haut, s.nom, s.bas - p.haut)
-			)
+-- Trois passes : dans l'ascension, le tuto au-dessus de l'ascension (l'accès traverse le toit de la fac) et
+-- l'ascension au-dessus du tuto (le pied et son accès flottent au-dessus de la salle de partiel et de l'atrium).
+local function plafondsBas(dessous: { Plateforme }, dessus: { Plateforme }, quoi: string): number
+	local n = 0
+	for _, p in dessous do
+		for _, s in dessus do
+			if s.part == p.part then
+				continue
+			end
+			local chevauche = math.min(p.x2, s.x2) - math.max(p.x1, s.x1) > 0.5
+				and math.min(p.z2, s.z2) - math.max(p.z1, s.z1) > 0.5
+			if chevauche and s.bas > p.haut + 0.01 and s.bas < p.haut + HAUTEUR_LIBRE then
+				n += 1
+				defaut(
+					string.format(
+						"plafond bas (%s) : %s (haut %.1f) sous %s (à %.1f)",
+						quoi,
+						p.nom,
+						p.haut,
+						s.nom,
+						s.bas - p.haut
+					)
+				)
+			end
 		end
 	end
+	return n
 end
+local avecSalleEtPied = table.clone(plateformes)
+table.insert(avecSalleEtPied, salle)
+local bas = plafondsBas(plateformes, solides, "ascension")
+	+ plafondsBas(avecSalleEtPied, solidesParcours, "tuto au-dessus de l'ascension")
+	+ plafondsBas(plateformesParcours, solides, "ascension au-dessus du tuto")
 print(`plafonds trop bas : {bas}`)
 
 -- Emprise horizontale de tout ce qui est marchable, pour information (l'axe de l'ascension est en 845, 0).

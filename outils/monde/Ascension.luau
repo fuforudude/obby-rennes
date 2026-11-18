@@ -5,10 +5,9 @@
 -- - dans Lune, par outils/monde/generer.luau, qui écrit monde/Ascension.rbxm ;
 -- - dans Studio, collée dans un execute_luau du MCP, pour un aperçu immédiat.
 --
--- Le tracé. On sort de la salle de partiel (checkpoint 15, en 834, 42, 8), on redescend dans l'atrium de Sup de Vinci
--- par trois meubles qui flottent, on ressort par la porte d'entrée (dalles « Accueil » et « Marche » du Parcours),
--- puis on grimpe par le sud de la fac jusqu'au **pied de l'ascension**, une plateforme qui flotte 10 studs au-dessus
--- du toit. De là, 258 studs de montée en spirale autour de la fac : morceaux d'immeubles rennais retournés, bus STAR,
+-- Le tracé. On sort de la salle de partiel (checkpoint 15, en 834, 42, 8) **par le haut** : la verrière ouverte dans
+-- le toit de Sup de Vinci (outils/monde/Parcours.luau) se franchit en trois dalles qui montent droit (48, 54, 60),
+-- et le quatrième saut pose sur le **pied de l'ascension**, une plateforme qui flotte 10 studs au-dessus du toit. De là, 258 studs de montée en spirale autour de la fac : morceaux d'immeubles rennais retournés, bus STAR,
 -- rames de métro, grues, échafaudages, panneaux publicitaires, canapés, armoires, bureaux, bouées, poubelles,
 -- pancartes du cortège et une galette-saucisse géante. Quatre paliers (tous les 60 studs) et le sommet.
 --
@@ -1124,41 +1123,6 @@ return function(R)
 	end
 
 	---------------------------------------------------------------------------------------------------------------
-	-- L'accès depuis la salle de partiel (checkpoint 15, en 834, 42, 8 : dalle de 12 × 12, dessus à 42).
-	--
-	-- Sup de Vinci est un bâtiment fermé (murs du sol à 56, toit plein à 55-56) : on ne peut en sortir que par sa
-	-- porte, sur la face -X (ouverture z -4..4, de 18 à 30). L'accès redescend donc de la mezzanine par trois meubles
-	-- qui flottent, emprunte les deux dalles du Parcours qui encadrent la porte (« Accueil » en 829, 18, 0 et
-	-- « Marche » en 820, 18, 0 : on ressort comme on est entré, de plain-pied), puis remonte par le sud de la fac
-	-- jusqu'au pied de l'ascension. Les trois meubles intérieurs restent à l'écart des plateformes de l'atrium et de
-	-- l'« Accueil » : aucun plafond bas (moins de 5,5 studs) au-dessus d'une plateforme du tuto.
-	-- Un toit vitré ouvrant dans Parcours.luau rendrait cet accès inutile : voir le rendu de la tâche.
-	local acces = {
-		{ nom = "SortieSalle", x = 833, y = 35, z = -1, hx = 4, hz = 4, objet = objetBureau },
-		{ nom = "ArmoireAtrium", x = 836.5, y = 29, z = 6, hx = 4, hz = 3, objet = objetArmoire },
-		{ nom = "CanapeAtrium", x = 836, y = 24, z = -1, hx = 3, hz = 3, objet = objetCanape },
-		{ nom = "ParvisVolant", x = 812, y = 24, z = 0, hx = 4, hz = 4, objet = objetEchafaudage },
-		{ nom = "Container", x = 808, y = 31, z = -13, hx = 4, hz = 4, objet = objetContainer },
-		{ nom = "BusRenverse", x = 818, y = 38, z = -24, hx = 4, hz = 4, objet = objetBus },
-		{ nom = "Poubelles", x = 828, y = 45, z = -28, hx = 4, hz = 4, objet = objetPoubelle },
-		{ nom = "Echafaudage", x = 838, y = 54, z = -26, hx = 4, hz = 4, objet = objetEchafaudage },
-		{ nom = "DernierPalier", x = 847, y = 62, z = -17, hx = 4, hz = 4, objet = objetPanneau },
-	}
-	for i, a in acces do
-		local p = dalle(dAcces, a.nom, a.hx * 2, a.hz * 2, a.x, a.y, a.z, couleurs.beton, Enum.Material.Concrete)
-		contour(p, ACCES, 0.12)
-		a.objet(dAcces, p, ACCES)
-		if i == 1 then
-			p:SetAttribute("DepartAcces", true) -- repère du contrôle : d'ici, on doit atteindre le pied
-			etiquette(p, "SORTIE ↓ L'ASCENSION", ACCES, 4, 200)
-		elseif i == 3 then
-			etiquette(p, "↓ PAR LA PORTE", ACCES, 4, 200)
-		elseif i == 4 then
-			etiquette(p, "L'ASCENSION ↑", ACCES, 4, 220)
-		end
-	end
-
-	---------------------------------------------------------------------------------------------------------------
 	-- Le pied de l'ascension : 26 × 26 studs qui flottent 10 studs au-dessus du toit de la fac. C'est là que la
 	-- chute renvoie, et là que sont les deux tableaux de classement.
 	local pied = dalle(dPied, "PiedAscension", 26, 26, CX, BASE, CZ, couleurs.vinci, Enum.Material.DiamondPlate)
@@ -1764,6 +1728,35 @@ return function(R)
 	pluie.Transparency = NumberSequence.new(0.5)
 	pluie.Color = ColorSequence.new(Color3.fromRGB(190, 210, 235))
 	pluie.Parent = crachin
+
+	---------------------------------------------------------------------------------------------------------------
+	-- L'accès depuis la salle de partiel (checkpoint 15, en 834, 42, 8 : dalle de 12 × 12, dessus à 42).
+	--
+	-- Sup de Vinci a une verrière ouverte dans son toit (outils/monde/Parcours.luau : trou x 832..844 / z 2..14,
+	-- toit à 55-56) : on sort de la salle de partiel **par le haut**, en quatre sauts qui montent droit jusqu'au
+	-- pied de l'ascension. Chaque saut monte de 6 studs sur les 9 possibles et ne franchit que 1 à 4 studs de vide :
+	-- c'est une transition, pas une épreuve.
+	-- Deux règles tiennent le placement : les deux dalles qui traversent la verrière (48 et 54) restent à 1 stud au
+	-- moins du cadre, et aucune dalle n'est posée sous une autre à moins de 5,5 studs (ni sous le pied : la dernière
+	-- est au nord du toit, hors de l'emprise du pied). Donc aucun plafond bas au-dessus d'une plateforme du tuto
+	-- (la dalle du checkpoint 15, à 42, a 11 studs de libre) ni de l'accès.
+	-- Ce bloc est construit en dernier pour que les tirages aléatoires du chemin et du décor ne changent pas.
+	local acces = {
+		{ nom = "BureauVolant", x = 844, y = 48, z = 8, hx = 3, hz = 3, objet = objetBureau },
+		{ nom = "ArmoireDeLaVerriere", x = 836, y = 54, z = 10, hx = 3, hz = 3, objet = objetArmoire },
+		{ nom = "PanneauDuToit", x = 836, y = 60, z = 20, hx = 3, hz = 3, objet = objetPanneau },
+	}
+	for i, a in acces do
+		local p = dalle(dAcces, a.nom, a.hx * 2, a.hz * 2, a.x, a.y, a.z, couleurs.beton, Enum.Material.Concrete)
+		contour(p, ACCES, 0.12)
+		a.objet(dAcces, p, ACCES)
+		if i == 1 then
+			p:SetAttribute("DepartAcces", true) -- repère du contrôle : d'ici, on doit atteindre le pied
+			etiquette(p, "SORTIE ↑ PAR LA VERRIÈRE", ACCES, 4, 200)
+		elseif i == 3 then
+			etiquette(p, "L'ASCENSION ↑", ACCES, 4, 220)
+		end
+	end
 
 	---------------------------------------------------------------------------------------------------------------
 	-- Lisibilité, dernier mot : toute pièce où l'on pose les pieds porte un contour de la couleur de sa tranche

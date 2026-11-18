@@ -563,7 +563,9 @@ return function(R)
 
 	-- Bâtiment creux qu'on traverse : quatre murs, un toit, et des ouvertures (porte, fenêtre) par face.
 	-- ouvertures[face] = { centre, largeur, bas, haut } ; face « -X », « +X », « -Z » ou « +Z ».
-	local function batiment(parent, nom, x1, x2, z1, z2, haut, couleur, materiau, ouvertures)
+	-- `trou` (facultatif) = { x1, x2, z1, z2 } : une verrière ouverte dans le toit, découpé en quatre morceaux
+	-- autour d'elle et encadré comme les autres ouvertures qu'on traverse (cadre d'acier + liseré néon).
+	local function batiment(parent, nom, x1, x2, z1, z2, haut, couleur, materiau, ouvertures, trou)
 		local function mur(ax1, ax2, az1, az2, o, leLongDeZ)
 			if not o then
 				decor(boite(parent, nom .. "Mur", ax1, ax2, SOL, haut, az1, az2, couleur, materiau))
@@ -617,20 +619,61 @@ return function(R)
 		mur(x2 - 1, x2, z1, z2, ouvertures["+X"], true)
 		mur(x1 + 1, x2 - 1, z1, z1 + 1, ouvertures["-Z"], false)
 		mur(x1 + 1, x2 - 1, z2 - 1, z2, ouvertures["+Z"], false)
-		decor(
-			boite(
-				parent,
-				nom .. "Toit",
-				x1 - 0.5,
-				x2 + 0.5,
-				haut - 1,
-				haut,
-				z1 - 0.5,
-				z2 + 0.5,
-				Color3.fromRGB(80, 85, 100),
-				Enum.Material.Slate
-			)
-		)
+		local ardoise = Color3.fromRGB(80, 85, 100)
+		local function pan(ax1, ax2, az1, az2)
+			if ax2 - ax1 < 0.05 or az2 - az1 < 0.05 then
+				return
+			end
+			decor(boite(parent, nom .. "Toit", ax1, ax2, haut - 1, haut, az1, az2, ardoise, Enum.Material.Slate))
+		end
+		if not trou then
+			pan(x1 - 0.5, x2 + 0.5, z1 - 0.5, z2 + 0.5)
+		else
+			-- Le toit en quatre morceaux autour de la verrière.
+			pan(x1 - 0.5, x2 + 0.5, z1 - 0.5, trou.z1)
+			pan(x1 - 0.5, x2 + 0.5, trou.z2, z2 + 0.5)
+			pan(x1 - 0.5, trou.x1, trou.z1, trou.z2)
+			pan(trou.x2, x2 + 0.5, trou.z1, trou.z2)
+			-- Cadre d'acier débordant (visible du dessous comme du dessus) et liseré néon sur la lèvre : tous deux
+			-- fantômes et posés en dehors de l'ouverture, pour que rien n'accroche au passage.
+			local cadre = Color3.fromRGB(255, 255, 255)
+			local anneaux = {
+				{ e = 1, y1 = haut - 1.2, y2 = haut + 1.4, c = Color3.fromRGB(120, 128, 140), m = Enum.Material.Metal },
+				{ e = 0.4, y1 = haut + 1.4, y2 = haut + 1.8, c = cadre, m = Enum.Material.Neon },
+			}
+			for _, a in anneaux do
+				fantome(
+					boite(
+						parent,
+						"Encadrement",
+						trou.x1 - a.e,
+						trou.x2 + a.e,
+						a.y1,
+						a.y2,
+						trou.z1 - a.e,
+						trou.z1,
+						a.c,
+						a.m
+					)
+				)
+				fantome(
+					boite(
+						parent,
+						"Encadrement",
+						trou.x1 - a.e,
+						trou.x2 + a.e,
+						a.y1,
+						a.y2,
+						trou.z2,
+						trou.z2 + a.e,
+						a.c,
+						a.m
+					)
+				)
+				fantome(boite(parent, "Encadrement", trou.x1 - a.e, trou.x1, a.y1, a.y2, trou.z1, trou.z2, a.c, a.m))
+				fantome(boite(parent, "Encadrement", trou.x2, trou.x2 + a.e, a.y1, a.y2, trou.z1, trou.z2, a.c, a.m))
+			end
+		end
 		-- Bandes de fenêtres sur les grandes faces (décor, sans collision).
 		for y = SOL + 6, haut - 4, 6 do
 			for _, zf in { z1 - 0.15, z2 + 0.15 } do
@@ -2206,9 +2249,36 @@ return function(R)
 	-- mortel), et on arrive dans la salle de partiel, en mezzanine.
 	local vinci = dossier("9_SupDeVinci", accents.vinci)
 	dalle(vinci, "Marche", 4, 4, 820, 18, 0, couleurs.pierre, Enum.Material.Concrete)
+	-- La verrière du toit (12 × 12, au-dessus de la salle de partiel) : c'est par là qu'on sort du tuto pour
+	-- l'ascension (outils/monde/Ascension.luau y fait passer ses dalles d'accès, à 48 et 54). Le trou laisse 1 stud
+	-- de marge autour des dalles d'accès : rien du toit ne fait plafond bas au-dessus d'elles.
+	local VERRIERE = { x1 = 832, x2 = 844, z1 = 2, z2 = 14 }
 	batiment(vinci, "SupDeVinci", 825, 865, -16, 16, 56, Color3.fromRGB(70, 120, 200), Enum.Material.Glass, {
 		["-X"] = { centre = 0, largeur = 8, bas = 18, haut = 30 },
-	})
+	}, VERRIERE)
+	-- Éclats de verre restés dans le cadre : on voit que la verrière a été traversée (fantômes, sans ombre).
+	local eclats = {
+		{ x = 834, z = 2.8, rx = -32, ry = 4 },
+		{ x = 841.5, z = 2.6, rx = -26, ry = -7 },
+		{ x = 843.2, z = 6.5, rx = -30, ry = 90 },
+		{ x = 843.4, z = 11.5, rx = 24, ry = 90 },
+		{ x = 839, z = 13.4, rx = 28, ry = -5 },
+		{ x = 833.4, z = 13.2, rx = 33, ry = 8 },
+	}
+	for i, e in eclats do
+		local eclat = piece(
+			vinci,
+			"EclatVerriere",
+			if i % 2 == 0 then 3.4 else 4.2,
+			0.25,
+			2.6,
+			CFrame.new(e.x, 56.6, e.z) * CFrame.Angles(math.rad(e.rx), math.rad(e.ry), math.rad(i * 3 - 9)),
+			Color3.fromRGB(190, 225, 240),
+			Enum.Material.Glass
+		)
+		eclat.Transparency = 0.55
+		eclat.CastShadow = false
+	end
 	local frontonVinci = decor(boite(vinci, "Fronton", 824.6, 825, 34, 42, -13, 13, couleurs.vinci))
 	texte(Enum.NormalId.Left, "SUP DE VINCI", Color3.fromRGB(255, 255, 255), couleurs.vinci).Parent = frontonVinci
 	mortel(
