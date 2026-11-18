@@ -21,8 +21,9 @@
 -- Parcours ne place plus personne : la réapparition est à nous, au pied de l'ascension. « Avoir fini le tuto » est
 -- `donnees.tutoFini`, sauvegardé : les deux côtés l'obtiennent par la même fonction (`Regles.ascensionOuverte`),
 -- donc décident de la même chose dans n'importe quel ordre. « Recommencer » remet l'étape à 0 mais pas tutoFini :
--- il ne referme pas l'ascension. L'attribut repasse à false au chargement des données et dès que le joueur
--- quitte l'ascension.
+-- l'ascension reste ouverte (téléportation possible), mais la tentative en cours est abandonnée (Parcours nous
+-- prévient par `Parcours.avantRecommencer`) et le joueur retourne au tuto. L'attribut repasse à false au
+-- chargement des données et dès que le joueur quitte l'ascension.
 -- La téléportation vers un palier débloqué marche aussi hors tentative (depuis la coloc) : elle ouvre alors une
 -- tentative d'ascension, non classée.
 -- L'aura des étages passe par Parcours.ajouterAura : même chemin que l'aura des checkpoints (liste des joueurs,
@@ -510,6 +511,9 @@ function Ascension.demarrer()
 	lireEtagesEtSommet()
 
 	Donnees.surChargement(surChargement)
+	-- « Recommencer » renvoie au tuto : la tentative d'ascension est abandonnée (jamais classée : le chrono et le
+	-- classement ne se règlent qu'au sommet), les paliers et tutoFini restent acquis.
+	Parcours.avantRecommencer(quitterAscension)
 
 	local function suivre(joueur: Player)
 		joueur.CharacterAdded:Connect(function()
