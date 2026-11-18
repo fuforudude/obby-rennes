@@ -107,6 +107,12 @@ function Ascension.estRecordHauteur(ancienne: number, nouvelle: number): boolean
 	return nouvelle > 0 and nouvelle > ancienne
 end
 
+--- Le joueur a-t-il quelque chose à voir dans l'interface de l'ascension (un palier ou un record de hauteur) ?
+--- Sinon le renvoi périodique de l'état est inutile : le premier envoi, au chargement des données, suffit.
+function Ascension.aQuelqueChoseAMontrer(nbPaliers: number, meilleureHauteur: number): boolean
+	return nbPaliers > 0 or meilleureHauteur > 0
+end
+
 --- « 182 m » : la hauteur en mètres, arrondie, jamais négative.
 function Ascension.formaterHauteur(studs: number): string
 	local metres = math.floor(math.max(0, studs) * METRES_PAR_STUD + 0.5)

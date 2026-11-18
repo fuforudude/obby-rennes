@@ -286,4 +286,89 @@ return function()
 			expect(Capacites.evaluerFenetre(AUCUNE, tampon)).never.to.be.ok()
 		end)
 	end)
+
+	describe("téléportation décidée par le serveur (tampon amorcé à la destination)", function()
+		local FENETRE = Reglages.SURVEILLANCE_FENETRE
+		-- Le délai pendant lequel le serveur ne prend aucun relevé après une téléportation (serveur/Capacites).
+		local DELAI = 1.5
+
+		--- Le tampon juste après le placement : le seul relevé est la destination, à l'instant 0.
+		local function apresPlacement(x: number, y: number, z: number)
+			return Capacites.amorcer({ { instant = -9, x = 500, y = 500, z = 500 } }, 0, x, y, z)
+		end
+
+		it("amorcer repart de la destination : l'ancien tampon est oublié, un seul relevé reste", function()
+			local tampon = apresPlacement(10, 20, 30)
+			expect(#tampon).to.equal(1)
+			expect(tampon[1].instant).to.equal(0)
+			expect(tampon[1].x).to.equal(10)
+			expect(tampon[1].y).to.equal(20)
+			expect(tampon[1].z).to.equal(30)
+			expect(Capacites.deplacementFenetre(tampon)).never.to.be.ok() -- pas de verdict sur un seul relevé
+		end)
+
+		it(
+			"ne compare jamais le saut de la téléportation : un joueur qui reste sur place n'est pas refusé",
+			function()
+				local tampon = apresPlacement(100, 300, 0) -- très loin du point de départ, qui n'est plus dans le tampon
+				Capacites.empiler(tampon, DELAI, 100, 300, 0, FENETRE)
+				expect(Capacites.evaluerFenetre(AUCUNE, tampon)).never.to.be.ok()
+			end
+		)
+
+		it("accepte un joueur qui marche, court ou saute juste après son arrivée", function()
+			local marche = apresPlacement(0, 10, 0)
+			Capacites.empiler(marche, DELAI, 16 * DELAI, 10, 0, FENETRE)
+			expect(Capacites.evaluerFenetre(AUCUNE, marche)).never.to.be.ok()
+			local course = apresPlacement(0, 10, 0)
+			Capacites.empiler(course, DELAI, 24 * DELAI, 10, 0, FENETRE)
+			expect(Capacites.evaluerFenetre(COURSE, course)).never.to.be.ok()
+			local saut = apresPlacement(0, 10, 0)
+			Capacites.empiler(saut, DELAI, 0, 17.2, 0, FENETRE)
+			expect(Capacites.evaluerFenetre(AUCUNE, saut)).never.to.be.ok()
+		end)
+
+		it("accepte un joueur qui tombe de la plateforme d'arrivée", function()
+			local tampon = apresPlacement(0, 300, 0)
+			Capacites.empiler(tampon, DELAI, 5, 0, 0, FENETRE)
+			expect(Capacites.evaluerFenetre(AUCUNE, tampon)).never.to.be.ok()
+		end)
+
+		it("refuse un vol horizontal pris dès le premier relevé après le délai (le trou des 1,5 s)", function()
+			local tampon = apresPlacement(0, 10, 0)
+			Capacites.empiler(tampon, DELAI, 150, 10, 0, FENETRE) -- 100 studs/s pendant le délai
+			expect(Capacites.evaluerFenetre(TOUTES, tampon)).to.equal("horizontal")
+		end)
+
+		it("refuse une montée en vol prise dès le premier relevé après le délai", function()
+			local tampon = apresPlacement(0, 10, 0)
+			Capacites.empiler(tampon, DELAI, 0, 160, 0, FENETRE) -- 100 studs/s vers le haut
+			expect(Capacites.evaluerFenetre(TOUTES, tampon)).to.equal("vertical")
+		end)
+
+		it("sans relevé de départ, le même vol ne se voyait pas (c'est ce que l'amorce corrige)", function()
+			local sans = {}
+			Capacites.empiler(sans, DELAI, 150, 10, 0, FENETRE)
+			expect(Capacites.evaluerFenetre(TOUTES, sans)).never.to.be.ok()
+		end)
+
+		it("la destination reste la référence tant qu'elle couvre la fenêtre, puis la fenêtre glisse", function()
+			local tampon = apresPlacement(0, 10, 0)
+			Capacites.empiler(tampon, 1.5, 10, 10, 0, FENETRE)
+			Capacites.empiler(tampon, 2, 20, 10, 0, FENETRE)
+			expect(tampon[1].instant).to.equal(0) -- 2 s < FENETRE : toujours la référence
+			Capacites.empiler(tampon, 4.5, 30, 10, 0, FENETRE)
+			expect(tampon[1].instant > 0).to.equal(true) -- au-delà de la fenêtre : la référence suivante a pris le relais
+		end)
+
+		it("une téléportation toutes les 2 s : chaque tour est mesuré, le vol n'a plus de pause gratuite", function()
+			-- Le client redemande un palier toutes les 2 s (PALIER_DELAI_TELEPORT) : à chaque tour le tampon repart
+			-- de la destination, et le premier relevé (1,5 s plus tard) est jugé.
+			for tour = 1, 5 do
+				local tampon = apresPlacement(tour * 100, 50, 0)
+				Capacites.empiler(tampon, DELAI, tour * 100 + 120, 50, 0, FENETRE)
+				expect(Capacites.evaluerFenetre(TOUTES, tampon)).to.equal("horizontal")
+			end
+		end)
+	end)
 end

@@ -194,6 +194,21 @@ function Affichage.paliersDisponibles(paliers: any): boolean
 	return #numerosValides(paliers) > 0
 end
 
+--- Les deux listes de paliers donnent-elles le même menu ? Compare ce qui compte à l'écran (numéros valides, sans
+--- doublon ni ordre) : nil et une liste invalide valent « aucun palier ». Le menu ne se reconstruit que si c'est faux.
+function Affichage.memesPaliers(a: any, b: any): boolean
+	local x, y = numerosValides(a), numerosValides(b)
+	if #x ~= #y then
+		return false
+	end
+	for i, numero in x do
+		if y[i] ~= numero then
+			return false
+		end
+	end
+	return true
+end
+
 --- Combien de paliers lister : jusqu'au plus haut palier vu sur la carte ou débloqué ; tant que la carte n'a rien
 --- donné (streaming, remote en retard), 5 au moins.
 function Affichage.nombrePaliers(debloques: any, hauteurs: { [number]: number }): number
