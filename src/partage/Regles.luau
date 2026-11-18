@@ -26,24 +26,13 @@ export type Donnees = {
 	aura: number, -- aura totale, cumulée sur toutes les parties
 	achats: { string }, -- PurchaseId déjà traités, les plus récents à la fin
 	capacites: { [string]: boolean }, -- capacités débloquées dans le tuto (« course », « doubleSaut », « dash »)
-	paliers: { number }, -- numéros des paliers d'ascension atteints, définitifs, rangés croissants
 	meilleureHauteur: number, -- plus grande hauteur atteinte dans l'ascension, en studs ; 0 = jamais montée
 	meilleurTempsAscension: number, -- meilleur chrono du pied de l'ascension au sommet, en secondes ; 0 = aucun
 }
 
 local VERSION_DONNEES = 1
 
--- Paliers de l'ascension : la carte en pose 4 à 5 (tag Palier, attribut Numero). Ce n'est qu'un garde-fou contre
--- une valeur absurde, volontairement large (comme Affichage.PALIERS_MAX) : c'est la carte qui dit combien il y en
--- a, pas la sauvegarde — une carte qui en gagnerait un sixième ne doit pas faire perdre sa progression au joueur.
--- Un numéro hors bornes est écarté, jamais ramené dans les bornes (on ne débloque jamais un palier non atteint).
-local PALIERS_MAX = 10
-
 local Regles = {}
-
--- Garde-fou public : le serveur refuse un palier de la carte au-delà, sinon il le débloquerait pour la session puis
--- le perdrait au rechargement sans un mot (src/serveur/Ascension.luau).
-Regles.PALIERS_MAX = PALIERS_MAX
 
 --- Un checkpoint touché ne compte que s'il est le suivant, et qu'il existe.
 function Regles.peutValider(etapeActuelle: number, etapeTouchee: number, nbEtapes: number): boolean
@@ -64,7 +53,7 @@ function Regles.placeParAscension(enAscension: boolean, donnees: Donnees): boole
 	return enAscension and Regles.ascensionOuverte(donnees)
 end
 
---- « Recommencer » : l'étape repart à 0, rien d'autre ne bouge (aura, tutoFini, paliers, records, capacités).
+--- « Recommencer » : l'étape repart à 0, rien d'autre ne bouge (aura, tutoFini, records, capacités).
 function Regles.recommencer(donnees: Donnees)
 	donnees.etape = 0
 end
@@ -111,7 +100,6 @@ function Regles.donneesNeuves(): Donnees
 		aura = 0,
 		achats = {},
 		capacites = {},
-		paliers = {},
 		meilleureHauteur = 0,
 		meilleurTempsAscension = 0,
 	}
@@ -152,21 +140,8 @@ function Regles.migrer(brutes: any, nbEtapes: number): Donnees
 			end
 		end
 	end
-	-- Paliers d'ascension : des numéros entiers de 1 à PALIERS_MAX, sans doublon, rangés croissants.
-	if typeof(brutes.paliers) == "table" then
-		for _, numero in brutes.paliers do
-			if
-				typeof(numero) == "number"
-				and numero % 1 == 0
-				and numero >= 1
-				and numero <= PALIERS_MAX
-				and table.find(d.paliers, numero) == nil
-			then
-				table.insert(d.paliers, numero)
-			end
-		end
-		table.sort(d.paliers)
-	end
+	-- `paliers` (sauvegardes d'avant la tour exigeante) : le champ n'existe plus, il est simplement ignoré. Il
+	-- n'est pas recopié dans les données actuelles, et sa présence ne doit rien casser au chargement.
 	local hauteur = brutes.meilleureHauteur
 	if typeof(hauteur) == "number" and hauteur == hauteur and hauteur > 0 and hauteur < math.huge then
 		d.meilleureHauteur = math.floor(hauteur)
