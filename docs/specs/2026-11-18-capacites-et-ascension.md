@@ -1,6 +1,6 @@
 # Capacités de déplacement et ascension après Sup de Vinci
 
-Statut : validée
+Statut : en cours (relue deux fois, PR #6 ; essai en jeu sur l'expérience de test après fusion)
 Date : 2026-11-18
 
 ## Besoin
