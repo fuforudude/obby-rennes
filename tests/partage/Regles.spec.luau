@@ -194,6 +194,53 @@ return function()
 		end)
 	end)
 
+	describe("le tuto fini ouvre l'ascension, et « Recommencer » ne la referme pas (tutoFini)", function()
+		it("un joueur neuf n'a pas fini le tuto", function()
+			expect(Regles.donneesNeuves().tutoFini).to.equal(false)
+		end)
+
+		it("un joueur existant arrivé au bout du tuto le reçoit à true", function()
+			expect(Regles.migrer({ etape = 15 }, 15).tutoFini).to.equal(true)
+			expect(Regles.migrer({ etape = 99 }, 15).tutoFini).to.equal(true) -- étape abîmée, ramenée à 15
+		end)
+
+		it("un joueur existant en route le reçoit à false", function()
+			expect(Regles.migrer({ etape = 14 }, 15).tutoFini).to.equal(false)
+			expect(Regles.migrer({ etape = 0 }, 15).tutoFini).to.equal(false)
+			expect(Regles.migrer({}, 15).tutoFini).to.equal(false)
+			expect(Regles.migrer(nil, 15).tutoFini).to.equal(false)
+		end)
+
+		it("garde tutoFini quand l'étape est repartie à 0 après « Recommencer »", function()
+			local d = Regles.migrer({ etape = 0, tutoFini = true }, 15)
+			expect(d.tutoFini).to.equal(true)
+			expect(d.etape).to.equal(0)
+		end)
+
+		it("n'invente pas tutoFini à partir d'une valeur abîmée", function()
+			expect(Regles.migrer({ etape = 3, tutoFini = "oui" }, 15).tutoFini).to.equal(false)
+			expect(Regles.migrer({ etape = 3, tutoFini = 1 }, 15).tutoFini).to.equal(false)
+			expect(Regles.migrer({ etape = 3, tutoFini = {} }, 15).tutoFini).to.equal(false)
+		end)
+
+		it("un tutoFini à false ne referme pas l'ascension d'un joueur arrivé au bout", function()
+			expect(Regles.migrer({ etape = 15, tutoFini = false }, 15).tutoFini).to.equal(true)
+		end)
+
+		it(
+			"l'ascension est ouverte exactement quand tutoFini est vrai (une seule règle pour les deux services)",
+			function()
+				local fini = Regles.donneesNeuves()
+				fini.tutoFini = true
+				fini.etape = 0 -- « Recommencer » : l'étape repart à 0, l'ascension reste ouverte
+				expect(Regles.ascensionOuverte(fini)).to.equal(true)
+				local enRoute = Regles.donneesNeuves()
+				enRoute.etape = 15 -- l'étape ne décide plus de rien
+				expect(Regles.ascensionOuverte(enRoute)).to.equal(false)
+			end
+		)
+	end)
+
 	describe("un achat n'est jamais donné deux fois", function()
 		it("reconnaît un achat déjà traité", function()
 			local achats = {}

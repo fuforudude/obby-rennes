@@ -104,6 +104,128 @@ return function()
 		end)
 	end)
 
+	describe(
+		"l'aura après une téléportation : les étages au-dessus du palier d'arrivée paient, ceux d'en dessous non",
+		function()
+			-- Étages tous les 15 studs (17 étages jusqu'au sommet) et paliers aux étages 4, 8, 12 et 16 (60, 120, 180, 240).
+			local MARGE = 2 -- Reglages.ASCENSION_MARGE_PALIER
+			local function hauteurEtage(numero: number): number
+				return numero * 15 + 0.95 -- le dessus de la plaque est un peu au-dessus de la dalle
+			end
+			local function tentative(modif: { [string]: any }?)
+				local t: { [string]: any } = { debut = 100, teleportations = 0, alertes = 0 }
+				for cle, valeur in modif or {} do
+					t[cle] = valeur
+				end
+				return t
+			end
+			local function auraTotale(t: { [string]: any }): number
+				local total = 0
+				for numero = 1, 17 do
+					if Ascension.etagePaye(t, hauteurEtage(numero)) then
+						total += Ascension.auraEtage(numero, BAREME)
+					end
+				end
+				return total
+			end
+
+			it("sans téléportation, tous les étages paient", function()
+				expect(Ascension.etagePaye(tentative(), hauteurEtage(1))).to.equal(true)
+				expect(Ascension.etagePaye(tentative(), hauteurEtage(17))).to.equal(true)
+				expect(auraTotale(tentative())).to.equal(Ascension.auraAscension(17, BAREME))
+			end)
+
+			it("le seuil après une téléportation est la hauteur du palier plus la marge", function()
+				expect(Ascension.hauteurMinimumPayante(180, MARGE)).to.equal(182)
+			end)
+
+			it(
+				"après une téléportation au palier 3 (180 studs), les étages au-dessus paient normalement",
+				function()
+					local t = tentative({
+						teleportations = 1,
+						hauteurMinimumPayante = Ascension.hauteurMinimumPayante(180, MARGE),
+					})
+					expect(Ascension.etagePaye(t, hauteurEtage(13))).to.equal(true)
+					expect(Ascension.etagePaye(t, hauteurEtage(17))).to.equal(true)
+				end
+			)
+
+			it("après une téléportation au palier 3, les étages en dessous ne paient rien", function()
+				local t = tentative({
+					teleportations = 1,
+					hauteurMinimumPayante = Ascension.hauteurMinimumPayante(180, MARGE),
+				})
+				expect(Ascension.etagePaye(t, hauteurEtage(1))).to.equal(false)
+				expect(Ascension.etagePaye(t, hauteurEtage(11))).to.equal(false)
+			end)
+
+			it("l'étage posé sur la dalle même du palier d'arrivée ne paie pas", function()
+				local t = tentative({
+					teleportations = 1,
+					hauteurMinimumPayante = Ascension.hauteurMinimumPayante(180, MARGE),
+				})
+				expect(Ascension.etagePaye(t, hauteurEtage(12))).to.equal(false) -- 180,95 : la dalle du palier
+			end)
+
+			it("exemple chiffré : au palier 3, seuls les étages 13 à 17 paient, soit 3 300 d'aura", function()
+				local t = tentative({
+					teleportations = 1,
+					hauteurMinimumPayante = Ascension.hauteurMinimumPayante(180, MARGE),
+				})
+				-- 580 + 620 + 660 + 700 + 740
+				expect(auraTotale(t)).to.equal(3300)
+				-- contre 7 140 pour les 17 étages grimpés depuis le pied.
+				expect(Ascension.auraAscension(17, BAREME)).to.equal(7140)
+			end)
+
+			it("une téléportation ne rapporte jamais plus que de grimper : un palier plus haut paie moins", function()
+				local function aura(hauteurPalier: number)
+					return auraTotale(tentative({
+						teleportations = 1,
+						hauteurMinimumPayante = Ascension.hauteurMinimumPayante(hauteurPalier, MARGE),
+					}))
+				end
+				expect(aura(60) > aura(120)).to.equal(true)
+				expect(aura(120) > aura(180)).to.equal(true)
+				expect(aura(180) > aura(240)).to.equal(true)
+				expect(aura(60) < Ascension.auraAscension(17, BAREME)).to.equal(true)
+			end)
+
+			it("une alerte de la surveillance : plus rien ne paie, même au-dessus du palier", function()
+				local t = tentative({
+					teleportations = 1,
+					alertes = 1,
+					hauteurMinimumPayante = Ascension.hauteurMinimumPayante(180, MARGE),
+				})
+				expect(Ascension.etagePaye(t, hauteurEtage(17))).to.equal(false)
+				expect(Ascension.etagePaye(tentative({ alertes = 1 }), hauteurEtage(1))).to.equal(false)
+				expect(auraTotale(t)).to.equal(0)
+			end)
+
+			it("sans chrono (après le sommet), plus rien ne paie", function()
+				local t = tentative()
+				t.debut = nil
+				expect(Ascension.etagePaye(t, hauteurEtage(5))).to.equal(false)
+			end)
+
+			it("une hauteur d'étage abîmée ne paie pas", function()
+				local t = tentative({ hauteurMinimumPayante = 100 })
+				expect(Ascension.etagePaye(t, 0 / 0)).to.equal(false)
+				expect(Ascension.etagePaye(tentative(), 0 / 0)).to.equal(false)
+			end)
+
+			it("une téléportation rend toujours la tentative non classée, aura payée ou non", function()
+				local t = tentative({
+					teleportations = 1,
+					hauteurMinimumPayante = Ascension.hauteurMinimumPayante(180, MARGE),
+				})
+				expect(Ascension.estClassable(t)).to.equal(false)
+				expect(Ascension.etagePaye(t, hauteurEtage(15))).to.equal(true)
+			end)
+		end
+	)
+
 	describe("hauteur affichée en mètres", function()
 		it("rend une hauteur lisible (1 stud vaut environ 0,28 m)", function()
 			expect(Ascension.formaterHauteur(650)).to.equal("182 m")
