@@ -63,6 +63,24 @@ local Reglages = {
 	SURVEILLANCE_MARGE = 1.3,
 	SURVEILLANCE_TOLERANCE = 6,
 
+	-- Ascension (au-dessus de Sup de Vinci). Aura d'un étage franchi : ASCENSION_AURA_BASE pour le premier étage,
+	-- puis ASCENSION_AURA_PAR_ETAGE de plus à chaque étage (étage n = BASE + PAR_ETAGE × (n − 1)). Monter haut est
+	-- le vrai gain : avec 100 et 40, l'étage 1 rapporte 100 et l'étage 25 en rapporte 1 060, dix fois plus.
+	-- Une ascension entière de 25 étages rapporte 14 500 d'aura (Ascension.auraAscension), à comparer aux 16 500
+	-- d'un tuto parfait (15 checkpoints en série, puis 1 000 + 5 000 à l'arrivée) : le tuto reste le gros coup
+	-- unique, l'ascension devient la raison de revenir. Un étage ne rapporte qu'une fois par tentative.
+	ASCENSION_AURA_BASE = 100,
+	ASCENSION_AURA_PAR_ETAGE = 40,
+	-- Téléportation vers un palier débloqué : pas plus d'une fois toutes les 2 secondes (anti-triche).
+	PALIER_DELAI_TELEPORT = 2,
+	-- Suivi de la hauteur pendant l'ascension : relevé toutes les ASCENSION_PERIODE_SUIVI secondes, et l'état n'est
+	-- renvoyé au client que si la hauteur a bougé d'au moins ASCENSION_PAS_ETAT studs (pas à chaque image).
+	ASCENSION_PERIODE_SUIVI = 0.25,
+	ASCENSION_PAS_ETAT = 2,
+	-- Hauteur (studs au-dessus du pied) en dessous de laquelle retoucher le pied ne relance pas le chrono : sans ça,
+	-- rester posé sur la plateforme de départ le remettrait à zéro sans arrêt.
+	ASCENSION_SEUIL_DEPART = 8,
+
 	TAILLE_CLASSEMENT = 10,
 	DELAI_RAFRAICHIR_CLASSEMENT = 60, -- secondes
 	DELAI_MIN_ENTRE_DEMANDES = 1, -- secondes, pour « Recommencer »
@@ -73,6 +91,8 @@ local Reglages = {
 	STORE_JOUEURS = "Joueurs_v1",
 	STORE_CLASSEMENT = "MeilleursTemps_v1",
 	STORE_AURA = "Aura_v1",
+	STORE_HAUTEUR = "HauteurAscension_v1",
+	STORE_ASCENSION = "TempsAscension_v1",
 }
 
 return table.freeze(Reglages)
