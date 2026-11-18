@@ -10,6 +10,9 @@
 --   CapaciteDebloquee(capacite: string)  une capacité vient d'être débloquée ("course", "doubleSaut" ou "dash")
 --   EtatAscension(etat: EtatAscension)  à chaque changement utile de l'ascension (pas à chaque image) : départ du
 --                                     pied, étage, palier débloqué, téléportation, sommet, hauteur qui bouge
+--   EffetCapacite(joueur: Player, capacite: string)  « ce joueur vient de faire un dash ou un double saut » : les
+--                                     autres clients jouent l'effet (vrille, traînée, onde) sur son personnage.
+--                                     Envoyé à tous les joueurs SAUF celui d'origine ; capacite = "dash" ou "doubleSaut"
 -- Client → serveur
 --   DemanderRecommencer()             repartir de la coloc, chrono à zéro
 --   ToucheParEvenement(objet: Instance)  « cet événement (tag Evenement) m'a touché » : le serveur vérifie que le
@@ -18,6 +21,10 @@
 --                                     existe, qu'il est débloqué, que le joueur est dans l'ascension et qu'il ne
 --                                     demande pas plus d'une fois toutes les PALIER_DELAI_TELEPORT secondes
 --                                     (serveur/Ascension, règle pure dans partage/Ascension)
+--   SignalerEffet(capacite: string)    « j'ai fait un dash / un double saut » (effet déjà joué chez moi) : le serveur
+--                                     vérifie le type, la capacité (débloquée), que le joueur est vivant et la cadence
+--                                     (au plus un par capacité toutes les EFFET_DELAI_MIN s), puis relaie EffetCapacite
+--                                     (serveur/Capacites, règle pure dans partage/EffetsCapacites)
 -- (« Passer l'étape » passe par MarketplaceService : le client affiche l'achat, le serveur le traite.)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -57,6 +64,8 @@ local NOMS = {
 	"DemanderRecommencer",
 	"ToucheParEvenement",
 	"DemanderTeleportPalier",
+	"EffetCapacite",
+	"SignalerEffet",
 }
 local NOM_DOSSIER = "Remotes"
 
