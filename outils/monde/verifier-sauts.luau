@@ -1,13 +1,38 @@
 -- Usage : lune run outils/monde/verifier-sauts.luau [fichier.rbxm] (défaut monde/Parcours.rbxm ; après lune run outils/monde/generer.luau).
 -- Vérifie le tracé : depuis le départ, peut-on atteindre chaque checkpoint en sautant de plateforme en plateforme ?
 -- Saut possible si : montée <= 4,5 ; vide horizontal (entre bords) <= 6,5 (+ 1 par tranche de 4 de descente, max 9).
--- Signale aussi les plafonds trop bas (moins de 5,5 studs au-dessus d'une plateforme, sur la même emprise)
--- et les pièces mortelles collées à une plateforme de départ de saut (voir « mortels trop proches »).
+--
+-- Les capacités de déplacement (spec 2026-11-18) changent ces limites, mais seulement là où elles sont déjà
+-- débloquées : une pièce taguée « DeblocageCapacite » porte l'attribut « Capacite » (« course », « doubleSaut » ou
+-- « dash ») et la donne dès qu'on marche dessus. Le parcours en largeur transporte donc, avec chaque plateforme
+-- atteinte, les capacités ramassées en chemin, et applique les limites correspondantes (voir `limites`). Deux
+-- chemins qui arrivent sur la même plateforme avec des capacités différentes sont réunis : approximation sans
+-- conséquence ici, les trois déblocages se suivent sur un chemin unique. Une carte qui vient après le tuto peut
+-- déclarer ce que le joueur a forcément en main en y entrant : attribut « CapacitesAcquises » de la racine du
+-- modèle, une liste séparée par des virgules (« course,doubleSaut,dash »).
+--
+-- Signale aussi les plafonds trop bas (moins de 5,5 studs au-dessus d'une plateforme, sur la même emprise),
+-- les pièces mortelles collées à une plateforme de départ de saut (voir « mortels trop proches ») et les portes
+-- d'apprentissage sans effet (une capacité dont le retrait ne rend aucun checkpoint inatteignable : le passage
+-- censé l'enseigner se franchit sans elle, le joueur n'apprend rien).
 local fs = require("@lune/fs")
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 
 local modele = roblox.deserializeModel(fs.readFile(process.args[1] or "monde/Parcours.rbxm"))[1]
+
+-- Limites de saut du personnage par défaut (WalkSpeed 16, JumpPower 50) et ce que chaque capacité y ajoute.
+-- Le temps en l'air ne dépend pas de la vitesse : courir allonge la portée horizontale du même facteur que la
+-- vitesse. Le double saut, lui, sert à monter (la spec ne lui promet pas de portée en plus).
+local MONTEE = 4.5 -- montée franchissable d'un saut debout
+local VIDE = 6.5 -- vide franchissable à plat, à l'arrêt
+local BONUS_DESCENTE = 2.5 -- au plus ; 1 stud de vide en plus par tranche de 4 studs de descente
+local COURSE_FACTEUR = 1.5 -- course : vitesse ×1,5, donc vide ×1,5 (9,75)
+local DOUBLE_SAUT_MONTEE = 9 -- double saut : montée totale des deux sauts
+local DASH_VIDE = 8 -- dash : studs de vide en plus (borne basse de la fourchette 8 à 12 de la spec)
+
+local CAPACITES = { course = 1, doubleSaut = 2, dash = 4 }
+local ORDRE = { "course", "doubleSaut", "dash" }
 
 type Plateforme = {
 	nom: string,
@@ -18,10 +43,12 @@ type Plateforme = {
 	haut: number,
 	bas: number?,
 	cp: number?,
+	donne: number?,
 }
 local plateformes: { Plateforme } = {}
 local solides = {}
 local mortels: { Plateforme } = {}
+local defauts = 0
 
 local function emprise(p, dx, dz)
 	local s, pos = p.Size, p.CFrame.Position
@@ -64,10 +91,25 @@ for _, d in modele:GetDescendants() do
 		local x1, x2, z1, z2 = emprise(d, dx, dz)
 		local haut = d.CFrame.Position.Y + d.Size.Y / 2
 		local n = d:GetAttribute("Numero")
-		table.insert(
-			plateformes,
-			{ nom = d.Parent.Name .. "/" .. d.Name, x1 = x1, x2 = x2, z1 = z1, z2 = z2, haut = haut, cp = n }
-		)
+		local donne = 0
+		if d:HasTag("DeblocageCapacite") then
+			local capacite = d:GetAttribute("Capacite")
+			donne = CAPACITES[capacite] or 0
+			if donne == 0 then
+				print(`  DÉFAUT : {d.Parent.Name}/{d.Name} taguée DeblocageCapacite, Capacite = {tostring(capacite)}`)
+				defauts += 1
+			end
+		end
+		table.insert(plateformes, {
+			nom = d.Parent.Name .. "/" .. d.Name,
+			x1 = x1,
+			x2 = x2,
+			z1 = z1,
+			z2 = z2,
+			haut = haut,
+			cp = n,
+			donne = donne,
+		})
 	end
 end
 
@@ -77,41 +119,102 @@ local function vide(a: Plateforme, b: Plateforme): number
 	return math.sqrt(gx * gx + gz * gz)
 end
 
-local function sautPossible(a: Plateforme, b: Plateforme): boolean
-	local montee = b.haut - a.haut
-	if montee > 4.5 then
-		return false
+-- Les limites de saut telles que les voit un joueur qui a déjà `capacites` (masque de bits de CAPACITES).
+local function limites(capacites: number): (number, number)
+	local montee = if bit32.band(capacites, CAPACITES.doubleSaut) ~= 0 then DOUBLE_SAUT_MONTEE else MONTEE
+	local videMax = VIDE
+	if bit32.band(capacites, CAPACITES.course) ~= 0 then
+		videMax *= COURSE_FACTEUR
 	end
-	local bonus = if montee < 0 then math.min(2.5, -montee / 4) else 0
-	return vide(a, b) <= 6.5 + bonus
+	if bit32.band(capacites, CAPACITES.dash) ~= 0 then
+		videMax += DASH_VIDE
+	end
+	return montee, videMax
 end
 
--- Parcours en largeur depuis le départ.
+local function sautPossible(a: Plateforme, b: Plateforme, capacites: number): boolean
+	local monteeMax, videMax = limites(capacites)
+	local montee = b.haut - a.haut
+	if montee > monteeMax then
+		return false
+	end
+	local bonus = if montee < 0 then math.min(BONUS_DESCENTE, -montee / 4) else 0
+	return vide(a, b) <= videMax + bonus
+end
+
 local depart
 for i, p in plateformes do
 	if p.cp == 0 then
 		depart = i
 	end
 end
-local atteint = { [depart] = true }
-local file = { depart }
-while #file > 0 do
-	local i = table.remove(file, 1)
-	for j, q in plateformes do
-		if not atteint[j] and sautPossible(plateformes[i], q) then
-			atteint[j] = true
-			table.insert(file, j)
+if not depart then
+	print("DÉFAUT : aucune plateforme Checkpoint de Numero 0 (le départ) dans ce modèle")
+	process.exit(1)
+end
+
+-- Capacités déjà acquises en arrivant sur ce modèle : l'attribut « CapacitesAcquises » de la racine, une liste
+-- séparée par des virgules. Le parcours du tuto n'en met pas (on y débloque tout) ; une carte qui vient après lui,
+-- comme l'ascension, y déclare ce que le joueur a forcément en main avant d'y entrer.
+local acquises = 0
+do
+	local liste = modele:GetAttribute("CapacitesAcquises")
+	if typeof(liste) == "string" then
+		for nom in string.gmatch(liste, "[^,%s]+") do
+			if CAPACITES[nom] then
+				acquises = bit32.bor(acquises, CAPACITES[nom])
+			else
+				print(`DÉFAUT : CapacitesAcquises contient « {nom} », inconnue`)
+				defauts += 1
+			end
 		end
+		print(`capacités acquises avant cette carte : {liste}`)
 	end
 end
 
-local manquants = {}
-for _, p in plateformes do
-	if p.cp and not atteint[table.find(plateformes, p)] then
-		table.insert(manquants, p.cp)
+-- Parcours en largeur depuis le départ, en transportant les capacités ramassées en chemin. `privee` est le masque
+-- des capacités que l'on refuse de donner : avec 0 on explore le parcours tel qu'il se joue, avec le masque d'une
+-- capacité on vérifie que son passage d'apprentissage barre bien la route. Rend, par plateforme atteinte, les
+-- capacités dont on y dispose.
+local function explorer(privee: number): { [number]: number }
+	local atteint: { [number]: number } = {}
+	local file = {}
+	local function pousser(i: number, capacites: number)
+		local avec = bit32.band(bit32.bor(capacites, plateformes[i].donne or 0), bit32.bnot(privee))
+		local connu = atteint[i]
+		if connu and bit32.band(avec, bit32.bnot(connu)) == 0 then
+			return -- déjà vu, et sans capacité nouvelle à y apporter
+		end
+		atteint[i] = bit32.bor(connu or 0, avec)
+		table.insert(file, i)
 	end
+	pousser(depart, acquises)
+	while #file > 0 do
+		local i = table.remove(file, 1)
+		local capacites = atteint[i]
+		for j, q in plateformes do
+			if sautPossible(plateformes[i], q, capacites) then
+				pousser(j, capacites)
+			end
+		end
+	end
+	return atteint
 end
-table.sort(manquants)
+
+-- Les numéros des checkpoints qu'on n'atteint pas, dans l'ordre.
+local function inatteignables(atteint: { [number]: number }): { number }
+	local manquants = {}
+	for i, p in plateformes do
+		if p.cp and not atteint[i] then
+			table.insert(manquants, p.cp)
+		end
+	end
+	table.sort(manquants)
+	return manquants
+end
+
+local atteint = explorer(0)
+local manquants = inatteignables(atteint)
 print(
 	`{#plateformes} plateformes, checkpoints inatteignables : {if #manquants == 0
 		then "aucun"
@@ -120,6 +223,54 @@ print(
 for i, p in plateformes do
 	if not atteint[i] then
 		print("  inatteignable : " .. p.nom .. string.format(" (x %.0f, haut %.1f)", (p.x1 + p.x2) / 2, p.haut))
+	end
+end
+
+-- Les capacités, leur dalle de déblocage et l'effet de leur passage d'apprentissage.
+local posees = {}
+for _, p in plateformes do
+	if (p.donne or 0) ~= 0 then
+		for _, nom in ORDRE do
+			if p.donne == CAPACITES[nom] then
+				if posees[nom] then
+					print(`  DÉFAUT : capacité {nom} débloquée deux fois ({posees[nom]} et {p.nom})`)
+					defauts += 1
+				end
+				posees[nom] = p.nom
+			end
+		end
+	end
+end
+local montee0, vide0 = limites(0)
+print(
+	string.format(
+		"limites de base : montée %.1f, vide %.1f (+%.1f au plus en descente)",
+		montee0,
+		vide0,
+		BONUS_DESCENTE
+	)
+)
+for _, nom in ORDRE do
+	if not posees[nom] then
+		continue
+	end
+	local montee, videMax = limites(CAPACITES[nom])
+	local sans = inatteignables(explorer(CAPACITES[nom]))
+	print(
+		string.format(
+			"  %s : dalle %s ; avec elle seule montée %.1f, vide %.2f ; sans elle %d checkpoint(s) inatteignable(s)",
+			nom,
+			posees[nom],
+			montee,
+			videMax,
+			#sans - #manquants
+		)
+	)
+	-- On ne juge les portes que sur un parcours entier : s'il est déjà coupé ailleurs, tout est inatteignable de
+	-- toute façon et l'écart ne veut plus rien dire.
+	if #manquants == 0 and #sans == 0 then
+		print(`  DÉFAUT : le passage d'apprentissage de {nom} se franchit sans elle (porte sans effet)`)
+		defauts += 1
 	end
 end
 
@@ -155,7 +306,7 @@ local proches = 0
 local vus = {}
 for i, a in plateformes do
 	for j, b in plateformes do
-		if i == j or not sautPossible(a, b) then
+		if i == j or not sautPossible(a, b, atteint[i] or 0) then
 			continue
 		end
 		for k, m in mortels do
@@ -192,8 +343,9 @@ for i, a in plateformes do
 end
 print(`mortels trop proches : {proches}`)
 
--- Un checkpoint inatteignable ou un mortel trop proche bloque la CI ; les plafonds bas restent un avertissement
--- (deux sont voulus : les barres tournantes).
-if #manquants > 0 or proches > 0 then
+-- Un checkpoint inatteignable, un mortel trop proche ou une porte d'apprentissage sans effet bloque la CI ; les
+-- plafonds bas restent un avertissement (deux sont voulus : les barres tournantes).
+if #manquants > 0 or proches > 0 or defauts > 0 then
+	print(`défauts : {defauts}`)
 	process.exit(1)
 end

@@ -12,6 +12,10 @@
 -- Vilaine, on escalade le Parlement et on court sur son toit, on saute de cime en cime au Thabor, et on monte
 -- l'atrium de Sup de Vinci jusqu'à la salle de partiel. On avance globalement vers +X.
 -- Repères de saut (personnage par défaut) : on monte d'au plus 4 studs, on saute au plus 6 studs de vide.
+-- Trois exceptions voulues, les passages d'apprentissage des capacités (spec 2026-11-18) : chacun est précédé de sa
+-- dalle de déblocage et ne se franchit qu'avec la capacité qu'elle vient de donner. Dimensions dans les commentaires
+-- de chaque zone ; outils/monde/verifier-sauts.luau applique les limites capacité par capacité et refuse une porte
+-- qui se franchirait sans elle.
 --
 -- Ce que le jeu attend (contrats avec src/serveur) :
 -- - tag « Checkpoint » + attribut « Numero » (0 à 15) : les checkpoints ; le 0 est la SpawnLocation du départ ;
@@ -19,7 +23,9 @@
 -- - tag « Fragile » : s'efface un instant après qu'on a marché dessus ;
 -- - tag « Mobile » + attributs « Deplacement » (Vector3) et « Duree » (s) : va-et-vient ;
 -- - tag « Tournant » + attribut « Vitesse » (rad/s) : barre qui tourne autour de son centre et pousse les joueurs ;
--- - tags « TableauClassement » / « TableauAura » : panneaux dont le serveur remplit le TextLabel « Liste ».
+-- - tags « TableauClassement » / « TableauAura » : panneaux dont le serveur remplit le TextLabel « Liste » ;
+-- - tag « DeblocageCapacite » + attribut « Capacite » (« course », « doubleSaut » ou « dash ») : dalle qui débloque
+--   la capacité quand on marche dessus (trois en tout, une par zone d'apprentissage).
 
 return function(R)
 	local Instance, Vector3, Color3, CFrame, Enum, UDim2 = R.Instance, R.Vector3, R.Color3, R.CFrame, R.Enum, R.UDim2
@@ -432,6 +438,79 @@ return function(R)
 		texte(Enum.NormalId.Right, nom, accent).Parent = fronton
 		decor(bloc(parent, "LisereArche", 0.9, 0.3, taille + 2.4, x, dessus + 8.15, z, accent, Enum.Material.Neon))
 		return p
+	end
+
+	-- Passage d'apprentissage d'une capacité (spec 2026-11-18) : `p` est la dalle qu'on traverse, posée en travers du
+	-- chemin pour qu'on ne puisse pas la manquer. Elle porte le tag « DeblocageCapacite » et l'attribut « Capacite »
+	-- (« course », « doubleSaut » ou « dash ») : c'est par là que src/serveur débloque la capacité. On lui ajoute un
+	-- marquage lumineux au sol et un nom flottant, pour qu'on comprenne ce qu'on vient de gagner.
+	local function deblocage(parent, p, capacite: string, titre: string, accent)
+		p:SetAttribute("Capacite", capacite)
+		etiqueter(p, "DeblocageCapacite")
+		local pos, taille = p.CFrame.Position, p.Size
+		local marque = decor(
+			bloc(
+				parent,
+				p.Name .. "Marquage",
+				taille.X - 0.8,
+				0.05,
+				taille.Z - 0.8,
+				pos.X,
+				pos.Y + taille.Y / 2 + 0.05,
+				pos.Z,
+				accent,
+				Enum.Material.Neon
+			)
+		)
+		marque.CanCollide = false
+		texte(Enum.NormalId.Top, titre, Color3.fromRGB(20, 20, 28), accent).Parent = marque
+		etiquette(marque, titre, accent, 6)
+		return p
+	end
+
+	-- Panneau qui explique la capacité, planté à côté du passage (jamais au-dessus d'une plateforme : il resterait
+	-- en travers du saut). `face` est la grande face qui porte le texte, celle qu'on voit en arrivant.
+	local function panneauCapacite(parent, nom: string, x, dessus, z, face, longueur: number, contenu: string, accent)
+		local surZ = face == Enum.NormalId.Front or face == Enum.NormalId.Back
+		local p = decor(
+			bloc(
+				parent,
+				nom,
+				if surZ then longueur else 0.5,
+				6,
+				if surZ then 0.5 else longueur,
+				x,
+				dessus + 6,
+				z,
+				Color3.fromRGB(20, 20, 28)
+			)
+		)
+		texte(face, contenu, accent).Parent = p
+		return p
+	end
+
+	-- Trois jalons lumineux en pointillé au-dessus du vide d'un passage d'apprentissage : ils montrent où l'on va.
+	-- Fantômes (ni collision, ni toucher, ni requête) : ils ne servent jamais d'appui et n'entrent dans aucun des
+	-- contrôles de plateforme ou de plafond.
+	local function jalons(parent, nom: string, x1, z1, dessus1, x2, z2, dessus2, accent)
+		for k = 1, 3 do
+			local t = k / 4
+			local p = fantome(
+				bloc(
+					parent,
+					nom,
+					1.4,
+					0.3,
+					1.4,
+					x1 + (x2 - x1) * t,
+					dessus1 + (dessus2 - dessus1) * t + 0.3,
+					z1 + (z2 - z1) * t,
+					accent,
+					Enum.Material.Neon
+				)
+			)
+			p.CastShadow = false
+		end
 	end
 
 	-- Panneau de classement : `face` dit vers où il regarde ; `mural` = accroché à un mur (pas de pieds).
@@ -1389,6 +1468,28 @@ return function(R)
 	fragile(dalle(metro, "EscalatorEnPanne", 4, 6, 225, 22, 0, couleurs.papier))
 	dalle(metro, "Escalator", 4, 6, 231, 18, 0, couleurs.quai, Enum.Material.DiamondPlate)
 	checkpoint(metro, 4, 243, 14, 0, "La station")
+	-- Apprentissage 1/3 · la course. En sortant de la station, le parvis est coupé : 8 studs de vide à plat, soit
+	-- plus que les 6,5 d'un saut debout et moins que les 9,75 d'un saut en courant. La dalle barre toute la sortie
+	-- du checkpoint 4 (12 studs de large, collée à sa dalle) : impossible de passer à côté.
+	deblocage(
+		metro,
+		dalle(metro, "DalleDeLaCourse", 5, 12, 251.5, 14, 0, couleurs.quai, Enum.Material.DiamondPlate),
+		"course",
+		"COURSE",
+		accents.metro
+	)
+	panneauCapacite(
+		metro,
+		"PanneauCourse",
+		257,
+		15,
+		-10,
+		Enum.NormalId.Left,
+		12,
+		"COURSE DÉBLOQUÉE\nMAINTIENS MAJ\nET SAUTE : TU IRAS PLUS LOIN",
+		accents.metro
+	)
+	jalons(metro, "JalonCourse", 254, 0, 14, 262, 0, 15, accents.metro)
 	local girouette = decor(bloc(metro, "PanneauStation", 0.4, 3, 12, 196.5, 44, -9, Color3.fromRGB(20, 20, 25)))
 	texte(Enum.NormalId.Left, "LIGNE B · TRAFIC INTERROMPU", Color3.fromRGB(255, 170, 30)).Parent = girouette
 
@@ -1400,9 +1501,10 @@ return function(R)
 		texte(Enum.NormalId.Top, slogan, Color3.fromRGB(190, 30, 30), couleurs.banderole).Parent = b
 		return mobile(b, deplacement, duree)
 	end
-	dalle(cortege, "Pancarte", 2, 2, 254, 15, 0, couleurs.pancarte)
-	banderole(262, 15, "DES PRISES DANS LES AMPHIS", Vector3.new(0, 0, 8), 4)
-	dalle(cortege, "Pancarte", 2, 2, 270, 17, 0, couleurs.pancarte)
+	-- La première banderole est la cible du saut en courant du métro (8 studs de vide depuis la DalleDeLaCourse) :
+	-- large, elle pardonne l'approximation. Le reste du cortège se resserre derrière, jusqu'au checkpoint 5 (inchangé).
+	banderole(264, 15, "DES PRISES DANS LES AMPHIS", Vector3.new(0, 0, 8), 4)
+	dalle(cortege, "Pancarte", 2, 2, 271, 15, 0, couleurs.pancarte)
 	banderole(278, 17, "NON AUX PARTIELS À 8H", Vector3.new(0, 0, -8), 3)
 	dalle(cortege, "Pancarte", 2, 2, 286, 19, 0, couleurs.pancarte)
 	checkpoint(cortege, 5, 298, 19, 0, "Place de la République")
@@ -1433,6 +1535,10 @@ return function(R)
 		["+X"] = { centre = 0, largeur = 8, bas = 66, haut = 76 },
 	})
 	-- La spirale : balcons de 5 × 5 qui montent de 2,5 à chaque saut, une fois et quart autour de la tour.
+	-- Apprentissage 2/3 · le double saut. Deux exceptions à la montée régulière : le balcon 9 est la dalle de
+	-- déblocage (on y atterrit forcément, c'est le seul chemin), et le balcon 10 passe de 49 à 53,5, soit 7 studs
+	-- au-dessus du 9 : plus que les 4,5 d'un saut simple, moins que les 9 des deux sauts enchaînés. Le balcon 11
+	-- reste à 53,5 pour rattraper la spirale, le 12 retrouve sa hauteur d'origine (54).
 	local spirale = {
 		{ 376, -11 },
 		{ 378, -19 },
@@ -1451,10 +1557,25 @@ return function(R)
 		{ 376, 11 },
 		{ 376, 2 },
 	}
+	local hauteursForcees = { [10] = 53.5, [11] = 53.5 }
 	for i, pos in spirale do
-		local b = dalle(tour, "Balcon", 5, 5, pos[1], 24 + 2.5 * i, pos[2], couleurs.beton, Enum.Material.Concrete)
+		local dessus = hauteursForcees[i] or 24 + 2.5 * i
+		local b = dalle(
+			tour,
+			if i == 9 then "BalconDuDoubleSaut" else "Balcon",
+			5,
+			5,
+			pos[1],
+			dessus,
+			pos[2],
+			couleurs.beton,
+			Enum.Material.Concrete
+		)
 		if i == 5 or i == 12 then
 			fragile(b)
+		end
+		if i == 9 then
+			deblocage(tour, b, "doubleSaut", "DOUBLE SAUT", accents.tour)
 		end
 		-- Garde-corps vitré (fantôme) sur le bord extérieur du balcon, celui qui ne mène à aucun autre balcon.
 		local dx, dz = pos[1] - CX, pos[2]
@@ -1469,7 +1590,7 @@ return function(R)
 				1.3,
 				if surX then 5 else 0.2,
 				gx,
-				24 + 2.5 * i + 1.3,
+				dessus + 1.3,
 				gz,
 				Color3.fromRGB(170, 220, 240),
 				Enum.Material.Glass
@@ -1477,6 +1598,18 @@ return function(R)
 		)
 		verre.Transparency = 0.35
 	end
+	panneauCapacite(
+		tour,
+		"PanneauDoubleSaut",
+		417.5,
+		48,
+		7,
+		Enum.NormalId.Left,
+		8,
+		"DOUBLE SAUT\nDÉBLOQUÉ\nSAUTE UNE 2e FOIS\nEN L'AIR",
+		accents.tour
+	)
+	jalons(tour, "JalonDoubleSaut", 414, 9.5, 46.5, 413, 12.5, 53.5, accents.tour)
 	-- L'appart du 20e.
 	mortel(
 		boite(
@@ -1676,9 +1809,32 @@ return function(R)
 	)
 	dalle(vilaine, "Ponton", 4, 8, 599, 5, 0, couleurs.ponton, Enum.Material.WoodPlanks)
 	checkpoint(vilaine, 11, 611, 5, 0, "La Vilaine")
-	dalle(vilaine, "Bouee", 4, 4, 622, 8, 0, Color3.fromRGB(240, 90, 40))
-	fragile(dalle(vilaine, "BoueeCrevee", 4, 4, 629, 11, 2, couleurs.papier))
-	dalle(vilaine, "Bouee", 4, 4, 636, 14, -1, Color3.fromRGB(240, 90, 40))
+	-- Apprentissage 3/3 · le dash. Les bouées montent maintenant en biais vers la rive nord, où un long ponton barre
+	-- tout le passage : c'est la dalle de déblocage. De son bord sud aux quais (checkpoint 12, inchangé) il y a
+	-- 16 studs de vide, à plat, au-dessus de l'eau : plus que les 9,75 d'un saut en courant, moins que les 17,75 du
+	-- même saut prolongé d'un dash. Le ponton est long de 22 studs : on arrive dessus sans viser.
+	dalle(vilaine, "Bouee", 4, 6, 621, 8, 2, Color3.fromRGB(240, 90, 40))
+	fragile(dalle(vilaine, "BoueeCrevee", 4, 6, 626, 11, 9, couleurs.papier))
+	dalle(vilaine, "Bouee", 4, 6, 626, 14, 18, Color3.fromRGB(240, 90, 40))
+	deblocage(
+		vilaine,
+		dalle(vilaine, "PontonDuDash", 22, 6, 641, 17, 25, couleurs.ponton, Enum.Material.WoodPlanks),
+		"dash",
+		"DASH",
+		accents.vilaine
+	)
+	panneauCapacite(
+		vilaine,
+		"PanneauDash",
+		641,
+		18,
+		29.5,
+		Enum.NormalId.Front,
+		14,
+		"DASH DÉBLOQUÉ\nTOUCHE A EN L'AIR\nPOUR FONCER DEVANT",
+		accents.vilaine
+	)
+	jalons(vilaine, "JalonDash", 641, 22, 17, 641, 6, 17, accents.vilaine)
 	checkpoint(vilaine, 12, 647, 17, 0, "Les quais")
 	for _, dz in { -4, 4 } do
 		decor(bloc(vilaine, "PileDuPont", 3, 15, 3, 647, 16, dz, couleurs.pierre, Enum.Material.Cobblestone))
