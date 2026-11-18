@@ -21,6 +21,7 @@ export type Bareme = {
 export type Donnees = {
 	version: number,
 	etape: number,
+	tutoFini: boolean, -- le joueur a atteint l'arrivée du tuto au moins une fois : définitif, « Recommencer » ne le retire pas
 	meilleurTemps: number, -- en secondes ; 0 = aucun
 	aura: number, -- aura totale, cumulée sur toutes les parties
 	achats: { string }, -- PurchaseId déjà traités, les plus récents à la fin
@@ -47,6 +48,13 @@ Regles.PALIERS_MAX = PALIERS_MAX
 --- Un checkpoint touché ne compte que s'il est le suivant, et qu'il existe.
 function Regles.peutValider(etapeActuelle: number, etapeTouchee: number, nbEtapes: number): boolean
 	return etapeTouchee == etapeActuelle + 1 and etapeTouchee <= nbEtapes
+end
+
+--- L'ascension est-elle ouverte à ce joueur ? Exactement `tutoFini`. C'est LA règle, appelée par les deux services
+--- qui se partagent la réapparition (src/serveur/Ascension.luau et la dérogation de Parcours.placer) : une seule
+--- définition, donc jamais deux conditions qui divergent.
+function Regles.ascensionOuverte(donnees: Donnees): boolean
+	return donnees.tutoFini
 end
 
 --- Course qui démarre au départ, chrono lancé.
@@ -86,6 +94,7 @@ function Regles.donneesNeuves(): Donnees
 	return {
 		version = VERSION_DONNEES,
 		etape = 0,
+		tutoFini = false,
 		meilleurTemps = 0,
 		aura = 0,
 		achats = {},
@@ -106,6 +115,9 @@ function Regles.migrer(brutes: any, nbEtapes: number): Donnees
 	if typeof(etape) == "number" and etape == etape then -- etape == etape écarte NaN
 		d.etape = math.clamp(math.floor(etape), 0, nbEtapes)
 	end
+	-- Tuto fini : un joueur d'avant le champ l'a fini s'il est à l'arrivée ; un champ déjà sauvegardé à true reste
+	-- vrai même quand l'étape est repartie à 0 (« Recommencer »). Jamais d'autre valeur que true ou false.
+	d.tutoFini = brutes.tutoFini == true or d.etape >= nbEtapes
 	if typeof(brutes.meilleurTemps) == "number" and brutes.meilleurTemps > 0 then
 		d.meilleurTemps = brutes.meilleurTemps
 	end

@@ -81,6 +81,9 @@ local Reglages = {
 	-- renvoyé au client que si la hauteur a bougé d'au moins ASCENSION_PAS_ETAT studs (pas à chaque image).
 	ASCENSION_PERIODE_SUIVI = 0.25,
 	ASCENSION_PAS_ETAT = 2,
+	-- Après une téléportation vers un palier, les étages au-dessus du palier d'arrivée paient normalement, ceux en
+	-- dessous ne paient rien. Cette marge (studs) évite de payer l'étage posé sur la dalle même du palier.
+	ASCENSION_MARGE_PALIER = 2,
 	-- Hauteur (studs au-dessus du pied) en dessous de laquelle retoucher le pied ne relance pas le chrono : sans ça,
 	-- rester posé sur la plateforme de départ le remettrait à zéro sans arrêt.
 	ASCENSION_SEUIL_DEPART = 8,

@@ -65,16 +65,23 @@ local function creerLeaderstats(joueur: Player, donnees: Regles.Donnees)
 	stats.Parent = joueur
 end
 
+--- Cette réapparition est-elle celle de l'ascension ? Un joueur qui a fini le tuto et qui est dans l'ascension
+--- (attribut `EnAscension` posé par src/serveur/Ascension.luau) est placé par ce service-là, au pied de
+--- l'ascension, pas ici. « A fini le tuto » vient de `Regles.ascensionOuverte` (donc `donnees.tutoFini`), la même
+--- fonction que l'ouverture de l'ascension côté src/serveur/Ascension.luau : les deux services doivent toujours dire
+--- la même chose, sinon ils se disputent la réapparition.
+local function placeParAscension(joueur: Player, donnees: Regles.Donnees): boolean
+	return joueur:GetAttribute("EnAscension") == true and Regles.ascensionOuverte(donnees)
+end
+
 --- Pose le personnage sur son dernier checkpoint, tourné vers la suite du parcours (+X).
---- Exception : un joueur qui a fini le tuto et qui est dans l'ascension (attribut `EnAscension` posé par
---- src/serveur/Ascension.luau) est placé par ce service-là, au pied de l'ascension — pas ici.
 local function placer(joueur: Player)
 	local donnees = Donnees.obtenir(joueur)
 	local personnage = joueur.Character
 	if not donnees or not personnage then
 		return
 	end
-	if joueur:GetAttribute("EnAscension") == true and donnees.etape >= Reglages.NB_ETAPES then
+	if placeParAscension(joueur, donnees) then
 		return
 	end
 	local cp = checkpoints[donnees.etape]
@@ -93,6 +100,7 @@ local function terminer(joueur: Player)
 	end
 	local duree = maintenant() - (course.debut :: number)
 	course.debut = nil -- le chrono s'arrête
+	donnees.tutoFini = true -- arrivée atteinte : l'ascension s'ouvre, pour toujours (« Recommencer » n'y change rien)
 	local classable = Regles.estClassable(course, duree, Reglages.TEMPS_MIN_CLASSABLE)
 	local record = classable and Regles.estRecord(donnees.meilleurTemps, duree)
 	if record then
@@ -141,7 +149,8 @@ end
 local function surChute(joueur: Player)
 	local donnees = Donnees.obtenir(joueur)
 	local course = courses[joueur]
-	if not donnees or not course or donnees.etape >= Reglages.NB_ETAPES then
+	-- Pas de perte d'aura à l'arrivée, ni dans l'ascension (même après « Recommencer », qui remet l'étape à 0).
+	if not donnees or not course or donnees.etape >= Reglages.NB_ETAPES or placeParAscension(joueur, donnees) then
 		return
 	end
 	course.serie = 0

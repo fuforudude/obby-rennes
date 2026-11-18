@@ -17,6 +17,9 @@ export type Tentative = {
 	debut: number?, -- heure serveur du départ au pied de l'ascension ; nil = pas de chrono
 	teleportations: number, -- téléportations vers un palier pendant cette tentative
 	alertes: number, -- alertes de la surveillance des déplacements (src/serveur/Capacites.luau)
+	-- Après une téléportation : les étages dont le dessus est à cette hauteur (studs au-dessus du pied) ou plus bas
+	-- ne paient pas. nil = pas de seuil (tentative partie du pied : tous les étages paient).
+	hauteurMinimumPayante: number?,
 }
 
 export type RaisonTeleport =
@@ -29,7 +32,7 @@ export type RaisonTeleport =
 -- Ce qu'il faut savoir pour accepter une demande de téléportation. `numero` arrive du client : rien n'est supposé.
 export type EntreeTeleport = {
 	numero: unknown, -- l'argument du RemoteEvent DemanderTeleportPalier, tel qu'il est arrivé
-	enAscension: boolean, -- le joueur est dans une tentative d'ascension, personnage vivant
+	enAscension: boolean, -- le joueur peut se téléporter : ascension ouverte (tuto fini), personnage vivant
 	paliersCarte: { number }, -- hauteur de chaque palier de la carte, rangée par numéro (1 à 5)
 	paliersDebloques: { number }, -- numéros des paliers déjà atteints par ce joueur (données sauvegardées)
 }
@@ -74,6 +77,29 @@ end
 --- Cette tentative entre-t-elle aux classements ? Chrono parti du pied, aucune téléportation, aucune alerte.
 function Ascension.estClassable(tentative: Tentative): boolean
 	return tentative.debut ~= nil and tentative.teleportations == 0 and tentative.alertes == 0
+end
+
+--- Le seuil d'aura après une téléportation vers un palier : les étages au-dessus du palier d'arrivée paient, ceux
+--- à son niveau ou en dessous non. `marge` (studs) évite de payer l'étage posé sur la dalle même du palier, dont la
+--- plaque dépasse un peu : c'est le même niveau pour le joueur.
+function Ascension.hauteurMinimumPayante(hauteurPalier: number, marge: number): number
+	return hauteurPalier + marge
+end
+
+--- Cet étage paie-t-il son aura dans cette tentative ? Il faut un chrono parti du pied et aucune alerte de la
+--- surveillance (une alerte coupe tout : plus rien du tout), puis, après une téléportation, que l'étage soit
+--- au-dessus du seuil. Une téléportation seule ne coupe pas l'aura (elle rend seulement la tentative non classée,
+--- voir `estClassable`) : grimper depuis le palier d'arrivée reste récompensé, sans ferme depuis le bas.
+--- `hauteurEtage` : dessus de l'étage, en studs au-dessus du pied. Une valeur abîmée (NaN) ne paie pas.
+function Ascension.etagePaye(tentative: Tentative, hauteurEtage: number): boolean
+	if tentative.debut == nil or tentative.alertes > 0 then
+		return false
+	end
+	local seuil = tentative.hauteurMinimumPayante
+	if seuil == nil then
+		return hauteurEtage == hauteurEtage
+	end
+	return hauteurEtage > seuil
 end
 
 --- Nouveau record de hauteur ? (la plus grande gagne, contrairement aux temps)
