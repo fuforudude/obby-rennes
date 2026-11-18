@@ -6,6 +6,7 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Capacites = require(script.Parent.Capacites)
 local Classement = require(script.Parent.Classement)
 local Donnees = require(script.Parent.Donnees)
 local Reglages = require(ReplicatedStorage.Partage.Reglages)
@@ -65,10 +66,15 @@ local function creerLeaderstats(joueur: Player, donnees: Regles.Donnees)
 end
 
 --- Pose le personnage sur son dernier checkpoint, tourné vers la suite du parcours (+X).
+--- Exception : un joueur qui a fini le tuto et qui est dans l'ascension (attribut `EnAscension` posé par
+--- src/serveur/Ascension.luau) est placé par ce service-là, au pied de l'ascension — pas ici.
 local function placer(joueur: Player)
 	local donnees = Donnees.obtenir(joueur)
 	local personnage = joueur.Character
 	if not donnees or not personnage then
+		return
+	end
+	if joueur:GetAttribute("EnAscension") == true and donnees.etape >= Reglages.NB_ETAPES then
 		return
 	end
 	local cp = checkpoints[donnees.etape]
@@ -177,6 +183,26 @@ end
 
 local Parcours = {}
 
+--- Replace le joueur sur son dernier checkpoint. Sert à src/serveur/Ascension.luau, qui rend la main quand il n'a
+--- pas réussi à poser le joueur au pied de l'ascension : sans ça, plus personne ne le placerait.
+function Parcours.placerAuCheckpoint(joueur: Player)
+	placer(joueur)
+end
+
+--- Ajoute de l'aura au joueur et la fait suivre partout : liste des joueurs, classement (par lots) et état du
+--- client. Même chemin que l'aura des checkpoints. Sert aux étages de l'ascension (src/serveur/Ascension.luau).
+--- Rend false si les données ne sont pas chargées ou si le gain est nul.
+function Parcours.ajouterAura(joueur: Player, gain: number): boolean
+	local donnees = Donnees.obtenir(joueur)
+	if not donnees or gain <= 0 then
+		return false
+	end
+	donnees.aura += math.floor(gain)
+	majAura(joueur, donnees)
+	envoyerEtat(joueur)
+	return true
+end
+
 --- Avance le joueur d'une étape (achat Robux). Rend false s'il n'y a plus d'étape à passer.
 function Parcours.passerEtape(joueur: Player): boolean
 	local donnees = Donnees.obtenir(joueur)
@@ -188,6 +214,8 @@ function Parcours.passerEtape(joueur: Player): boolean
 	course.passages += 1
 	course.serie = 0 -- une étape achetée ne rapporte pas d'aura et casse la série
 	placer(joueur)
+	-- Ce déplacement vient du serveur : la surveillance ne doit pas le prendre pour un déplacement impossible.
+	Capacites.autoriserTeleportation(joueur)
 	if donnees.etape == Reglages.NB_ETAPES then
 		terminer(joueur)
 	end
