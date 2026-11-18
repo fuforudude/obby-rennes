@@ -40,6 +40,10 @@ local PALIERS_MAX = 10
 
 local Regles = {}
 
+-- Garde-fou public : le serveur refuse un palier de la carte au-delà, sinon il le débloquerait pour la session puis
+-- le perdrait au rechargement sans un mot (src/serveur/Ascension.luau).
+Regles.PALIERS_MAX = PALIERS_MAX
+
 --- Un checkpoint touché ne compte que s'il est le suivant, et qu'il existe.
 function Regles.peutValider(etapeActuelle: number, etapeTouchee: number, nbEtapes: number): boolean
 	return etapeTouchee == etapeActuelle + 1 and etapeTouchee <= nbEtapes

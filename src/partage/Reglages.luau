@@ -73,6 +73,10 @@ local Reglages = {
 	ASCENSION_AURA_PAR_ETAGE = 40,
 	-- Téléportation vers un palier débloqué : pas plus d'une fois toutes les 2 secondes (anti-triche).
 	PALIER_DELAI_TELEPORT = 2,
+	-- Une ascension plus rapide que ça est impossible à la main : son chrono n'entre pas au classement, comme
+	-- TEMPS_MIN_CLASSABLE pour le tuto. À recalibrer sur la tour réelle (au moins 250 studs) : avec le double
+	-- saut et le dash, un joueur très bon monte de l'ordre de 15 studs/s, donc jamais la tour en moins de 15 s.
+	ASCENSION_TEMPS_MIN_CLASSABLE = 15,
 	-- Suivi de la hauteur pendant l'ascension : relevé toutes les ASCENSION_PERIODE_SUIVI secondes, et l'état n'est
 	-- renvoyé au client que si la hauteur a bougé d'au moins ASCENSION_PAS_ETAT studs (pas à chaque image).
 	ASCENSION_PERIODE_SUIVI = 0.25,

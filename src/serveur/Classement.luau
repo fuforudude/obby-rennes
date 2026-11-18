@@ -94,6 +94,9 @@ local function afficher(tableau: Tableau, texte: string, centre: boolean)
 end
 
 local function rafraichirTableau(tableau: Tableau)
+	if #CollectionService:GetTagged(tableau.tag) == 0 then
+		return -- aucun panneau de ce tableau dans la carte : rien à écrire, et pas de lecture DataStore pour rien
+	end
 	local store = tableau.store
 	if not store then
 		afficher(tableau, "Classement indisponible", true)

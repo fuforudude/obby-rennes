@@ -183,6 +183,12 @@ end
 
 local Parcours = {}
 
+--- Replace le joueur sur son dernier checkpoint. Sert à src/serveur/Ascension.luau, qui rend la main quand il n'a
+--- pas réussi à poser le joueur au pied de l'ascension : sans ça, plus personne ne le placerait.
+function Parcours.placerAuCheckpoint(joueur: Player)
+	placer(joueur)
+end
+
 --- Ajoute de l'aura au joueur et la fait suivre partout : liste des joueurs, classement (par lots) et état du
 --- client. Même chemin que l'aura des checkpoints. Sert aux étages de l'ascension (src/serveur/Ascension.luau).
 --- Rend false si les données ne sont pas chargées ou si le gain est nul.

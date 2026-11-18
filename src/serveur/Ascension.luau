@@ -72,11 +72,16 @@ local function maintenant(): number
 	return workspace:GetServerTimeNow()
 end
 
---- Appelle une fonction de serveur/Capacites si le module est là. Jamais bloquant, jamais fatal.
+--- Appelle une fonction de serveur/Capacites si le module est là. Jamais fatal, mais une erreur se voit : sans
+--- `autoriserTeleportation`, chaque placement décidé par le serveur serait pris pour de la triche.
 local function appelerCapacites(nom: string, joueur: Player)
 	local fonction = if capacites then capacites[nom] else nil
-	if typeof(fonction) == "function" then
-		pcall(fonction, joueur)
+	if typeof(fonction) ~= "function" then
+		return
+	end
+	local ok, erreur = pcall(fonction, joueur)
+	if not ok then
+		warn(`[Ascension] Capacites.{nom} en échec : {erreur}`)
 	end
 end
 
@@ -151,6 +156,11 @@ local function placerSur(joueur: Player, part: BasePart): boolean
 	end
 	local position = part.Position + Vector3.new(0, part.Size.Y / 2 + 3, 0)
 	personnage:PivotTo(CFrame.lookAt(position, position + Vector3.xAxis))
+	-- Sans ça, un joueur téléporté en pleine chute arrive avec sa vitesse de chute et retombe aussitôt.
+	local racine = personnage:FindFirstChild("HumanoidRootPart")
+	if racine and racine:IsA("BasePart") then
+		racine.AssemblyLinearVelocity = Vector3.zero
+	end
 	appelerCapacites("autoriserTeleportation", joueur)
 	return true
 end
@@ -181,19 +191,27 @@ end
 local function replacerAuPied(joueur: Player)
 	local p = pied
 	if not p or not placerSur(joueur, p) then
-		-- Pas de pied dans la carte, ou personne à placer : on rend la main à Parcours.luau plutôt que de laisser
-		-- le joueur nulle part (il repartira de son checkpoint, et retouchera le pied pour relancer l'ascension).
+		-- Pas de pied dans la carte, ou racine jamais arrivée : on rend la main à Parcours, qui a déjà renoncé à
+		-- cause de l'attribut. Sans ce rappel, le joueur resterait au point d'apparition de Roblox.
 		quitterAscension(joueur)
+		Parcours.placerAuCheckpoint(joueur)
 		return
 	end
 	demarrerTentative(joueur)
 end
 
---- Toucher le pied (re)lance une tentative. L'ascension n'est ouverte qu'au joueur arrivé à Sup de Vinci.
+--- L'ascension n'est ouverte qu'au joueur arrivé à Sup de Vinci. Même condition que la dérogation de
+--- Parcours.placer : les deux services doivent dire la même chose, sinon ils se disputent la réapparition.
+--- Attention : « Recommencer » remet l'étape à 0 et referme donc l'ascension (voir le rendu, décision à prendre).
+local function ascensionOuverte(donnees: Regles.Donnees): boolean
+	return donnees.etape >= Reglages.NB_ETAPES
+end
+
+--- Toucher le pied (re)lance une tentative.
 local function surPied(touche: BasePart)
 	local joueur = joueurDepuis(touche)
 	local donnees = joueur and Donnees.obtenir(joueur)
-	if not joueur or not donnees or donnees.etape < Reglages.NB_ETAPES then
+	if not joueur or not donnees or not ascensionOuverte(donnees) then
 		return
 	end
 	local tentative = tentatives[joueur]
@@ -204,6 +222,9 @@ local function surPied(touche: BasePart)
 end
 
 --- Un étage franchi pour la première fois de cette tentative rapporte son aura (croissante avec la hauteur).
+--- Une tentative non classable ne rapporte rien : sans ça, se téléporter au dernier palier, toucher les deux
+--- étages du haut, se laisser tomber et recommencer rapporterait plus d'aura en une minute qu'un tuto parfait.
+--- L'étage est marqué comme franchi dans tous les cas : il ne se repaie pas en retouchant la pièce.
 local function surEtage(numero: number, touche: BasePart)
 	local joueur = joueurDepuis(touche)
 	local tentative = joueur and tentatives[joueur]
@@ -211,19 +232,34 @@ local function surEtage(numero: number, touche: BasePart)
 		return
 	end
 	tentative.etages[numero] = true
+	if surveillanceAlerte(joueur) then
+		tentative.alertes += 1
+	end
+	if not RegleAscension.estClassable(tentative) then
+		return
+	end
 	Parcours.ajouterAura(joueur, RegleAscension.auraEtage(numero, Reglages))
 end
 
 --- Un palier touché est acquis définitivement, avec tous ceux d'en dessous (on ne peut pas être là sans les avoir
 --- passés — un joueur qui saute par-dessus un palier ne perd pas les précédents).
+--- Un palier débloqué est la seule chose irréversible du jalon : il faut une vraie tentative, le tuto fini, et
+--- aucune alerte de la surveillance (le Touched arrive avant que serveur/Capacites ramène le tricheur en arrière,
+--- donc on refuse aussi sur une alerte vue plus tôt dans la tentative).
 local function surPalier(numero: number, touche: BasePart)
 	local joueur = joueurDepuis(touche)
 	local donnees = joueur and Donnees.obtenir(joueur)
-	if not joueur or not donnees then
+	local tentative = joueur and tentatives[joueur]
+	if not joueur or not donnees or not tentative or not ascensionOuverte(donnees) then
 		return
 	end
-	local tentative = tentatives[joueur]
-	local hauteur = if tentative then tentative.hauteur else 0
+	if surveillanceAlerte(joueur) then
+		tentative.alertes += 1
+	end
+	if tentative.alertes > 0 then
+		return
+	end
+	local hauteur = tentative.hauteur
 	local nouveau = false
 	for n = 1, math.max(numero, RegleAscension.palierPour(hauteur, paliersHauteur)) do
 		if table.find(donnees.paliers, n) == nil then
@@ -251,7 +287,13 @@ local function surSommet(touche: BasePart)
 	end
 	local classable = RegleAscension.estClassable(tentative)
 	tentative.debut = nil -- le chrono s'arrête
-	if classable and duree > 0 and Regles.estRecord(donnees.meilleurTempsAscension, duree) then
+	-- Un temps plus court qu'ASCENSION_TEMPS_MIN_CLASSABLE est impossible à la main : il n'entre pas au classement
+	-- (un pied ou un sommet mal placés dans la carte y inscriraient sinon un temps imbattable, pour toujours).
+	if
+		classable
+		and duree >= Reglages.ASCENSION_TEMPS_MIN_CLASSABLE
+		and Regles.estRecord(donnees.meilleurTempsAscension, duree)
+	then
 		donnees.meilleurTempsAscension = duree
 		Classement.soumettreAscension(joueur, duree)
 	end
@@ -280,35 +322,43 @@ local function surDemandeTeleport(joueur: Player, numero: unknown)
 	end
 	local part = paliersParts[numero :: number]
 	local tentative = tentatives[joueur]
-	if not part or not tentative then
+	if not part or not tentative or not placerSur(joueur, part) then
 		return
 	end
 	tentative.teleportations += 1 -- la tentative en cours n'est plus classable
-	placerSur(joueur, part)
 	envoyerEtat(joueur)
 end
 
---- Relevé périodique : hauteur suivie, record sauvegardé, alertes de surveillance, état renvoyé si utile.
-local function relever()
+--- Relevé d'un joueur : hauteur suivie, record sauvegardé, alertes de surveillance, état renvoyé si utile.
+local function relever(joueur: Player, tentative: Tentative)
+	local hauteur = hauteurDe(joueur)
+	local donnees = Donnees.obtenir(joueur)
+	if hauteur == nil or donnees == nil then
+		return
+	end
+	tentative.hauteur = hauteur
+	if surveillanceAlerte(joueur) then
+		tentative.alertes += 1 -- la tentative n'est plus classable (anti-triche, serveur/Capacites)
+	end
+	-- Une tentative surveillée comme impossible ne monte plus personne au classement de la hauteur ; une
+	-- téléportation vers un palier déjà gagné, elle, ne retire rien à la hauteur réellement atteinte.
+	local studs = RegleAscension.versStudsEntiers(hauteur)
+	if tentative.alertes == 0 and RegleAscension.estRecordHauteur(donnees.meilleureHauteur, studs) then
+		donnees.meilleureHauteur = studs
+		Classement.signalerHauteur(joueur, studs)
+	end
+	if math.abs(hauteur - tentative.hauteurEnvoyee) >= Reglages.ASCENSION_PAS_ETAT then
+		envoyerEtat(joueur)
+	end
+end
+
+--- Le tour de tous les joueurs qui montent. Chacun dans son pcall : une erreur chez l'un n'éteint pas le suivi
+--- pour tout le serveur (sinon plus de hauteur, plus de record, plus d'état envoyé jusqu'au redémarrage).
+local function releverTous()
 	for joueur, tentative in tentatives do
-		local hauteur = hauteurDe(joueur)
-		local donnees = Donnees.obtenir(joueur)
-		if hauteur == nil or donnees == nil then
-			continue
-		end
-		tentative.hauteur = hauteur
-		if surveillanceAlerte(joueur) then
-			tentative.alertes += 1 -- la tentative n'est plus classable (anti-triche, serveur/Capacites)
-		end
-		-- Une tentative surveillée comme impossible ne monte plus personne au classement de la hauteur ; une
-		-- téléportation vers un palier déjà gagné, elle, ne retire rien à la hauteur réellement atteinte.
-		local studs = RegleAscension.versStudsEntiers(hauteur)
-		if tentative.alertes == 0 and RegleAscension.estRecordHauteur(donnees.meilleureHauteur, studs) then
-			donnees.meilleureHauteur = studs
-			Classement.signalerHauteur(joueur, studs)
-		end
-		if math.abs(hauteur - tentative.hauteurEnvoyee) >= Reglages.ASCENSION_PAS_ETAT then
-			envoyerEtat(joueur)
+		local ok, erreur = pcall(relever, joueur, tentative)
+		if not ok then
+			warn(`[Ascension] relevé de {joueur.Name} en échec : {erreur}`)
 		end
 	end
 end
@@ -351,11 +401,16 @@ end
 
 local function lirePied()
 	for _, part in CollectionService:GetTagged("PiedAscension") do
-		if part:IsA("BasePart") then
-			pied = part
-			part.Touched:Connect(surPied)
-			break
+		if not part:IsA("BasePart") then
+			continue
 		end
+		if pied then
+			-- Une seule plateforme de départ : c'est l'origine des hauteurs, deux donneraient deux repères.
+			warn(`[Ascension] plusieurs pièces PiedAscension : {part:GetFullName()} ignorée`)
+			continue
+		end
+		pied = part
+		part.Touched:Connect(surPied)
 	end
 	if not pied then
 		warn("[Ascension] aucune pièce PiedAscension dans la carte : pas d'ascension (monde/Ascension.rbxm)")
@@ -366,8 +421,18 @@ local function lirePaliers()
 	local origine = sommetDuPied()
 	for _, part in CollectionService:GetTagged("Palier") do
 		local numero = part:GetAttribute("Numero")
-		if not part:IsA("BasePart") or typeof(numero) ~= "number" or numero % 1 ~= 0 or numero < 1 then
-			warn(`[Ascension] palier ignoré : {part:GetFullName()} (attribut Numero entier attendu)`)
+		-- Au-delà de Regles.PALIERS_MAX, la sauvegarde l'écarterait : le palier serait débloqué pour la session
+		-- puis perdu au rechargement. Mieux vaut le refuser tout de suite, et le dire.
+		if
+			not part:IsA("BasePart")
+			or typeof(numero) ~= "number"
+			or numero % 1 ~= 0
+			or numero < 1
+			or numero > Regles.PALIERS_MAX
+		then
+			warn(
+				`[Ascension] palier ignoré : {part:GetFullName()} (attribut Numero entier de 1 à {Regles.PALIERS_MAX} attendu)`
+			)
 			continue
 		end
 		local n = numero :: number
@@ -436,7 +501,7 @@ function Ascension.demarrer()
 
 	task.spawn(function()
 		while true do
-			relever()
+			releverTous()
 			task.wait(Reglages.ASCENSION_PERIODE_SUIVI)
 		end
 	end)

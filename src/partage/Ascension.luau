@@ -43,8 +43,11 @@ Ascension.METRES_PAR_STUD = METRES_PAR_STUD
 
 --- Aura d'un étage franchi : la base pour le premier étage, puis de plus en plus haut on monte.
 --- Croissante avec la hauteur : l'étage n rapporte BASE + PAR_ETAGE × (n − 1).
+--- Un numéro abîmé (NaN, infini, négatif) compte pour l'étage 1 : une pièce mal taguée dans la carte ne rapporte
+--- jamais plus que la base.
 function Ascension.auraEtage(numeroEtage: number, bareme: Bareme): number
-	local n = math.max(1, math.floor(if numeroEtage == numeroEtage then numeroEtage else 1))
+	local sain = numeroEtage == numeroEtage and numeroEtage < math.huge
+	local n = math.max(1, math.floor(if sain then numeroEtage else 1))
 	return math.floor(bareme.ASCENSION_AURA_BASE + bareme.ASCENSION_AURA_PAR_ETAGE * (n - 1))
 end
 

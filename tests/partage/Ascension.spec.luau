@@ -27,10 +27,12 @@ return function()
 			expect(Ascension.auraEtage(25, BAREME) >= 10 * Ascension.auraEtage(1, BAREME)).to.equal(true)
 		end)
 
-		it("un numéro d'étage abîmé ne rapporte jamais moins que la base", function()
+		it("un numéro d'étage abîmé compte pour l'étage 1, jamais plus", function()
 			expect(Ascension.auraEtage(0, BAREME)).to.equal(100)
 			expect(Ascension.auraEtage(-5, BAREME)).to.equal(100)
 			expect(Ascension.auraEtage(3.7, BAREME)).to.equal(180) -- étage 3
+			expect(Ascension.auraEtage(0 / 0, BAREME)).to.equal(100)
+			expect(Ascension.auraEtage(math.huge, BAREME)).to.equal(100)
 		end)
 
 		it("l'aura d'une ascension complète reste du même ordre qu'un tuto parfait (équilibrage)", function()
