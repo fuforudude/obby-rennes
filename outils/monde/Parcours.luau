@@ -1742,10 +1742,16 @@ return function(R)
 		motDuVoisin
 	-- La descente par les échafaudages.
 	dalle(tour, "Rebord", 4, 6, CX + 17, 66, 0, couleurs.beton, Enum.Material.Concrete)
-	dalle(tour, "Echafaudage", 4, 4, CX + 26, 58, 0, Color3.fromRGB(240, 160, 40), Enum.Material.Metal)
-	dalle(tour, "Echafaudage", 4, 4, CX + 35, 50, 4, Color3.fromRGB(240, 160, 40), Enum.Material.Metal)
-	dalle(tour, "Echafaudage", 4, 4, CX + 44, 42, -4, Color3.fromRGB(240, 160, 40), Enum.Material.Metal)
-	dalle(tour, "Echafaudage", 4, 4, CX + 53, 34, 0, Color3.fromRGB(240, 160, 40), Enum.Material.Metal)
+	-- Révision du 2026-11-19 : les échafaudages s'écartent de la tour (CX+26/35/44/53 -> CX+30/42/50/56). Le dash
+	-- se débloque maintenant avant la spirale, et le modèle de confort passe alors de 9,75 à 17,75 studs de vide :
+	-- depuis le balcon du double saut (46,5), le deuxième échafaudage (50) n'était plus qu'à 11,5 studs, et toute
+	-- la fin de la spirale se contournait par la descente. Écartés, les deux premiers sont à 19,5 et 26,5 studs
+	-- des balcons de montée les plus proches : hors de portée, dash compris, et même en physique réelle pour le
+	-- second. On ne sort donc de la spirale que par le haut, c'est-à-dire par la montée de 8 studs.
+	dalle(tour, "Echafaudage", 4, 4, CX + 30, 58, 0, Color3.fromRGB(240, 160, 40), Enum.Material.Metal)
+	dalle(tour, "Echafaudage", 4, 4, CX + 42, 50, 4, Color3.fromRGB(240, 160, 40), Enum.Material.Metal)
+	dalle(tour, "Echafaudage", 4, 4, CX + 50, 42, -4, Color3.fromRGB(240, 160, 40), Enum.Material.Metal)
+	dalle(tour, "Echafaudage", 4, 4, CX + 56, 34, 0, Color3.fromRGB(240, 160, 40), Enum.Material.Metal)
 	drapeauBreton(tour, CX + 12, 78, -12)
 	-- La tour elle-même (fictive) : une tour d'habitation rennaise des années 1970, de la famille des Horizons
 	-- (béton blanc, un nez de dalle à chaque étage entre les bandes de fenêtres, refends verticaux, édicule bleu sur le

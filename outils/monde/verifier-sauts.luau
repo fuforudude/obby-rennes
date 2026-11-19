@@ -363,12 +363,13 @@ for _, nom in ORDRE do
 	local sans = inatteignables(explorer(CAPACITES[nom]))
 	print(
 		string.format(
-			"  %s : dalle %s ; avec elle seule montée %.1f, vide %.2f ; sans elle %d checkpoint(s) inatteignable(s)",
+			"  %s : dalle %s ; avec elle seule montée %.1f, vide %.2f ; sans elle %d checkpoint(s) inatteignable(s) : %s",
 			nom,
 			posees[nom],
 			montee,
 			videMax,
-			#sans - #manquants
+			#sans - #manquants,
+			table.concat(sans, ", ")
 		)
 	)
 	-- On ne juge les portes que sur un parcours entier : s'il est déjà coupé ailleurs, tout est inatteignable de
