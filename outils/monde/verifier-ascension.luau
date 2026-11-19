@@ -40,6 +40,11 @@ local roblox = require("@lune/roblox")
 
 local CFrame, Vector3 = roblox.CFrame, roblox.Vector3
 
+-- Physique réelle du moteur : elle ne sert ici qu'à prouver qu'on n'entre dans la tour que par la salle de
+-- partiel (voir « On n'entre dans la tour qu'en ayant fini le tuto »). Les règles de saut ci-dessous restent le
+-- modèle prudent, qui décide de la difficulté du tracé.
+local Physique = require("./physique")
+
 -- Horaires du jeu (src/partage/Horaires.luau) : la sinusoïde des balanciers. Même chargement que
 -- outils/monde/verifier-evenements.luau, avec la formule recopiée si le module n'est pas sur cette branche.
 local Horaires
@@ -678,6 +683,55 @@ else
 		defaut(
 			`l'accès ne commence pas par la dalle marquée DepartAcces ({depart.nom}) mais par {suite[2] and suite[2].nom}`
 		)
+	end
+end
+
+---------------------------------------------------------------------------------------------------------------
+-- On n'entre dans la tour qu'en ayant fini le tuto (révision du 2026-11-19).
+--
+-- Les portes de la tour (les sauts « course », « dash » et « double » d'outils/monde/Ascension.luau, vérifiées
+-- plus haut) sont un critère de **difficulté** : elles disent que le tracé ne se franchit pas confortablement
+-- sans les trois capacités. Elles ne prouvent rien sur un joueur réel, qui arrive ici avec les trois en main.
+-- Ce qui garantit qu'il les a, c'est le tuto : outils/monde/verifier-sauts.luau montre qu'en physique réelle le
+-- checkpoint 15 (la salle de partiel) est hors d'atteinte sans la course, sans le dash et sans le double saut.
+--
+-- Reste à fermer la porte d'entrée : toute route vers la tour finit par un saut d'une plateforme du tuto vers une
+-- plateforme de l'ascension. On exige donc que les seules plateformes du tuto d'où ce saut est possible — en
+-- portée réelle, toutes capacités comprises et marge de bord offerte — soient le haut de l'atrium de Sup de
+-- Vinci : à moins de ATRIUM_RAYON studs de la salle de partiel et au plus une volée en dessous d'elle. Cette
+-- dernière volée fait 8 studs, plus qu'un saut simple (7,2) : on n'y arrive pas sans le double saut, et on n'y
+-- arrive pas non plus sans la course ni sans le dash (le reste du tuto le prouve). Tout le reste de la ville est
+-- donc trop loin ou trop bas pour entrer dans la tour. C'est pour cela que la tour n'a pas à durcir ses sauts.
+local ATRIUM_RAYON, ATRIUM_VOLEE = 25, 8
+do
+	local fuites = 0
+	for _, p in plateformesParcours do
+		if p.haut >= salle.haut - ATRIUM_VOLEE and vide(p, salle) <= ATRIUM_RAYON then
+			continue -- la salle de partiel et la dernière volée de l'atrium, derrière le double saut
+		end
+		for _, q in plateformes do
+			if Physique.franchissable(vide(p, q), q.haut - p.haut, Physique.TOUTES) then
+				fuites += 1
+				if fuites <= 5 then
+					print(
+						string.format(
+							"  entrée dérobée : %s (haut %.1f) -> %s (haut %.1f), vide %.2f, montée %+.1f",
+							p.nom,
+							p.haut,
+							q.nom,
+							q.haut,
+							vide(p, q),
+							q.haut - p.haut
+						)
+					)
+				end
+			end
+		end
+	end
+	if fuites > 0 then
+		defaut(`{fuites} saut(s) mènent du tuto à l'ascension depuis ailleurs que le haut de l'atrium`)
+	else
+		print("entrée de la tour : on n'y saute que depuis la salle de partiel et le haut de l'atrium")
 	end
 end
 

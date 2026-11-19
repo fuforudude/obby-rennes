@@ -20,6 +20,10 @@ local fs = require("@lune/fs")
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 
+-- Physique réelle du moteur (outils/monde/physique.luau) : elle ne sert qu'à la preuve de stricte nécessité des
+-- portes, plus bas. Le modèle prudent ci-dessous reste la règle pour tout le reste.
+local Physique = require("./physique")
+
 local modele = roblox.deserializeModel(fs.readFile(process.args[1] or "monde/Parcours.rbxm"))[1]
 
 -- Limites de saut du personnage par défaut (WalkSpeed 16, JumpPower 50) et ce que chaque capacité y ajoute.
@@ -32,7 +36,7 @@ local COURSE_FACTEUR = 1.5 -- course : vitesse ×1,5, donc vide ×1,5 (9,75)
 local DOUBLE_SAUT_MONTEE = 9 -- double saut : montée totale des deux sauts
 local DASH_VIDE = 8 -- dash : studs de vide en plus (borne basse de la fourchette 8 à 12 de la spec)
 
-local CAPACITES = { course = 1, doubleSaut = 2, dash = 4 }
+local CAPACITES = Physique.CAPACITES -- course = 1, doubleSaut = 2, dash = 4
 local ORDRE = { "course", "doubleSaut", "dash" }
 
 type Plateforme = {
@@ -133,9 +137,14 @@ local function limites(capacites: number): (number, number)
 	return montee, videMax
 end
 
-local function sautPossible(a: Plateforme, b: Plateforme, capacites: number): boolean
-	local monteeMax, videMax = limites(capacites)
+-- `reel` : on juge en physique réelle (tout ce que le moteur permet) au lieu du modèle prudent. Réservé à la
+-- preuve de stricte nécessité des portes ; partout ailleurs, c'est le modèle prudent qui décide.
+local function sautPossible(a: Plateforme, b: Plateforme, capacites: number, reel: boolean?): boolean
 	local montee = b.haut - a.haut
+	if reel then
+		return Physique.franchissable(vide(a, b), montee, capacites)
+	end
+	local monteeMax, videMax = limites(capacites)
 	if montee > monteeMax then
 		return false
 	end
@@ -176,15 +185,20 @@ end
 -- Parcours en largeur depuis le départ, en transportant les capacités ramassées en chemin. `privee` est le masque
 -- des capacités que l'on refuse de donner : avec 0 on explore le parcours tel qu'il se joue, avec le masque d'une
 -- capacité on vérifie que son passage d'apprentissage barre bien la route. Rend, par plateforme atteinte, les
--- capacités dont on y dispose.
-local function explorer(privee: number): { [number]: number }
+-- capacités dont on y dispose, et par quelle plateforme on y est arrivé (pour afficher la route trouvée quand une
+-- porte ne tient pas : c'est elle qu'il faut corriger).
+local function explorer(privee: number, reel: boolean?): ({ [number]: number }, { [number]: number })
 	local atteint: { [number]: number } = {}
+	local venant: { [number]: number } = {}
 	local file = {}
-	local function pousser(i: number, capacites: number)
+	local function pousser(i: number, capacites: number, depuis: number?)
 		local avec = bit32.band(bit32.bor(capacites, plateformes[i].donne or 0), bit32.bnot(privee))
 		local connu = atteint[i]
 		if connu and bit32.band(avec, bit32.bnot(connu)) == 0 then
 			return -- déjà vu, et sans capacité nouvelle à y apporter
+		end
+		if connu == nil and depuis then
+			venant[i] = depuis
 		end
 		atteint[i] = bit32.bor(connu or 0, avec)
 		table.insert(file, i)
@@ -194,12 +208,12 @@ local function explorer(privee: number): { [number]: number }
 		local i = table.remove(file, 1)
 		local capacites = atteint[i]
 		for j, q in plateformes do
-			if sautPossible(plateformes[i], q, capacites) then
-				pousser(j, capacites)
+			if sautPossible(plateformes[i], q, capacites, reel) then
+				pousser(j, capacites, i)
 			end
 		end
 	end
-	return atteint
+	return atteint, venant
 end
 
 -- Les numéros des checkpoints qu'on n'atteint pas, dans l'ordre.
@@ -376,6 +390,84 @@ for _, nom in ORDRE do
 			)
 			defauts += 1
 		end
+	end
+end
+
+---------------------------------------------------------------------------------------------------------------
+-- Portes strictement nécessaires, en **physique réelle** (spec 2026-11-18, critère d'acceptation révisé).
+--
+-- Les deux contrôles ci-dessus jugent avec le modèle prudent : ils disent qu'un joueur *raisonnable* ne passe pas
+-- sans la capacité. Ce n'est pas la même chose que « personne ne passe ». Ici on rejoue exactement le même parcours
+-- en largeur, mais avec tout ce que le moteur permet vraiment (outils/monde/physique.luau) : course, vol du double
+-- saut déclenché au meilleur moment, dash, plus deux studs de marge de bord offerts au joueur. Si un chemin existe
+-- quand même jusqu'au dernier checkpoint sans la capacité, la porte est décorative et c'est un défaut.
+--
+-- Le jeu de capacités disponible varie le long du chemin : le parcours en largeur transporte ce qui a été ramassé
+-- en route, donc chaque porte est jugée avec ce que le joueur a vraiment en main à cet endroit (rien devant la
+-- porte de la course, la course devant celle du double saut, etc.), et le minimum est pris sur tous les chemins.
+print("\n== Portes strictement nécessaires (physique réelle) ==")
+print(
+	string.format(
+		"  repères : saut simple %.1f studs de montée, double saut %.1f ; marge de bord offerte %.0f stud(s)",
+		Physique.HAUTEUR_SIMPLE,
+		Physique.HAUTEUR_DOUBLE,
+		Physique.MARGE_BORD
+	)
+)
+for caps = 0, 7 do
+	print(
+		string.format(
+			"  plafond réel avec %-28s : vide %5.2f à plat, %5.2f en montant de 4, montée %.1f",
+			Physique.nommer(caps),
+			Physique.portee(0, caps),
+			Physique.portee(4, caps),
+			Physique.monteeMax(caps)
+		)
+	)
+end
+for _, nom in ORDRE do
+	if not posees[nom] or #manquants > 0 then
+		continue
+	end
+	local atteintReel, venantReel = explorer(CAPACITES[nom], true)
+	local sansReel = inatteignables(atteintReel)
+	if #sansReel == 0 then
+		print(`  DÉFAUT : en physique réelle, un chemin mène au bout sans {nom} : la porte ne tient pas en jeu`)
+		defauts += 1
+		-- La route trouvée : les sauts qui, dans le modèle prudent, auraient été refusés sans la capacité. Ce sont
+		-- eux qu'il faut agrandir (ou déplacer avant le déblocage qui les rend franchissables).
+		local fin
+		for i, p in plateformes do
+			if p.cp == dernierCp and atteintReel[i] then
+				fin = i
+			end
+		end
+		local suite = {}
+		while fin do
+			table.insert(suite, 1, fin)
+			fin = venantReel[fin]
+		end
+		for k = 1, #suite - 1 do
+			local a, b = plateformes[suite[k]], plateformes[suite[k + 1]]
+			local caps = bit32.band(atteintReel[suite[k]] or 0, bit32.bnot(CAPACITES[nom]))
+			if not sautPossible(a, b, caps) then
+				print(
+					string.format(
+						"      passé quand même : %s (haut %.1f) -> %s (haut %.1f), vide %.2f, montée %+.1f (portée réelle %.2f avec %s)",
+						a.nom,
+						a.haut,
+						b.nom,
+						b.haut,
+						vide(a, b),
+						b.haut - a.haut,
+						Physique.portee(b.haut - a.haut, caps),
+						Physique.nommer(caps)
+					)
+				)
+			end
+		end
+	else
+		print(`  {nom} : sans elle, {#sansReel} checkpoint(s) restent hors d'atteinte (le premier : {sansReel[1]})`)
 	end
 end
 

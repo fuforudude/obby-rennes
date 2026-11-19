@@ -24,7 +24,7 @@ Après l'essai en jeu : le dash et le double saut ne servent à rien, parce que 
 - [ ] Aucun effet ne coûte plus que quelques pièces temporaires, détruites à la fin ; rien ne fuit si le personnage meurt en plein dash.
 ### La tour
 - [ ] Hauteur **258 studs**, **aucune pièce taguée `Palier`**, aucun checkpoint entre le pied et le sommet. Tomber renvoie au pied.
-- [ ] **Difficulté maximale partout** : un contrôle automatique vérifie qu'aucun chemin du pied au sommet n'existe **sans le dash**, ni **sans le double saut**, ni **sans la course** (même méthode que la « porte sans effet » du tuto).
+- [ ] **Difficulté maximale partout** : un contrôle automatique vérifie qu'aucun chemin du pied au sommet n'existe **sans le dash**, ni **sans le double saut**, ni **sans la course**, *dans le modèle prudent* (voir « Révision du 2026-11-19 » : c'est un critère de difficulté, pas une preuve de nécessité ; la nécessité est garantie par le tuto, qu'il faut avoir fini pour entrer dans la tour).
 - [ ] Les limites restent tenables : aucun saut au-delà de 16 studs de vide ni 9 studs de montée, les deux liés.
 - [ ] Les six familles d'obstacles sont présentes, réparties sur toute la hauteur, de plus en plus denses.
 - [ ] Un contrôle vérifie que chaque obstacle laisse une **fenêtre de passage d'au moins 1,2 s** par cycle, et qu'aucun ne bloque seul le chemin.
@@ -37,6 +37,7 @@ Après l'essai en jeu : le dash et le double saut ne servent à rien, parce que 
 ### Le tuto
 - [ ] Les passages situés **après** chaque déblocage sont durcis pour exiger vraiment la capacité (écarts et montées proches des limites de la capacité concernée). Les étapes 0 à 2, avant le premier déblocage, ne changent pas.
 - [ ] `verifier-sauts` reste vert, en tenant compte des capacités acquises à chaque point du parcours.
+- [ ] **Aucun chemin n'existe jusqu'au dernier checkpoint sans la course, sans le dash ou sans le double saut, en physique réelle** (voir « Révision du 2026-11-19 »).
 
 ## Décisions
 Prises par l'utilisateur le 2026-11-18.
@@ -81,6 +82,47 @@ Durée estimée du jalon : 2 h 45 (vague la plus longue 1 h 15, revue 30 min, co
 
 ## Risque assumé
 Une tour de 258 studs en difficulté maximale, **sans aucun checkpoint**, avec six familles d'obstacles : très peu de joueurs la termineront. C'est le choix de l'utilisateur (esprit Only Up). À revoir après son essai, quand on connaîtra le temps réel d'une montée complète.
+
+## Révision du 2026-11-19 : des portes vraiment infranchissables
+
+Demande de l'utilisateur après relecture : les portes de capacité doivent être infranchissables **en jeu**, pas seulement dans le modèle de contrôle.
+
+### Deux modèles, deux questions
+| Modèle | Question à laquelle il répond | Où il vit |
+|---|---|---|
+| **Prudent** (montée 4,5 / vide 6,5 à l'arrêt, × 1,5 en courant, +8 au dash, 9 en double saut) | « ce saut est-il confortable ? » | `verifier-sauts.luau`, `verifier-ascension.luau`, `Ascension.luau`. **Inchangé** : la marge de sécurité est voulue. |
+| **Physique réelle** (tout ce que le moteur permet) | « ce vide est-il infranchissable sans telle capacité ? » | `outils/monde/physique.luau`, utilisé **uniquement** pour la preuve de stricte nécessité. |
+
+`physique.luau` ne recopie rien : il charge `src/partage/Capacites.luau` (donc `PHYSIQUE_DEFAUT` : JumpHeight 7,2, gravité 196,2, marche 16) et `src/partage/Reglages.luau` (`COURSE_FACTEUR`, `DASH_VITESSE`, `DASH_DUREE`, `SAUT_DOUBLE_FACTEUR`). Changer l'un de ces réglages change le verdict des contrôles au lieu de les laisser mentir.
+
+Dérivation : v0 = √(2 g h) = 53,153 studs/s ; vol d'un saut simple à plat 2 v0/g = **0,5418 s** ; vol d'un double saut à plat **1,0836 s** (et non 0,9250 s : le second saut *impose* la vitesse v0 à n'importe quel moment du vol, donc on le déclenche en repassant par la hauteur d'arrivée et on colle deux arcs complets, au lieu de le déclencher au sommet) ; en général, pour se poser *m* studs plus haut, T = 2 (v0 + √(v0² − g m)) / g avec le double saut, (v0 + √(v0² − 2 g m)) / g sans. Portée = vitesse au sol × T, plus le gain d'un dash (`extensionDash`, 70 × 0,2 − v × 0,2). Deux studs de marge de bord sont **offerts au joueur** avant de déclarer un vide infranchissable.
+
+### Plafonds réels, par jeu de capacités
+| Capacités en main | Vide à plat | Vide en montant de 4 | Montée |
+|---|---|---|---|
+| aucune | 8,67 | 7,22 | 7,2 |
+| course | 13,00 | 10,84 | 7,2 |
+| double saut | 17,34 | 16,04 | 14,4 |
+| dash | 19,47 | 18,02 | 7,2 |
+| course + dash | 22,20 | 20,04 | 7,2 |
+| course + double saut | 26,01 | 24,06 | 14,4 |
+| double saut + dash | 28,14 | 26,84 | 14,4 |
+| les trois | 35,21 | 33,26 | 14,4 |
+
+Conséquence directe : **aucune porte de dash ne peut tenir après le déblocage du double saut** (26 studs de portée réelle contre 17,75 au plus dans le modèle de confort : la fenêtre est vide). L'ordre des déblocages devient **course (zone 2) → dash (zone 4) → double saut (zone 4)**.
+
+### Ce qui change sur la carte
+| Porte | Avant | Après | Pourquoi |
+|---|---|---|---|
+| Course (`2_Metro/DalleDeLaCourse`) | 8 studs à plat | **9,5 studs en montant de 4,5**, vers une banderole tendue (fixe) | 8 studs se passaient en marchant (8,67). La course multiplie la portée par 1,5 exactement, comme le modèle prudent : la seule fenêtre possible est un saut qui monte au maximum (sans course 8,99 marge comprise, modèle prudent 9,75). Volontairement le saut le plus exigeant que le confort accepte ; en portée réelle il ne vaut que 72 % de ce qu'un joueur qui court sait faire. |
+| Dash | `6_LaVilaine/PontonDuDash`, 16 studs à plat, **après** le double saut | déplacé en `4_LaTour/TremplinDuDash`, **avant** le double saut : 16,5 studs en montant de 3, d'un seul bond au-dessus du jus de poubelle (les deux bacs du milieu disparaissent, deux bacs mortels les remplacent) | avec la course seule la portée réelle est de 13 (15 avec la marge) et le confort autorise 17,75 avec le dash : la fenêtre existe ici et nulle part après. Le saut de la Vilaine reste, il **exige** toujours le dash et c'est le seul saut qui exige encore la course une fois le dash en main. |
+| Double saut (`4_LaTour/BalconDuDoubleSaut`) | balcons 10 et 11 à 53,5 (montée de 7) | **54,5 (montée de 8)** | un saut simple monte vraiment de 7,2 studs, pas de 4,5. Le balcon 11 montait aussi : à 53,5 il était à 7 studs du balcon 9, donc atteignable en diagonale. |
+| Atrium de Sup de Vinci | volées de 7 studs (18 → 25 → 32 → 39) | **volées de 8 studs (18 → 26 → 34 → 42)** | avec la course et le dash, tout le reste du tuto se franchit en physique réelle : **c'est l'atrium qui rend le double saut strictement obligatoire** (le balcon de la tour reste le passage qui l'enseigne). |
+
+### Contrôles
+- `verifier-sauts.luau` : nouvelle section « Portes strictement nécessaires (physique réelle) ». Pour chaque capacité, le parcours en largeur est rejoué en physique réelle en la refusant ; il doit rester au moins un checkpoint hors d'atteinte. En cas d'échec, la route trouvée est affichée saut par saut.
+- `verifier-ascension.luau` : nouvelle section « On n'entre dans la tour qu'en ayant fini le tuto ». Aucune plateforme du tuto, hors du haut de l'atrium, n'est à portée réelle d'une plateforme de l'ascension. Les portes `GATE_*` de la tour restent, mais **comme critère de difficulté** : un joueur réel y arrive forcément avec les trois capacités, c'est le tuto qui verrouille.
+- `casser-parcours.luau` : une panne par porte (`porte-course`, `porte-dash`, `porte-double-saut`), chacune posant une marche au milieu du passage ; `verifier-sauts` doit alors sortir en code 1.
 
 ## Questions ouvertes
 - Aucune.
