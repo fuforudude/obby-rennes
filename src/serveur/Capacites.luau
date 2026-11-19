@@ -46,6 +46,7 @@ type Suivi = {
 	ignorerJusqua: number, -- os.clock() : avant cet instant, on ne relève rien (position pas fiable)
 	suspect: boolean, -- un déplacement impossible a été vu pendant cette tentative
 	alertes: number,
+	enVol: boolean, -- le joueur vole (accordé par serveur/Vol) : aucun verdict, la fenêtre se réamorce à chaque relevé
 }
 
 local suivis: { [Player]: Suivi } = {}
@@ -83,6 +84,7 @@ local function nouveauSuivi(maintenant: number, delaiIgnore: number): Suivi
 		ignorerJusqua = maintenant + delaiIgnore,
 		suspect = false,
 		alertes = 0,
+		enVol = false, -- une nouvelle apparition ne vole jamais
 	}
 end
 
@@ -161,10 +163,16 @@ local function mesurer(joueur: Player, suivi: Suivi, maintenant: number)
 		return
 	end
 
-	Mouvement.empiler(suivi.tampon, maintenant, position.X, position.Y, position.Z, Reglages.SURVEILLANCE_FENETRE)
-	local verdict, mesure = Mouvement.evaluerFenetre(capacitesDe(donnees), suivi.tampon)
+	local verdict, mesure = Mouvement.mesurer(
+		suivi.tampon,
+		suivi.enVol,
+		capacitesDe(donnees),
+		{ instant = maintenant, x = position.X, y = position.Y, z = position.Z }
+	)
 	if verdict == nil or mesure == nil then
-		if auSol then
+		-- En vol, toute position est valide : si une alerte tombe juste après la sortie, on ramène le joueur là où il a
+		-- cessé de voler, pas à un sol d'avant le vol.
+		if auSol or suivi.enVol then
 			suivi.valide = position
 		end
 		return
@@ -229,6 +237,20 @@ function Capacites.nouvelleTentative(joueur: Player)
 	end
 end
 
+--- Le tampon repart de la position actuelle de la racine du joueur (seul relevé), qui devient aussi sa dernière position
+--- valide. Sans racine, le tampon est vidé : la fenêtre se reconstruira.
+local function amorcerSurRacine(joueur: Player, suivi: Suivi, maintenant: number)
+	local personnage = joueur.Character
+	local racine = personnage and personnage:FindFirstChild("HumanoidRootPart")
+	if racine and racine:IsA("BasePart") then
+		local position = racine.Position
+		Mouvement.amorcer(suivi.tampon, maintenant, position.X, position.Y, position.Z)
+		suivi.valide = position
+	else
+		table.clear(suivi.tampon)
+	end
+end
+
 --- À appeler quand le serveur déplace lui-même un joueur (étape passée, téléportation vers un palier, renvoi au
 --- pied...), dans la même image que le `PivotTo` : le déplacement n'est pas comparé aux capacités.
 function Capacites.autoriserTeleportation(joueur: Player)
@@ -243,15 +265,34 @@ function Capacites.autoriserTeleportation(joueur: Player)
 	-- 2 s (PALIER_DELAI_TELEPORT) volerait en toute impunité 1,5 s sur 2. La destination est aussi la dernière
 	-- position valide : si une alerte tombe, on ramène le joueur là, pas là où il était avant d'être téléporté.
 	suivi.ignorerJusqua = math.max(suivi.ignorerJusqua, maintenant + DELAI_TELEPORTATION)
-	local personnage = joueur.Character
-	local racine = personnage and personnage:FindFirstChild("HumanoidRootPart")
-	if racine and racine:IsA("BasePart") then
-		local position = racine.Position
-		Mouvement.amorcer(suivi.tampon, maintenant, position.X, position.Y, position.Z)
-		suivi.valide = position
-	else
-		table.clear(suivi.tampon) -- personne à placer : la fenêtre se reconstruira
+	amorcerSurRacine(joueur, suivi, maintenant)
+end
+
+--- Le joueur se met à voler (accordé par serveur/Vol, qui vérifie la liste des testeurs et appelle ceci seulement
+--- après avoir marqué sa course non classable). La surveillance ne juge plus ses déplacements, et la fenêtre repart de
+--- sa position : rien de ce qu'il a fait avant ne sert de référence à ce qu'il fait en volant.
+function Capacites.entrerVol(joueur: Player)
+	local suivi = suivis[joueur]
+	if not suivi then
+		return
 	end
+	suivi.enVol = true
+	amorcerSurRacine(joueur, suivi, os.clock())
+end
+
+--- Le joueur ne vole plus (il l'a demandé, il est mort, il part). La surveillance REPREND TOUT DE SUITE, sans délai
+--- ignoré : la fenêtre est amorcée sur la position de sortie, et le prochain relevé (au plus SURVEILLANCE_PERIODE plus
+--- tard) est comparé à elle comme n'importe quel déplacement. Même correction que pour la téléportation (voir
+--- autoriserTeleportation) : suspendre pour un temps laisserait une fenêtre sans contrôle, qu'un client pourrait
+--- rouvrir en rebasculant. Ne touche pas à `ignorerJusqua` : une apparition ou une téléportation du serveur en cours garde
+--- son délai légitime.
+function Capacites.sortirVol(joueur: Player)
+	local suivi = suivis[joueur]
+	if not suivi or not suivi.enVol then
+		return
+	end
+	suivi.enVol = false
+	amorcerSurRacine(joueur, suivi, os.clock())
 end
 
 --- Les capacités débloquées du joueur (copie ; vide tant que ses données ne sont pas chargées).

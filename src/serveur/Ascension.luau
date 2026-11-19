@@ -79,9 +79,11 @@ local function maintenant(): number
 	return workspace:GetServerTimeNow()
 end
 
---- La surveillance des déplacements a-t-elle vu quelque chose d'impossible dans cette tentative ?
+--- La tentative n'est-elle plus classable pour une raison de surveillance ? Soit la surveillance des déplacements a vu
+--- quelque chose d'impossible, soit le joueur a volé (mode testeur) depuis son dernier « Recommencer » : même chemin, donc
+--- `tentative.alertes`. Un vol vaut pour toute tentative suivante tant que la course n'est pas recommencée.
 local function surveillanceAlerte(joueur: Player): boolean
-	return Surveillance.tentativeSuspecte(joueur)
+	return Surveillance.tentativeSuspecte(joueur) or Parcours.aVole(joueur)
 end
 
 --- Le joueur vivant derrière une pièce touchée, ou nil (même filtre que Parcours.luau).
@@ -286,8 +288,9 @@ local function relever(joueur: Player, tentative: Tentative)
 		return
 	end
 	tentative.hauteur = hauteur
+	local etaitClassable = tentative.alertes == 0
 	if surveillanceAlerte(joueur) then
-		tentative.alertes += 1 -- la tentative n'est plus classable (anti-triche, serveur/Capacites)
+		tentative.alertes += 1 -- la tentative n'est plus classable (anti-triche, serveur/Capacites, ou vol)
 	end
 	-- Une tentative surveillée comme impossible ne monte plus personne au classement de la hauteur.
 	local studs = RegleAscension.versStudsEntiers(hauteur)
@@ -295,7 +298,11 @@ local function relever(joueur: Player, tentative: Tentative)
 		donnees.meilleureHauteur = studs
 		Classement.signalerHauteur(joueur, studs)
 	end
-	if math.abs(hauteur - tentative.hauteurEnvoyee) >= Reglages.ASCENSION_PAS_ETAT then
+	-- « Non classé » doit s'afficher tout de suite, pas au prochain mouvement de hauteur.
+	if
+		(etaitClassable and tentative.alertes > 0)
+		or math.abs(hauteur - tentative.hauteurEnvoyee) >= Reglages.ASCENSION_PAS_ETAT
+	then
 		envoyerEtat(joueur)
 	end
 end

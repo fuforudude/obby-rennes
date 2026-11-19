@@ -215,4 +215,27 @@ function Capacites.evaluerFenetre(capacites: Debloquees?, tampon: Tampon, physiq
 	return Capacites.evaluerDeplacement(capacites, m.horizontal, m.montee, m.duree, physique), m
 end
 
+--- Un relevé de la surveillance serveur, vol compris : LA fonction que le service appelle à chaque période.
+--- Hors vol : le relevé entre dans la fenêtre glissante, qui est jugée (verdict, mesure) comme avant.
+--- En vol (mode testeur, serveur/Vol) : aucun verdict, et la fenêtre est RÉAMORCÉE sur ce relevé (un seul relevé : la
+--- position actuelle). Ainsi la surveillance ne garde jamais en mémoire un déplacement fait en volant, et dès que le
+--- vol s'arrête (le service réamorce aussi sur la position de sortie, voir serveur/Capacites.sortirVol) le premier
+--- relevé suivant est comparé à la sortie : pas de fausse alerte pour la distance parcourue en vol, et pas de
+--- période sans contrôle après la sortie (c'est le piège de la téléportation : suspendre au lieu d'amorcer laissait
+--- 1,5 s de liberté, répétable). Le tampon est modifié.
+function Capacites.mesurer(
+	tampon: Tampon,
+	enVol: boolean,
+	capacites: Debloquees?,
+	releve: Releve,
+	physique: Physique?
+): (string?, Deplacement?)
+	if enVol then
+		Capacites.amorcer(tampon, releve.instant, releve.x, releve.y, releve.z)
+		return nil, nil
+	end
+	Capacites.empiler(tampon, releve.instant, releve.x, releve.y, releve.z, Reglages.SURVEILLANCE_FENETRE)
+	return Capacites.evaluerFenetre(capacites, tampon, physique)
+end
+
 return Capacites

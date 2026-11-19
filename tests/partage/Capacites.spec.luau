@@ -370,4 +370,97 @@ return function()
 			end
 		end)
 	end)
+
+	describe("mesurer : le vol des testeurs et la reprise de la surveillance à la sortie", function()
+		local PERIODE = Reglages.SURVEILLANCE_PERIODE
+
+		local function releve(instant: number, x: number, y: number, z: number)
+			return { instant = instant, x = x, y = y, z = z }
+		end
+
+		--- Le joueur vole pendant `ticks` relevés (50 studs/s sur le plan), puis sort : rend le tampon, l'instant et l'abscisse
+		--- de sortie. La sortie fait ce que fait serveur/Capacites.sortirVol : la fenêtre repart de la position de sortie.
+		local function volPuisSortie(ticks: number)
+			local tampon = {}
+			local x = 0
+			for i = 1, ticks do
+				x = i * 50 * PERIODE
+				local verdict = Capacites.mesurer(tampon, true, AUCUNE, releve(i * PERIODE, x, 80, 0))
+				expect(verdict).never.to.be.ok()
+			end
+			local instant = ticks * PERIODE
+			Capacites.amorcer(tampon, instant, x, 80, 0)
+			return tampon, instant, x
+		end
+
+		it("en vol : aucun verdict, même à 50 studs/s pendant dix secondes", function()
+			local tampon = {}
+			for i = 1, 20 do
+				local verdict, mesure =
+					Capacites.mesurer(tampon, true, AUCUNE, releve(i * PERIODE, i * 25, 10 + i * 20, 0))
+				expect(verdict).never.to.be.ok()
+				expect(mesure).never.to.be.ok()
+			end
+		end)
+
+		it(
+			"en vol, la fenêtre ne garde qu'un relevé : rien de ce qui a été fait en volant ne sert de référence",
+			function()
+				local tampon = {}
+				for i = 1, 20 do
+					Capacites.mesurer(tampon, true, AUCUNE, releve(i * PERIODE, i * 25, 10, 0))
+				end
+				expect(#tampon).to.equal(1)
+			end
+		)
+
+		it("même sans réamorçage à la sortie, aucune fausse alerte pour la distance parcourue en vol", function()
+			local tampon = {}
+			for i = 1, 20 do
+				Capacites.mesurer(tampon, true, AUCUNE, releve(i * PERIODE, i * 25, 10, 0))
+			end
+			-- Le service réamorce aussi (sortirVol) ; ici on montre que le relevé de vol suffit déjà : 5 studs de retombée.
+			local verdict = Capacites.mesurer(tampon, false, AUCUNE, releve(21 * PERIODE, 20 * 25 + 5, 10, 0))
+			expect(verdict).never.to.be.ok()
+		end)
+
+		it("à la sortie : une retombée de 30 studs et 5 studs d'élan ne sont pas une alerte", function()
+			local tampon, instant, x = volPuisSortie(10)
+			local verdict = Capacites.mesurer(tampon, false, TOUTES, releve(instant + PERIODE, x + 5, 50, 0))
+			expect(verdict).never.to.be.ok()
+		end)
+
+		it(
+			"à la sortie : la surveillance reprend tout de suite, un déplacement illégal est vu au premier relevé",
+			function()
+				local tampon, instant, x = volPuisSortie(10)
+				-- 40 studs sur le plan en une demi-période : c'est du vol, pas de la marche.
+				local verdict = Capacites.mesurer(tampon, false, TOUTES, releve(instant + PERIODE, x + 60, 80, 0))
+				expect(verdict).to.equal("horizontal")
+			end
+		)
+
+		it("une montée illégale juste après la sortie est vue aussi", function()
+			local tampon, instant, x = volPuisSortie(10)
+			local verdict = Capacites.mesurer(tampon, false, TOUTES, releve(instant + PERIODE, x, 80 + 90, 0))
+			expect(verdict).to.equal("vertical")
+		end)
+
+		it(
+			"vol puis sortie en boucle : aucune période sans contrôle, chaque sortie est suivie d'un relevé jugé",
+			function()
+				for _ = 1, 5 do
+					local tampon, instant, x = volPuisSortie(4)
+					local verdict = Capacites.mesurer(tampon, false, TOUTES, releve(instant + PERIODE, x + 60, 80, 0))
+					expect(verdict).to.equal("horizontal")
+				end
+			end
+		)
+
+		it("hors vol, le verdict est celui de la fenêtre glissante (inchangé)", function()
+			local tampon = {}
+			expect(Capacites.mesurer(tampon, false, TOUTES, releve(0, 0, 10, 0))).never.to.be.ok()
+			expect(Capacites.mesurer(tampon, false, TOUTES, releve(1.5, 120, 10, 0))).to.equal("horizontal")
+		end)
+	end)
 end

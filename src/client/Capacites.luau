@@ -9,6 +9,8 @@
 --   Double saut: appuyer sur saut en l'air (touche, manette ou bouton de saut tactile). Un appui NEUF est exigé : tenir
 --                la touche enfoncée ne le déclenche pas (voir « Double saut » plus bas).
 --   Dash       : touche Q (la touche marquée A sur un clavier français : KeyCode.Q), ButtonB, ou bouton tactile « DASH ».
+--   Vol        : touche F, réservée aux testeurs (liste Reglages.TESTEURS, décidée par le serveur) : elle ne fait que
+--                demander ; le vol lui-même est dans client/Vol.luau. Double saut et dash sont coupés pendant le vol.
 --
 -- Boutons tactiles : une rangée en bas à droite, AU-DESSUS du bouton de saut de Roblox (qui occupe les ~110 studs du
 -- bas) et loin du joystick (bas gauche) : « DASH » à droite, « COURIR » à sa gauche. Visibles seulement sur un appareil
@@ -34,9 +36,11 @@ local Effets = require(script.Parent.EffetsVisuels)
 local RegleEffets = require(ReplicatedStorage.Partage.EffetsCapacites)
 local Reglages = require(ReplicatedStorage.Partage.Reglages)
 local Remotes = require(ReplicatedStorage.Partage.Remotes)
+local Vol = require(script.Parent.Vol)
 
 local TOUCHE_DASH = Enum.KeyCode.Q -- la touche marquée A sur un clavier français (AZERTY)
 local TOUCHE_COURSE = Enum.KeyCode.LeftShift
+local TOUCHE_VOL = Enum.KeyCode.F
 local DUREE_FOV = 0.2 -- secondes : le champ de vision de la course s'élargit et revient en douceur
 local DUREE_FOV_DASH = 0.06 -- secondes : le champ de vision s'élargit « d'un coup » au départ du dash
 local TAILLE_BOUTON = 64 -- pixels
@@ -241,7 +245,7 @@ end
 
 local function tenterDoubleSaut()
 	local s = session
-	if not s or not s.actif or debloquees.doubleSaut ~= true or not s.doubleDispo then
+	if not s or not s.actif or debloquees.doubleSaut ~= true or not s.doubleDispo or Vol.actif() then
 		return
 	end
 	local humanoide = s.humanoide
@@ -317,7 +321,7 @@ end
 
 local function lancerDash()
 	local s = session
-	if not s or not s.actif or debloquees.dash ~= true or not s.dashDispo or s.dash ~= nil then
+	if not s or not s.actif or debloquees.dash ~= true or not s.dashDispo or s.dash ~= nil or Vol.actif() then
 		return
 	end
 	if s.humanoide.Health <= 0 or s.humanoide.Sit then
@@ -560,6 +564,10 @@ function Capacites.demarrer()
 			if not traite then
 				lancerDash()
 			end
+		elseif touche == TOUCHE_VOL then
+			if not traite then -- pas pendant qu'on écrit dans le chat
+				Vol.demander()
+			end
 		end
 	end)
 	UserInputService.InputEnded:Connect(function(entree)
@@ -575,6 +583,7 @@ function Capacites.demarrer()
 		appliquerCourse()
 	end)
 	UserInputService.JumpRequest:Connect(surDemandeSaut)
+	Vol.demarrer()
 
 	if UserInputService.TouchEnabled then
 		task.spawn(creerBoutonsTactiles)

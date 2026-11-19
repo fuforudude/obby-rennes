@@ -170,6 +170,22 @@ local Reglages = {
 	-- ce plafond la valeur est refusée : une densité absurde ferait traverser les murs aux joueurs.
 	BALANCIER_POUSSEE_MAX = 20,
 
+	-- Mode vol des testeurs (partage/Vol.luau, serveur/Vol.luau, client/Vol.luau). Touche F. Le serveur est seul juge :
+	-- un joueur dont l'identifiant n'est pas dans TESTEURS ne vole pas, même avec un client modifié.
+	-- Pour ajouter un testeur : une ligne `[identifiant] = true,` dans la table ci-dessous (l'identifiant Roblox est le
+	-- nombre de son profil : roblox.com/users/<identifiant>/profile), puis republier. Exemple, à décommenter avec le
+	-- vrai identifiant : `-- [123456789] = true,`. Pour en retirer un : supprimer la ligne. Dans Studio, les joueurs
+	-- d'un test « Clients et serveurs » ont des identifiants négatifs (-1, -2...).
+	-- Une partie où l'on a volé n'est plus classée (ni temps, ni hauteur, ni aura au classement) jusqu'à « Recommencer ».
+	TESTEURS = table.freeze({
+		-- [123456789] = true,
+	} :: { [number]: boolean }),
+	-- Vitesse du vol (studs/s), dans les trois dimensions. 50 : de quoi traverser la carte vite sans que les murs
+	-- fins ne soient franchis (le dash tient 70 studs/s).
+	VOL_VITESSE = 50,
+	-- Délai minimal (s) entre deux bascules du vol acceptées par le serveur (cadence côté serveur, et côté client).
+	VOL_DELAI_MIN = 0.5,
+
 	TAILLE_CLASSEMENT = 10,
 	DELAI_RAFRAICHIR_CLASSEMENT = 60, -- secondes
 	DELAI_MIN_ENTRE_DEMANDES = 1, -- secondes, pour « Recommencer »
