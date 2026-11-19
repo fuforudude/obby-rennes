@@ -362,8 +362,7 @@ return function()
 		end)
 
 		it("une téléportation toutes les 2 s : chaque tour est mesuré, le vol n'a plus de pause gratuite", function()
-			-- Le client redemande un palier toutes les 2 s (PALIER_DELAI_TELEPORT) : à chaque tour le tampon repart
-			-- de la destination, et le premier relevé (1,5 s plus tard) est jugé.
+			-- À chaque tour le tampon repart de la destination, et le premier relevé (1,5 s plus tard) est jugé.
 			for tour = 1, 5 do
 				local tampon = apresPlacement(tour * 100, 50, 0)
 				Capacites.empiler(tampon, DELAI, tour * 100 + 120, 50, 0, FENETRE)

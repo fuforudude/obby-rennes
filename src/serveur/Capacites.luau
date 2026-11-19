@@ -19,6 +19,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Donnees = require(script.Parent.Donnees)
 local Mouvement = require(ReplicatedStorage.Partage.Capacites)
+local RegleEffets = require(ReplicatedStorage.Partage.EffetsCapacites)
 local Reglages = require(ReplicatedStorage.Partage.Reglages)
 local Remotes = require(ReplicatedStorage.Partage.Remotes)
 
@@ -30,6 +31,8 @@ local DELAI_TELEPORTATION = 1.5
 local DELAI_CORRECTION = 1 -- après un retour en arrière : le temps que le client applique la correction
 
 local capaciteDebloquee = Remotes.obtenir("CapaciteDebloquee")
+local signalerEffet = Remotes.obtenir("SignalerEffet")
+local effetCapacite = Remotes.obtenir("EffetCapacite")
 
 -- Suivi d'un joueur : les relevés de la fenêtre glissante, la dernière position valide (au sol), et l'état de la
 -- tentative.
@@ -44,6 +47,7 @@ type Suivi = {
 local suivis: { [Player]: Suivi } = {}
 local liaisonsPlayers: { [Player]: RBXScriptConnection } = {}
 local liaisonsPieces: { [Instance]: RBXScriptConnection } = {}
+local derniersEffets: { [Player]: { [string]: number } } = {} -- par joueur : l'heure du dernier effet relayé, par capacité
 local abonnes: { (Player, string) -> () } = {}
 local demarre = false
 
@@ -266,6 +270,54 @@ function Capacites.surDeblocage(fonction: (Player, string) -> ())
 	table.insert(abonnes, fonction)
 end
 
+-- Effets visibles ------------------------------------------------------------------------------------------------------
+-- Le client qui fait un dash ou un double saut joue son effet tout de suite, puis envoie SignalerEffet(capacite). Le
+-- serveur ne fait confiance à rien : type, capacité relayable et débloquée, joueur vivant, cadence (la règle est pure et
+-- testée : partage/EffetsCapacites.accepter, qui n'enregistre l'heure qu'une fois la validation passée). Accepté, il
+-- diffuse EffetCapacite(joueur, capacite) aux AUTRES joueurs à moins de EFFET_DISTANCE_MAX studs (celui d'origine l'a
+-- déjà joué ; les plus loin ne verraient rien, on ne leur envoie rien). Le serveur ne joue
+-- rien lui-même : un tricheur qui spamme n'obtient au pire qu'un effet cosmétique par capacité et par 0,3 s.
+
+local function surSignalerEffet(joueur: Player, capacite: unknown)
+	local derniers = derniersEffets[joueur]
+	if not derniers then
+		derniers = {}
+		derniersEffets[joueur] = derniers
+	end
+	local accepte = RegleEffets.accepter(derniers, capacite, os.clock(), Reglages.EFFET_DELAI_MIN, function()
+		local personnage = joueur.Character
+		local humanoide = personnage and personnage:FindFirstChildOfClass("Humanoid")
+		return {
+			vivant = humanoide ~= nil and humanoide.Health > 0,
+			debloquees = Capacites.debloquees(joueur),
+		}
+	end)
+	if not accepte then
+		return
+	end
+	-- Le filtre de distance se fait ici (même constante que le client) pour ne pas envoyer l'effet à ceux qui ne le
+	-- verraient pas ; le client garde le sien, qui le protège du streaming. Un joueur sans personnage reçoit tout de
+	-- même l'effet : le client décidera.
+	local personnage = joueur.Character
+	local racine = personnage and personnage:FindFirstChild("HumanoidRootPart")
+	if not racine or not racine:IsA("BasePart") then
+		return
+	end
+	for _, autre in Players:GetPlayers() do
+		if autre ~= joueur then
+			local racineAutre = autre.Character and autre.Character:FindFirstChild("HumanoidRootPart")
+			local proche = true
+			if racineAutre and racineAutre:IsA("BasePart") then
+				local distance = (racineAutre.Position - racine.Position).Magnitude
+				proche = RegleEffets.assezProche(distance, Reglages.EFFET_DISTANCE_MAX)
+			end
+			if proche then
+				effetCapacite:FireClient(autre, joueur, capacite)
+			end
+		end
+	end
+end
+
 function Capacites.demarrer()
 	if demarre then
 		return
@@ -289,7 +341,9 @@ function Capacites.demarrer()
 			liaisonsPlayers[joueur] = nil
 		end
 		suivis[joueur] = nil
+		derniersEffets[joueur] = nil
 	end)
+	signalerEffet.OnServerEvent:Connect(surSignalerEffet)
 
 	task.spawn(function()
 		while true do

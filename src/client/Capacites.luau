@@ -17,21 +17,28 @@
 -- Recharges : l'état « double saut prêt » et « dash prêt » est publié en attributs booléens du joueur
 -- (`CapaciteDoubleSautPrete`, `CapaciteDashPrete`) à chaque changement ; l'interface (IconesCapacites) les lit.
 --
--- Une seule connexion par image au plus : RenderStepped n'est connecté que pendant les 0,45 s d'une vrille.
--- Toutes les connexions d'un personnage sont coupées à CharacterRemoving.
+-- Effets visibles (traînées, lignes de vitesse, vrille, onde de choc, penché) : client/EffetsVisuels.luau, qui les joue
+-- sur le personnage de n'importe quel joueur. Ici : le champ de vision (caméra du joueur local) et la réplication. Le
+-- client qui déclenche une capacité joue son effet tout de suite (aucun délai réseau), puis envoie SignalerEffet ; le
+-- serveur le relaie (EffetCapacite) aux autres, qui jouent l'effet sur son personnage, vrille comprise.
+--
+-- Une seule connexion par image au plus (dans EffetsVisuels : RenderStepped n'est connecté que pendant une vrille ou un
+-- penché). Toutes les connexions d'un personnage sont coupées à CharacterRemoving.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
 local Mouvement = require(ReplicatedStorage.Partage.Capacites)
+local Effets = require(script.Parent.EffetsVisuels)
+local RegleEffets = require(ReplicatedStorage.Partage.EffetsCapacites)
 local Reglages = require(ReplicatedStorage.Partage.Reglages)
 local Remotes = require(ReplicatedStorage.Partage.Remotes)
 
 local TOUCHE_DASH = Enum.KeyCode.Q -- la touche marquée A sur un clavier français (AZERTY)
 local TOUCHE_COURSE = Enum.KeyCode.LeftShift
-local DUREE_FOV = 0.2 -- secondes : le champ de vision s'élargit et revient en douceur
+local DUREE_FOV = 0.2 -- secondes : le champ de vision de la course s'élargit et revient en douceur
+local DUREE_FOV_DASH = 0.06 -- secondes : le champ de vision s'élargit « d'un coup » au départ du dash
 local TAILLE_BOUTON = 64 -- pixels
 local ATTRIBUT_DOUBLE_SAUT = "CapaciteDoubleSautPrete"
 local ATTRIBUT_DASH = "CapaciteDashPrete"
@@ -39,13 +46,6 @@ local ATTRIBUT_DASH = "CapaciteDashPrete"
 -- JumpRequest se répète à chaque image (16 à 100 ms selon la fréquence d'images) : 0,15 s sépare sûrement un appui
 -- maintenu d'un relâchement suivi d'un nouvel appui.
 local SILENCE_NOUVEL_APPUI = 0.15
-
-type Vrille = {
-	articulation: Motor6D,
-	c0: CFrame, -- la valeur d'origine, remise à la fin
-	debut: number,
-	connexion: RBXScriptConnection?,
-}
 
 type DashActif = {
 	id: number,
@@ -63,12 +63,12 @@ type Session = {
 	connexions: { RBXScriptConnection },
 	enCourse: boolean,
 	vitesseBase: number, -- WalkSpeed avant la course
-	fovBase: number, -- champ de vision avant la course
+	fovBase: number, -- champ de vision normal (avant la course ou le dash)
+	fovDash: boolean, -- le champ de vision est élargi par un dash en cours
 	tweenFov: Tween?,
 	doubleDispo: boolean, -- le double saut de cet envol n'est pas encore utilisé
 	dashDispo: boolean, -- le dash de cet envol n'est pas encore utilisé
 	dash: DashActif?,
-	vrille: Vrille?,
 }
 
 local joueur = Players.LocalPlayer
@@ -78,6 +78,7 @@ local session: Session? = nil
 local compteurDash = 0
 local boutons: { course: TextButton?, dash: TextButton? } = {}
 local demarre = false
+local signalerEffet: RemoteEvent? = nil -- SignalerEffet, une fois trouvé (sans bloquer le démarrage)
 local dernierSautDemande = -math.huge -- os.clock() du dernier JumpRequest reçu (répétitions comprises)
 
 -- Recharges publiées -----------------------------------------------------------------------------------------------
@@ -105,7 +106,14 @@ local function courseVoulue(): boolean
 		and (sourcesCourse.clavier == true or sourcesCourse.manette == true or sourcesCourse.tactile == true)
 end
 
-local function animerFov(s: Session, cible: number)
+--- Le champ de vision voulu sans dash : celui de base, plus le bonus de la course si on court.
+local function fovCible(s: Session): number
+	return s.fovBase + (if s.enCourse then Reglages.COURSE_FOV_BONUS else 0)
+end
+
+--- Fait glisser le champ de vision vers `cible` en `duree` secondes ; `apres` est appelée si l'animation va au bout
+--- (pas si une autre la remplace).
+local function animerFov(s: Session, cible: number, duree: number?, apres: (() -> ())?)
 	local camera = workspace.CurrentCamera
 	if not camera then
 		return
@@ -115,11 +123,35 @@ local function animerFov(s: Session, cible: number)
 	end
 	local tween = TweenService:Create(
 		camera,
-		TweenInfo.new(DUREE_FOV, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		TweenInfo.new(duree or DUREE_FOV, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 		{ FieldOfView = cible }
 	)
 	s.tweenFov = tween
+	if apres then
+		tween.Completed:Once(function(etat)
+			if etat == Enum.PlaybackState.Completed and s.actif then
+				apres()
+			end
+		end)
+	end
 	tween:Play()
+end
+
+--- Le champ de vision s'élargit d'un coup au départ du dash, puis revient en douceur à ce qu'il doit être.
+local function pousserFovDash(s: Session)
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	if not s.fovDash and not s.enCourse then
+		s.fovBase = camera.FieldOfView -- le champ de vision normal du moment (la course a le sien, déjà noté)
+	end
+	s.fovDash = true
+	animerFov(s, fovCible(s) + Reglages.DASH_FOV_BONUS, DUREE_FOV_DASH, function()
+		animerFov(s, fovCible(s), Reglages.DASH_FOV_RETOUR, function()
+			s.fovDash = false
+		end)
+	end)
 end
 
 --- Met la vitesse et le champ de vision d'accord avec « est-ce que je cours ? » (appelée à chaque changement).
@@ -136,13 +168,18 @@ local function appliquerCourse()
 	if voulue then
 		s.vitesseBase = s.humanoide.WalkSpeed
 		local camera = workspace.CurrentCamera
-		s.fovBase = if camera then camera.FieldOfView else s.fovBase
+		if camera and not s.fovDash then
+			s.fovBase = camera.FieldOfView -- pas pendant un dash : la caméra est alors élargie
+		end
+		s.fovDash = false -- la course reprend la main sur le champ de vision
 		s.humanoide.WalkSpeed = s.vitesseBase * Reglages.COURSE_FACTEUR
-		animerFov(s, s.fovBase + Reglages.COURSE_FOV_BONUS)
+		animerFov(s, fovCible(s))
 	else
 		s.humanoide.WalkSpeed = s.vitesseBase
-		animerFov(s, s.fovBase)
+		s.fovDash = false
+		animerFov(s, fovCible(s))
 	end
+	Effets.course(s.personnage, voulue) -- la traînée légère au sol
 end
 
 local function definirSourceCourse(source: string, vrai: boolean)
@@ -150,56 +187,40 @@ local function definirSourceCourse(source: string, vrai: boolean)
 	appliquerCourse()
 end
 
--- Vrille (saut périlleux du double saut) ---------------------------------------------------------------------------
--- Méthode : on fait tourner le CORPS autour de la racine en modifiant le `C0` de l'articulation Motor6D qui relie la
--- HumanoidRootPart au reste du corps (« Root » en R15, « RootJoint » en R6), image par image, d'un tour complet en
--- VRILLE_DUREE secondes. La HumanoidRootPart, elle, ne tourne pas : la physique, le contrôle de l'Humanoid, la caméra
--- et le dash ne voient rien. L'Animator n'écrit que `Transform`, jamais `C0` : les animations continuent. Tourner la
--- racine elle-même (CFrame image par image) aurait lutté contre le Humanoid, qui la remet debout. Limite connue : le
--- C0 d'un client ne se réplique pas, donc seuls le joueur et sa caméra voient la vrille (les autres joueurs voient un
--- saut normal) ; pour la montrer aux autres, il faudrait un RemoteEvent de plus (hors de cette tâche).
+-- Réplication des effets ---------------------------------------------------------------------------------------------
 
-local function trouverArticulation(racine: BasePart): Motor6D?
-	for _, joint in racine:GetJoints() do
-		if joint:IsA("Motor6D") and joint.Part0 == racine then
-			return joint
-		end
-	end
-	return nil
-end
-
-local function finirVrille(s: Session)
-	local v = s.vrille
-	if not v then
-		return
-	end
-	s.vrille = nil
-	if v.connexion then
-		v.connexion:Disconnect()
-	end
-	if v.articulation.Parent then
-		v.articulation.C0 = v.c0 -- remise exacte à l'état d'origine
+--- Joue l'effet de la capacité sur son propre personnage tout de suite, puis prévient le serveur, qui le relaie aux autres
+--- joueurs (EffetCapacite). Le serveur refuse ce qui est trop fréquent ou invraisemblable : rien d'autre n'en dépend.
+local function jouerEffet(capacite: string, s: Session)
+	Effets.jouer(capacite, s.personnage)
+	local remote = signalerEffet
+	if remote then
+		remote:FireServer(capacite)
 	end
 end
 
-local function lancerVrille(s: Session)
-	finirVrille(s)
-	local articulation = trouverArticulation(s.racine)
-	if not articulation then
+--- Le serveur dit qu'un autre joueur vient de faire un dash ou un double saut : on joue l'effet sur son personnage.
+--- Le message qui nous concerne est ignoré (déjà joué en local), comme tout ce qui est mal formé ou trop loin.
+local function surEffetRecu(origine: any, capacite: any)
+	if typeof(origine) ~= "Instance" or not origine:IsA("Player") or origine == joueur then
 		return
 	end
-	local v: Vrille = { articulation = articulation, c0 = articulation.C0, debut = os.clock(), connexion = nil }
-	s.vrille = v
-	v.connexion = RunService.RenderStepped:Connect(function()
-		local avancement = (os.clock() - v.debut) / Reglages.VRILLE_DUREE
-		if avancement >= 1 or not s.actif then
-			finirVrille(s)
+	if not RegleEffets.estReplicable(capacite) then
+		return
+	end
+	local personnage = origine.Character
+	local racine = personnage and personnage:FindFirstChild("HumanoidRootPart")
+	if not personnage or not racine or not racine:IsA("BasePart") then
+		return
+	end
+	local camera = workspace.CurrentCamera
+	if camera then
+		local distance = (racine.Position - camera.CFrame.Position).Magnitude
+		if not RegleEffets.assezProche(distance, Reglages.EFFET_DISTANCE_MAX) then
 			return
 		end
-		-- Tour vers l'avant (angle négatif autour de l'axe X de la racine = la tête passe devant), sur l'origine de la
-		-- racine : l'angle est calculé ici, à chaque image, d'après le temps écoulé.
-		v.articulation.C0 = CFrame.Angles(-2 * math.pi * avancement, 0, 0) * v.c0
-	end)
+	end
+	Effets.jouer(capacite :: string, personnage)
 end
 
 -- Double saut ----------------------------------------------------------------------------------------------------
@@ -239,7 +260,7 @@ local function tenterDoubleSaut()
 	local vitesse = s.racine.AssemblyLinearVelocity
 	local cible = Mouvement.vitesseSaut(physiqueDe(humanoide)) * Reglages.SAUT_DOUBLE_FACTEUR
 	s.racine.AssemblyLinearVelocity = Vector3.new(vitesse.X, math.max(vitesse.Y, cible), vitesse.Z)
-	lancerVrille(s)
+	jouerEffet("doubleSaut", s)
 end
 
 local function surDemandeSaut()
@@ -332,6 +353,11 @@ local function lancerDash()
 	local position = s.racine.Position
 	s.racine.CFrame = CFrame.lookAt(position, position + direction)
 
+	-- Les effets : penché, traînée, lignes de vitesse, choc d'arrivée (joués ici et chez les autres joueurs), et le
+	-- champ de vision, qui ne concerne que cette caméra.
+	jouerEffet("dash", s)
+	pousserFovDash(s)
+
 	task.delay(Reglages.DASH_DUREE, finirDash, s, id)
 end
 
@@ -348,7 +374,7 @@ local function fermerSession()
 		connexion:Disconnect()
 	end
 	table.clear(s.connexions)
-	finirVrille(s)
+	Effets.arreter(s.personnage) -- traînées, lignes, anneau, corps remis droit : tout est détruit
 	if s.dash then
 		s.dash.vitesse:Destroy()
 		s.dash.attache:Destroy()
@@ -357,7 +383,7 @@ local function fermerSession()
 	if s.tweenFov then
 		s.tweenFov:Cancel()
 	end
-	if s.enCourse then
+	if s.enCourse or s.fovDash then
 		local camera = workspace.CurrentCamera
 		if camera then
 			camera.FieldOfView = s.fovBase -- le champ de vision revient à la normale, même si le personnage disparaît
@@ -386,11 +412,11 @@ local function ouvrirSession(personnage: Model)
 		enCourse = false,
 		vitesseBase = humanoide.WalkSpeed,
 		fovBase = if camera then camera.FieldOfView else 70,
+		fovDash = false,
 		tweenFov = nil,
 		doubleDispo = true,
 		dashDispo = true,
 		dash = nil,
-		vrille = nil,
 	}
 	session = s
 	definirDoubleDispo(s, true) -- un nouveau personnage repart avec les deux capacités prêtes
@@ -412,7 +438,7 @@ local function ouvrirSession(personnage: Model)
 	table.insert(
 		s.connexions,
 		humanoide.Died:Connect(function()
-			finirVrille(s)
+			Effets.arreter(s.personnage) -- mort en plein dash ou en pleine vrille : tout disparaît tout de suite
 			appliquerCourse() -- plus de course pour un personnage mort : la vitesse et le champ de vision se remettent
 		end)
 	)
@@ -573,6 +599,8 @@ function Capacites.demarrer()
 			end
 		end)
 		Remotes.obtenir("EtatCourse").OnClientEvent:Connect(surEtat)
+		Remotes.obtenir("EffetCapacite").OnClientEvent:Connect(surEffetRecu)
+		signalerEffet = Remotes.obtenir("SignalerEffet")
 	end)
 end
 

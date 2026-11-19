@@ -640,7 +640,8 @@ return function(R)
 
 	---------------------------------------------------------------------------------------------------------------
 	-- 3 · Les échafaudages de la tour : des drones de livraison qui coupent la descente.
-	-- Échafaudages (4 × 4) : S1 (421, 58, 0), S2 (430, 50, 4), S3 (439, 42, -4), S4 (448, 34, 0). Le rebord
+	-- Échafaudages (4 × 4) : S1 (425, 58, 0), S2 (437, 50, 4), S3 (445, 42, -4), S4 (451, 34, 0) — écartés de la
+	-- tour le 2026-11-19 pour que la spirale ne se contourne plus au dash (voir Parcours.luau). Le rebord
 	-- (412, 66), à la sortie de la fenêtre, reste sûr : on y attend.
 	local tour = dossier(racineEvenements, "Tour")
 	local tubesPoses = {}
@@ -735,11 +736,11 @@ return function(R)
 		tubesPoses[cle] = true
 		return finir(m, corps)
 	end
-	drone(421, 58, 0, 1, 6, 0.5)
-	drone(430, 50, 4, -1, 7, 3)
-	drone(439, 42, -4, 1, 5.5, 2, -22) -- affiche « ascenseur en panne » en z = -17
-	drone(448, 34, 0, -1, 8, 5)
-	drone(448, 34, 0, 1, 12, 9.5)
+	drone(425, 58, 0, 1, 6, 0.5)
+	drone(437, 50, 4, -1, 7, 3)
+	drone(445, 42, -4, 1, 5.5, 2, -22) -- affiche « ascenseur en panne » en z = -17
+	drone(451, 34, 0, -1, 8, 5)
+	drone(451, 34, 0, 1, 12, 9.5)
 
 	---------------------------------------------------------------------------------------------------------------
 	-- 4 · Rue de la Soif : voitures, bus et trottinettes qui coupent la terrasse en Z, sur sa bande d'entrée

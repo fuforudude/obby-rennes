@@ -9,15 +9,18 @@
 --   Arrivee(temps: number, classable: boolean, record: boolean, gainAura: number)
 --   CapaciteDebloquee(capacite: string)  une capacité vient d'être débloquée ("course", "doubleSaut" ou "dash")
 --   EtatAscension(etat: EtatAscension)  à chaque changement utile de l'ascension (pas à chaque image) : départ du
---                                     pied, étage, palier débloqué, téléportation, sommet, hauteur qui bouge
+--                                     pied, étage, sommet, hauteur qui bouge
+--   EffetCapacite(joueur: Player, capacite: string)  « ce joueur vient de faire un dash ou un double saut » : les
+--                                     autres clients jouent l'effet (vrille, traînée, onde) sur son personnage.
+--                                     Envoyé à tous les joueurs SAUF celui d'origine ; capacite = "dash" ou "doubleSaut"
 -- Client → serveur
 --   DemanderRecommencer()             repartir de la coloc, chrono à zéro
 --   ToucheParEvenement(objet: Instance)  « cet événement (tag Evenement) m'a touché » : le serveur vérifie que le
 --                                     danger est actif et que le joueur est près, puis le tue (serveur/Evenements)
---   DemanderTeleportPalier(numero: number)  « téléporte-moi au palier numero » : le serveur vérifie que le palier
---                                     existe, qu'il est débloqué, que le joueur est dans l'ascension et qu'il ne
---                                     demande pas plus d'une fois toutes les PALIER_DELAI_TELEPORT secondes
---                                     (serveur/Ascension, règle pure dans partage/Ascension)
+--   SignalerEffet(capacite: string)    « j'ai fait un dash / un double saut » (effet déjà joué chez moi) : le serveur
+--                                     vérifie le type, la capacité (débloquée), que le joueur est vivant et la cadence
+--                                     (au plus un par capacité toutes les EFFET_DELAI_MIN s), puis relaie EffetCapacite
+--                                     (serveur/Capacites, règle pure dans partage/EffetsCapacites)
 -- (« Passer l'étape » passe par MarketplaceService : le client affiche l'achat, le serveur le traite.)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -44,9 +47,8 @@ export type EtatAscension = {
 	enAscension: boolean, -- le joueur est dans une tentative d'ascension (parti du pied)
 	hauteur: number, -- hauteur actuelle au-dessus du pied, en studs (0 hors ascension)
 	meilleureHauteur: number, -- record personnel sauvegardé, en studs
-	paliers: { number }, -- numéros des paliers débloqués (la téléportation n'accepte que ceux-là)
 	debut: number?, -- heure serveur du départ au pied ; nil = pas de chrono (sommet atteint, ou hors ascension)
-	classable: boolean, -- ni téléportation ni alerte de surveillance pendant cette tentative
+	classable: boolean, -- aucune alerte de surveillance pendant cette tentative
 }
 
 local NOMS = {
@@ -56,7 +58,8 @@ local NOMS = {
 	"EtatAscension",
 	"DemanderRecommencer",
 	"ToucheParEvenement",
-	"DemanderTeleportPalier",
+	"EffetCapacite",
+	"SignalerEffet",
 }
 local NOM_DOSSIER = "Remotes"
 

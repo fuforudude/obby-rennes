@@ -38,11 +38,6 @@ local Textes = {
 	-- Ascension.
 	hauteurRecord = "Record",
 	nonClasse = "non classé",
-	paliers = "Paliers",
-	paliersTitre = "Paliers débloqués",
-	paliersAvertissement = "Se téléporter rend la tentative non classée.",
-	paliersFermer = "Fermer",
-	paliersInconnue = "—",
 }
 
 --- « Maintiens Maj pour courir », ou « Maintiens le bouton pour courir » sur mobile (`touche` absent).
@@ -52,11 +47,6 @@ function Textes.annonceCommande(capacite: string, touche: string?): string
 		return ""
 	end
 	return `{action.avant}{touche or Textes.annonceBouton}{action.apres}`
-end
-
---- « Palier 3 · 182 m » (la hauteur est « — » quand la carte du palier n'est pas connue).
-function Textes.lignePalier(numero: number, hauteur: string?): string
-	return `Palier {numero} · {hauteur or Textes.paliersInconnue}`
 end
 
 --- « Record 245 m », puis « · non classé » quand la tentative ne compte plus.
