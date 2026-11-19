@@ -404,8 +404,13 @@ end
 -- quand même jusqu'au dernier checkpoint sans la capacité, la porte est décorative et c'est un défaut.
 --
 -- Le jeu de capacités disponible varie le long du chemin : le parcours en largeur transporte ce qui a été ramassé
--- en route, donc chaque porte est jugée avec ce que le joueur a vraiment en main à cet endroit (rien devant la
--- porte de la course, la course devant celle du double saut, etc.), et le minimum est pris sur tous les chemins.
+-- en route, donc chaque saut est jugé avec ce que le joueur a vraiment en main à cet endroit (rien au début, la
+-- course devant la porte du dash, etc.), et le minimum est pris sur tous les chemins.
+--
+-- Le critère est **global** : « aucun chemin ne mène au bout sans la capacité ». Il n'exige pas un saut dédié qui
+-- la verrouille à lui seul, et il ne dit pas où se trouve le verrou — un parcours peut parfaitement rendre une
+-- capacité obligatoire bien après la dalle qui l'enseigne (c'est le cas du double saut, verrouillé par l'atrium
+-- de Sup de Vinci et non par le balcon de la tour).
 print("\n== Portes strictement nécessaires (physique réelle) ==")
 print(
 	string.format(

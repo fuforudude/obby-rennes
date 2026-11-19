@@ -1520,11 +1520,14 @@ return function(R)
 	fragile(dalle(metro, "EscalatorEnPanne", 4, 6, 225, 22, 0, couleurs.papier))
 	dalle(metro, "Escalator", 4, 6, 231, 18, 0, couleurs.quai, Enum.Material.DiamondPlate)
 	checkpoint(metro, 4, 243, 14, 0, "La station")
-	-- Apprentissage 1/3 · la course. En sortant de la station, le parvis est coupé : la première banderole du
-	-- cortège est 9,5 studs plus loin et 4,5 studs plus haut (voir le commentaire de la zone 3 pour la dérivation :
-	-- c'est la seule géométrie à la fois infranchissable sans courir *en physique réelle* et tenable en courant
-	-- dans le modèle prudent). La dalle barre toute la sortie du checkpoint 4 (12 studs de large, collée à sa
-	-- dalle) : impossible de passer à côté.
+	-- Apprentissage 1/3 · la course. En sortant de la station, le parvis est coupé : 8 studs de vide en montant de
+	-- 1 jusqu'à la première banderole du cortège. Plus que les 6,5 d'un saut debout du modèle prudent — on a donc
+	-- envie de prendre de l'élan, et le panneau le dit — mais pas infranchissable en marchant (8,67 studs de
+	-- portée réelle) : **c'est voulu**. Le premier saut du jeu doit accueillir un débutant, pas le coincer
+	-- (décision de l'utilisateur du 2026-11-19). La course reste strictement obligatoire pour finir le tuto, mais
+	-- par un saut plus loin dans le cortège, une fois qu'on a compris à quoi elle sert (voir zone 3).
+	-- La dalle barre toute la sortie du checkpoint 4 (12 studs de large, collée à sa dalle) : impossible de passer
+	-- à côté sans la toucher.
 	deblocage(
 		metro,
 		dalle(metro, "DalleDeLaCourse", 5, 12, 251.5, 14, 0, couleurs.quai, Enum.Material.DiamondPlate),
@@ -1559,23 +1562,29 @@ return function(R)
 		end
 		return mobile(b, deplacement, duree)
 	end
-	-- La première banderole est la **porte de la course** (révision du 2026-11-19 : portes strictement
-	-- infranchissables en physique réelle). Elle est tendue (elle ne bouge pas : on ne demande pas un saut limite
-	-- sur une cible mobile), 9,5 studs de vide depuis la DalleDeLaCourse et 4,5 studs plus haut.
-	-- Pourquoi ces deux chiffres, et pas 8 studs à plat comme avant : un personnage sans aucune capacité franchit
-	-- vraiment 8,67 studs à plat (16 studs/s pendant 0,5418 s de vol), marge de bord comprise 10,67 — un vide de
-	-- 8 studs se passait donc sans courir. La course multiplie la portée par 1,5 exactement, comme le modèle
-	-- prudent (6,5 -> 9,75) : la seule fenêtre où un saut est à la fois **impossible sans courir** et **tenable en
-	-- courant** est un saut qui monte au maximum. À 4,5 studs de montée, la portée réelle sans course tombe à
-	-- 6,99 (8,99 avec la marge de bord) alors que le modèle prudent autorise toujours 9,75 en courant : 9,5 tient
-	-- dans cette fenêtre, et nulle part ailleurs. C'est volontairement le saut le plus exigeant que le modèle de
-	-- confort accepte (100 % de la montée, 97 % du vide) ; en portée réelle il ne vaut que 72 % de ce qu'un joueur
-	-- qui court sait faire. La banderole est large de 12 studs en Z : on arrive dessus sans viser.
-	-- Les deux sauts suivants restent à 8 studs de vide en montant de 2 (plus que les 6,5 d'un saut debout, moins
-	-- que les 9,75 d'un saut en courant) ; le checkpoint 5 ne bouge pas.
-	banderole("BanderoleTendue", 265.5, 18.5, "DES PRISES DANS LES AMPHIS")
+	-- Trois sauts en sortant du métro, de plus en plus engagés (révision du 2026-11-19).
+	--
+	-- 1. DalleDeLaCourse -> BanderoleTendue : 8 studs à plat en montant de 1. Accueillant : on peut le passer en
+	--    marchant si on insiste (8,67 studs de portée réelle), mais il est déjà au-delà du saut debout du modèle
+	--    prudent, donc on prend naturellement de l'élan. Cette banderole-là est **tendue entre deux lampadaires**,
+	--    elle ne bouge pas : le premier saut après un déblocage doit apprendre la capacité, pas le minutage d'une
+	--    cible mobile. La suivante, elle, se balance toujours.
+	-- 2. BanderoleTendue -> Banderole : 8 studs en montant de 2, sur une cible qui bouge.
+	-- 3. Banderole -> Pancarte : **c'est ce saut-là qui rend la course obligatoire** — 9,5 studs de vide en
+	--    montant de 4,5. Pourquoi ces deux chiffres précis : un personnage sans aucune capacité franchit vraiment
+	--    8,67 studs à plat (16 studs/s pendant 0,5418 s de vol), 10,67 marge de bord comprise, et la course
+	--    multiplie la portée par 1,5 exactement, comme le modèle prudent (6,5 -> 9,75). La seule fenêtre où un
+	--    saut est à la fois **impossible sans courir** et **tenable en courant** est donc un saut qui monte au
+	--    maximum : à 4,5 studs de montée, la portée réelle sans course tombe à 6,99 (8,99 avec la marge) alors que
+	--    le modèle prudent autorise toujours 9,75 en courant. 9,5 tient dans cette fenêtre, large de 0,76 stud, et
+	--    nulle part ailleurs. C'est volontairement le saut le plus exigeant que le modèle de confort accepte
+	--    (100 % de la montée, 97 % du vide) ; en portée réelle il ne vaut que 72 % de ce qu'un joueur qui court
+	--    sait faire. Il arrive en troisième position, et non en sortant du métro, pour qu'on l'aborde en ayant
+	--    déjà senti ce que la course change. La pancarte s'élargit (4 × 10 au lieu de 2 × 2) : on arrive dessus
+	--    sans viser, et sa profondeur absorbe le balancement de la banderole d'où l'on part.
+	banderole("BanderoleTendue", 264, 15, "DES PRISES DANS LES AMPHIS")
 	banderole("Banderole", 276, 17, "NON AUX PARTIELS À 8H", Vector3.new(0, 0, -8), 3)
-	dalle(cortege, "Pancarte", 2, 2, 287, 19, 0, couleurs.pancarte)
+	dalle(cortege, "Pancarte", 4, 10, 289.5, 21.5, 0, couleurs.pancarte)
 	checkpoint(cortege, 5, 298, 19, 0, "Place de la République")
 	local sono = mobile(
 		bloc(cortege, "CamionSono", 8, 2, 8, 314, 19, 0, couleurs.camion, Enum.Material.Metal),
