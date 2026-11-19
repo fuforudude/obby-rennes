@@ -146,6 +146,10 @@ local Reglages = {
 	-- Un même joueur n'est repoussé qu'une fois par PIEGE_DELAI_POUSSEE secondes (Touched se déclenche plusieurs
 	-- fois pour un seul contact).
 	PIEGE_POUSSEE = 60,
+	-- Plafond de la poussée qu'une carte peut demander (attribut « Poussee » du piège) : strictement sous
+	-- DASH_VITESSE (70), pour que le dash puisse toujours reprendre la main. Une valeur plus forte est ramenée à ce
+	-- plafond au lieu d'être refusée.
+	PIEGE_POUSSEE_MAX = 65,
 	PIEGE_PORTEE = 10,
 	PIEGE_REPOS = 1.2,
 	PIEGE_DELAI_POUSSEE = 0.4,
@@ -156,6 +160,11 @@ local Reglages = {
 	-- traverser en courant), puis revient à sa place EFFONDRABLE_RETOUR secondes plus tard.
 	EFFONDRABLE_DELAI = 0.5,
 	EFFONDRABLE_RETOUR = 4,
+	-- Combien de temps la dalle tombe librement (secondes), avant d'être réancrée, invisible et traversable, jusqu'à
+	-- son retour. Pourquoi si peu : la gravité (196,2 studs/s2) la ferait descendre de 880 studs en 3 s, sous
+	-- Workspace.FallenPartsDestroyHeight (-500), et Roblox DÉTRUIRAIT la pièce : la dalle ne reviendrait jamais.
+	-- 1,5 s suffit pour que la chute se voie. Si DelaiRetour est plus court, la chute est raccourcie d'autant.
+	EFFONDRABLE_DUREE_CHUTE = 1.5,
 	-- Balancier : multiplicateur de force (attribut facultatif « Poussee », 1 par défaut) appliqué à la densité de
 	-- la pièce — une pancarte plus lourde emporte plus loin, sans changer sa trajectoire ni son horaire. Au-delà de
 	-- ce plafond la valeur est refusée : une densité absurde ferait traverser les murs aux joueurs.

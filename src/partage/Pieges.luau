@@ -8,7 +8,13 @@
 --
 -- Contrats de la carte (tags posés par outils/monde/Ascension.luau) :
 --   PiegeMur    sur un Model, enfant `Pointe` (BasePart) : Direction (Vector3, sens de sortie), Distance (studs),
---               DureeSortie, DureeRentree (s), Portee (studs, facultatif), Poussee (studs/s, facultatif) ;
+--               DureeSortie, DureeRentree (s), Repos (s, facultatif), Portee (studs, facultatif), Poussee (studs/s,
+--               facultatif, plafonnée par Reglages.PIEGE_POUSSEE_MAX).
+--               Cycle, du déclenchement au suivant : sortie (DureeSortie : la pointe sort) -> rentrée (DureeRentree :
+--               la pointe rentre) -> repos (Repos : pointe rentrée, rien ne la déclenche). DureeSortie et
+--               DureeRentree sont des durées d'ANIMATION, pas des temps passés dehors ou rentré. La pointe est
+--               dangereuse (elle pousse) pendant la sortie ET la rentrée ; la fenêtre de passage du joueur est
+--               `Repos`. Sans attribut `Repos`, c'est Reglages.PIEGE_REPOS qui s'applique, en silence ;
 --   Laser       sur une BasePart : Depart, Arrivee (Vector3 absolus), Periode, Decalage (s) ;
 --   Effondrable sur une BasePart : DelaiChute (s, facultatif), DelaiRetour (s, facultatif) ;
 --   Balancier   (existant) : Poussee (multiplicateur de force, facultatif, 1 par défaut).
@@ -44,7 +50,7 @@ export type ParametresEffondrable = {
 
 export type CycleEffondrable = "tient" | "tombee" | "revenue"
 
-export type DefautsPiege = { portee: number, poussee: number, repos: number }
+export type DefautsPiege = { portee: number, poussee: number, pousseeMax: number, repos: number }
 export type DefautsEffondrable = { delaiChute: number, delaiRetour: number }
 
 local function fini(x: any): boolean
@@ -67,7 +73,10 @@ local Pieges = {}
 
 --- Lit les attributs d'un Model `PiegeMur` (table attribut -> valeur, par exemple `modele:GetAttributes()`).
 --- Rend nil si un attribut manque, a le mauvais type ou n'a pas de sens : l'appelant avertit et ignore le piège.
---- `Portee` et `Poussee` sont facultatifs (les réglages du jeu complètent) ; la direction est ramenée à l'unité et
+--- `Portee`, `Poussee` et `Repos` sont facultatifs (les réglages du jeu complètent, sans avertir : une carte qui
+--- oublie `Repos` prend `PIEGE_REPOS`) ; une valeur présente mais absurde (0, négative, NaN, pas un nombre) refuse le
+--- piège. `Poussee` est plafonnée à `defauts.pousseeMax` (strictement sous le dash) : au-delà, le joueur ne pourrait
+--- plus rattraper la poussée. La direction est ramenée à l'unité et
 --- à l'horizontale, parce que la poussée est horizontale et que le joueur doit pouvoir la rattraper au dash.
 function Pieges.piegeDepuisAttributs(attributs: { [string]: any }, defauts: DefautsPiege): ParametresPiege?
 	local direction = attributs.Direction
@@ -83,6 +92,9 @@ function Pieges.piegeDepuisAttributs(attributs: { [string]: any }, defauts: Defa
 	local dureeRentree = nombrePositif(attributs.DureeRentree, 0)
 	local portee = nombrePositif(attributs.Portee, defauts.portee)
 	local poussee = nombrePositif(attributs.Poussee, defauts.poussee)
+	if poussee ~= nil then
+		poussee = math.min(poussee, defauts.pousseeMax) -- la carte ne peut pas dépasser le dash : voir Reglages.PIEGE_POUSSEE_MAX
+	end
 	local repos = nombrePositif(attributs.Repos, defauts.repos)
 	if
 		distance == nil
@@ -186,6 +198,12 @@ function Pieges.effondrableDepuisAttributs(
 		return nil
 	end
 	return { delaiChute = delaiChute :: number, delaiRetour = delaiRetour :: number }
+end
+
+--- Combien de temps la dalle tombe librement : au plus `maximum`, et jamais plus que `delaiRetour` (sinon elle
+--- serait réancrée après son propre retour). Pourquoi un plafond : voir Reglages.EFFONDRABLE_DUREE_CHUTE.
+function Pieges.dureeChuteLibre(delaiRetour: number, maximum: number): number
+	return math.min(delaiRetour, maximum)
 end
 
 --- Où en est la plateforme, `ecoule` secondes après le premier contact : elle tient encore, elle est tombée, ou

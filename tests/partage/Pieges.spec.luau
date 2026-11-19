@@ -7,7 +7,7 @@ return function()
 	local Pieges = require(ReplicatedStorage.Partage.Pieges)
 
 	-- Les valeurs du jeu sont dans Reglages ; les tests passent les leurs pour rester indépendants de l'équilibrage.
-	local DEFAUTS_PIEGE = { portee = 10, poussee = 60, repos = 1.2 }
+	local DEFAUTS_PIEGE = { portee = 10, poussee = 60, pousseeMax = 65, repos = 1.2 }
 	local DEFAUTS_EFFONDRABLE = { delaiChute = 0.5, delaiRetour = 4 }
 
 	local function proche(a: number, b: number): boolean
@@ -44,6 +44,28 @@ return function()
 			local p = Pieges.piegeDepuisAttributs(attributsPiege({ Portee = 4, Poussee = 35 }), DEFAUTS_PIEGE)
 			expect((p :: any).portee).to.equal(4)
 			expect((p :: any).poussee).to.equal(35)
+		end)
+
+		it("plafonne la poussée de la carte : une valeur au-dessus du dash est ramenée au plafond", function()
+			local Reglages = require(ReplicatedStorage.Partage.Reglages)
+			local defauts =
+				{ portee = 10, poussee = Reglages.PIEGE_POUSSEE, pousseeMax = Reglages.PIEGE_POUSSEE_MAX, repos = 1.2 }
+			local p = Pieges.piegeDepuisAttributs(attributsPiege({ Poussee = 120 }), defauts) :: any
+			expect(p.poussee).to.equal(Reglages.PIEGE_POUSSEE_MAX)
+			expect(p.poussee < Reglages.DASH_VITESSE).to.equal(true)
+			local sous = Pieges.piegeDepuisAttributs(attributsPiege({ Poussee = 35 }), defauts) :: any
+			expect(sous.poussee).to.equal(35)
+		end)
+
+		it("sans Repos, la fenêtre de passage est celle des réglages ; un Repos absurde refuse le piège", function()
+			local p = Pieges.piegeDepuisAttributs(attributsPiege(), DEFAUTS_PIEGE) :: any
+			expect(p.repos).to.equal(1.2)
+			local carte = Pieges.piegeDepuisAttributs(attributsPiege({ Repos = 2 }), DEFAUTS_PIEGE) :: any
+			expect(carte.repos).to.equal(2)
+			expect(Pieges.piegeDepuisAttributs(attributsPiege({ Repos = 0 }), DEFAUTS_PIEGE)).never.to.be.ok()
+			expect(Pieges.piegeDepuisAttributs(attributsPiege({ Repos = -1 }), DEFAUTS_PIEGE)).never.to.be.ok()
+			expect(Pieges.piegeDepuisAttributs(attributsPiege({ Repos = "long" }), DEFAUTS_PIEGE)).never.to.be.ok()
+			expect(Pieges.piegeDepuisAttributs(attributsPiege({ Repos = 0 / 0 }), DEFAUTS_PIEGE)).never.to.be.ok()
 		end)
 
 		it("normalise la direction (une carte peut donner un vecteur non unitaire)", function()
@@ -176,11 +198,12 @@ return function()
 			expect(v.Z).to.equal(60)
 		end)
 
-		it("une poussée reste rattrapable : elle ne dépasse jamais la vitesse du dash", function()
-			-- Reglages : PIEGE_POUSSEE = 60, DASH_VITESSE = 70. Un dash lancé dans l'autre sens reprend la main.
+		it("les réglages gardent la poussée par défaut et son plafond sous la vitesse du dash", function()
+			-- Un dash lancé dans l'autre sens reprend la main. La poussée posée par la carte est testée plus haut.
 			local Reglages = require(ReplicatedStorage.Partage.Reglages)
-			expect(Reglages.PIEGE_POUSSEE < Reglages.DASH_VITESSE).to.equal(true)
 			expect(Reglages.PIEGE_POUSSEE > 0).to.equal(true)
+			expect(Reglages.PIEGE_POUSSEE <= Reglages.PIEGE_POUSSEE_MAX).to.equal(true)
+			expect(Reglages.PIEGE_POUSSEE_MAX < Reglages.DASH_VITESSE).to.equal(true)
 		end)
 	end)
 
@@ -288,6 +311,12 @@ return function()
 			expect(Pieges.cycleEffondrable(4.49, e)).to.equal("tombee")
 			expect(Pieges.cycleEffondrable(4.5, e)).to.equal("revenue")
 			expect(Pieges.cycleEffondrable(100, e)).to.equal("revenue")
+		end)
+
+		it("la chute libre est plafonnée, et raccourcie si le retour arrive plus tôt", function()
+			expect(Pieges.dureeChuteLibre(4, 1.5)).to.equal(1.5)
+			expect(Pieges.dureeChuteLibre(1.5, 1.5)).to.equal(1.5)
+			expect(Pieges.dureeChuteLibre(0.8, 1.5)).to.equal(0.8)
 		end)
 
 		it("avant le premier contact, elle tient", function()

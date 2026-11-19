@@ -168,26 +168,39 @@ local piegesMur: { [Model]: Piege } = {}
 local liaisonHorloge: RBXScriptConnection? = nil
 local prochainScan = 0
 
---- Distance du joueur vivant le plus proche d'un point, ou nil s'il n'y en a aucun.
-local function distanceAuPlusProche(point: Vector3): number?
-	local meilleure: number? = nil
+--- Les positions des joueurs vivants : relevées une seule fois par scan, partagées par tous les pièges.
+local function positionsVivantes(): { Vector3 }
+	local positions = {}
 	for _, joueur in Players:GetPlayers() do
 		local personnage = joueur.Character
 		local humanoide = personnage and personnage:FindFirstChildOfClass("Humanoid")
 		local racine = personnage and personnage:FindFirstChild("HumanoidRootPart")
 		if humanoide and humanoide.Health > 0 and racine and racine:IsA("BasePart") then
-			local d = (racine.Position - point).Magnitude
-			if meilleure == nil or d < meilleure then
-				meilleure = d
-			end
+			table.insert(positions, racine.Position)
+		end
+	end
+	return positions
+end
+
+--- Distance du plus proche de ces points à `point`, ou nil s'il n'y en a aucun.
+local function distanceAuPlusProche(positions: { Vector3 }, point: Vector3): number?
+	local meilleure: number? = nil
+	for _, position in positions do
+		local d = (position - point).Magnitude
+		if meilleure == nil or d < meilleure then
+			meilleure = d
 		end
 	end
 	return meilleure
 end
 
-local function majPiege(piege: Piege, horloge: number, scanner: boolean)
+-- `positions` n'est donné qu'aux images où l'on scanne.
+local function majPiege(piege: Piege, horloge: number, positions: { Vector3 }?)
 	local phase, avancement = Pieges.phasePiege(horloge - piege.debut, piege.parametres)
-	if scanner and Pieges.doitDeclencher(phase, distanceAuPlusProche(piege.pose.Position), piege.parametres.portee) then
+	if
+		positions
+		and Pieges.doitDeclencher(phase, distanceAuPlusProche(positions, piege.pose.Position), piege.parametres.portee)
+	then
 		piege.debut = horloge
 		phase, avancement = "sortie", 0
 	end
@@ -209,12 +222,13 @@ local function majHorloge()
 	if next(piegesMur) ~= nil then
 		-- Les pointes bougent à chaque image ; la recherche d'un joueur à portée, elle, est plus rare.
 		local horloge = os.clock()
-		local scanner = horloge >= prochainScan
-		if scanner then
+		local positions = nil
+		if horloge >= prochainScan then
 			prochainScan = horloge + Reglages.PIEGE_PERIODE_SCAN
+			positions = positionsVivantes()
 		end
 		for _, piege in piegesMur do
-			majPiege(piege, horloge, scanner)
+			majPiege(piege, horloge, positions)
 		end
 	end
 end
@@ -349,7 +363,9 @@ end
 -- voit bien mieux qu'une pièce qui s'efface. Elle est en même temps rendue traversable (ni collision ni toucher) :
 -- le joueur posé dessus tombe au même instant, et la dalle en chute libre ne va bousculer ni tuer personne plus
 -- bas dans la tour (une dalle qui rebondit d'étage en étage rendrait la montée des autres joueurs aléatoire).
--- `DelaiRetour` secondes après la chute, elle est réancrée à sa place d'origine et redevient franchissable.
+-- Elle ne tombe que `Reglages.EFFONDRABLE_DUREE_CHUTE` secondes (sinon Roblox la détruirait sous
+-- FallenPartsDestroyHeight) : elle est alors réancrée, invisible et traversable. `DelaiRetour` secondes après la
+-- chute, elle est remise à sa place d'origine et redevient franchissable.
 local function effondrable(part: BasePart)
 	local parametres = Pieges.effondrableDepuisAttributs(part:GetAttributes(), {
 		delaiChute = Reglages.EFFONDRABLE_DELAI,
@@ -360,7 +376,7 @@ local function effondrable(part: BasePart)
 		return
 	end
 	local pose = part.CFrame
-	local collision, toucher = part.CanCollide, part.CanTouch
+	local collision, toucher, transparence = part.CanCollide, part.CanTouch, part.Transparency
 	local enCours = false
 	part.Touched:Connect(function(touche)
 		if enCours or not humanoideVivant(touche) then
@@ -371,14 +387,22 @@ local function effondrable(part: BasePart)
 			part.CanCollide = false
 			part.CanTouch = false
 			part.Anchored = false
-			task.delay(parametres.delaiRetour, function()
-				part.Anchored = true
-				part.AssemblyLinearVelocity = Vector3.zero
-				part.AssemblyAngularVelocity = Vector3.zero
-				part.CFrame = pose
-				part.CanCollide = collision
-				part.CanTouch = toucher
-				enCours = false
+			part:SetNetworkOwner(nil)
+			-- Chute libre limitée : plus longtemps, la dalle passerait sous FallenPartsDestroyHeight et serait détruite.
+			local chute = Pieges.dureeChuteLibre(parametres.delaiRetour, Reglages.EFFONDRABLE_DUREE_CHUTE)
+			task.delay(chute, function()
+				part.Anchored = true -- figée là où elle est, invisible et traversable jusqu'au retour
+				part.Transparency = 1
+				task.delay(parametres.delaiRetour - chute, function()
+					part.Anchored = true
+					part.AssemblyLinearVelocity = Vector3.zero
+					part.AssemblyAngularVelocity = Vector3.zero
+					part.CFrame = pose
+					part.Transparency = transparence
+					part.CanCollide = collision
+					part.CanTouch = toucher
+					enCours = false
+				end)
 			end)
 		end)
 	end)
