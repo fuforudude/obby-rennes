@@ -7,6 +7,7 @@ export type Course = {
 	reprise: boolean, -- course reprise d'une ancienne session (le chrono n'a pas couru depuis le départ)
 	serie: number, -- checkpoints enchaînés depuis la dernière chute (multiplicateur d'aura)
 	chutes: number, -- chutes pendant cette course
+	vol: boolean, -- le joueur a volé (mode testeur, serveur/Vol) pendant cette course : ni classement, ni aura, jusqu'à « Recommencer »
 }
 
 -- Barème de l'aura (les valeurs du jeu sont dans Reglages ; les tests passent les leurs).
@@ -60,17 +61,23 @@ end
 
 --- Course qui démarre au départ, chrono lancé.
 function Regles.nouvelleCourse(maintenant: number): Course
-	return { debut = maintenant, passages = 0, reprise = false, serie = 0, chutes = 0 }
+	return { debut = maintenant, passages = 0, reprise = false, serie = 0, chutes = 0, vol = false }
 end
 
 --- Course reprise à un checkpoint sauvegardé : le chrono tourne mais le temps ne sera pas classé.
 function Regles.courseReprise(maintenant: number): Course
-	return { debut = maintenant, passages = 0, reprise = true, serie = 0, chutes = 0 }
+	return { debut = maintenant, passages = 0, reprise = true, serie = 0, chutes = 0, vol = false }
 end
 
---- La course entre-t-elle au classement ? D'une traite, sans passage payant, et pas plus rapide que possible.
+--- La course entre-t-elle au classement ? D'une traite, sans passage payant, sans vol, et pas plus rapide que possible.
 function Regles.estClassable(course: Course, duree: number, tempsMin: number): boolean
-	return course.debut ~= nil and course.passages == 0 and not course.reprise and duree >= tempsMin
+	return course.debut ~= nil and course.passages == 0 and not course.reprise and not course.vol and duree >= tempsMin
+end
+
+--- L'aura de cette course compte-t-elle ? Non dès que le joueur a volé : ni gain ni perte. Le classement de l'aura reçoit
+--- l'aura TOTALE du joueur : une aura gagnée en volant, même gardée en local, y serait envoyée au gain suivant.
+function Regles.auraCompte(course: Course): boolean
+	return not course.vol
 end
 
 --- Nouveau record personnel ? (0 = pas encore de temps)

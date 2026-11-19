@@ -17,9 +17,9 @@ local Remotes = require(ReplicatedStorage.Partage.Remotes)
 -- qu'à l'exécution le second résultat est bien le message d'erreur. Cast local, sans effet à l'exécution.
 local pcallAvecErreur: (...any) -> (boolean, any) = pcall :: any
 
-local etatCourse = Remotes.obtenir("EtatCourse")
-local arrivee = Remotes.obtenir("Arrivee")
-local demanderRecommencer = Remotes.obtenir("DemanderRecommencer")
+local etatCourse: RemoteEvent
+local arrivee: RemoteEvent
+local demanderRecommencer: RemoteEvent
 
 local checkpoints: { [number]: BasePart } = {}
 local courses: { [Player]: Regles.Course } = {}
@@ -115,9 +115,12 @@ local function terminer(joueur: Player)
 		donnees.meilleurTemps = duree
 		Classement.soumettre(joueur, duree)
 	end
-	local gain = Regles.gainArrivee(course, Reglages)
-	donnees.aura += gain
-	majAura(joueur, donnees)
+	-- Une course où l'on a volé ne rapporte pas d'aura (Regles.auraCompte) : sinon elle partirait au classement.
+	local gain = if Regles.auraCompte(course) then Regles.gainArrivee(course, Reglages) else 0
+	if gain > 0 then
+		donnees.aura += gain
+		majAura(joueur, donnees)
+	end
 	arrivee:FireClient(joueur, duree, classable, record, gain)
 end
 
@@ -144,8 +147,10 @@ local function surCheckpoint(numero: number, touche: BasePart)
 	local course = courses[joueur]
 	if course then
 		course.serie += 1
-		donnees.aura += Regles.gainCheckpoint(course.serie, Reglages)
-		majAura(joueur, donnees)
+		if Regles.auraCompte(course) then
+			donnees.aura += Regles.gainCheckpoint(course.serie, Reglages)
+			majAura(joueur, donnees)
+		end
 	end
 	if numero == Reglages.NB_ETAPES then
 		terminer(joueur)
@@ -163,8 +168,10 @@ local function surChute(joueur: Player)
 	end
 	course.serie = 0
 	course.chutes += 1
-	donnees.aura = Regles.auraApresChute(donnees.aura, Reglages)
-	majAura(joueur, donnees)
+	if Regles.auraCompte(course) then
+		donnees.aura = Regles.auraApresChute(donnees.aura, Reglages)
+		majAura(joueur, donnees)
+	end
 	envoyerEtat(joueur)
 end
 
@@ -213,6 +220,25 @@ function Parcours.avantRecommencer(fonction: (Player) -> ())
 	table.insert(avantRecommencer, fonction)
 end
 
+--- Le joueur va voler (serveur/Vol) : sa course n'est plus classable et son aura est figée, jusqu'à « Recommencer » (qui
+--- remplace la course par une neuve). Rend false quand il n'y a pas de course à marquer (données pas chargées, ou course pas
+--- encore posée) : l'appelant doit alors REFUSER le vol, on n'accorde pas un vol qu'on ne sait pas marquer.
+function Parcours.marquerVol(joueur: Player): boolean
+	local course = courses[joueur]
+	if course == nil then
+		return false
+	end
+	course.vol = true
+	return true
+end
+
+--- Le joueur a-t-il volé depuis son dernier « Recommencer » ? Lu par serveur/Ascension pour que la tentative en cours
+--- (et toute nouvelle tentative) soit non classable, par le même chemin que les alertes de la surveillance.
+function Parcours.aVole(joueur: Player): boolean
+	local course = courses[joueur]
+	return course ~= nil and course.vol
+end
+
 --- Replace le joueur sur son dernier checkpoint. Sert à src/serveur/Ascension.luau, qui rend la main quand il n'a
 --- pas réussi à poser le joueur au pied de l'ascension : sans ça, plus personne ne le placerait.
 function Parcours.placerAuCheckpoint(joueur: Player)
@@ -224,8 +250,9 @@ end
 --- Rend false si les données ne sont pas chargées ou si le gain est nul.
 function Parcours.ajouterAura(joueur: Player, gain: number): boolean
 	local donnees = Donnees.obtenir(joueur)
-	if not donnees or gain <= 0 then
-		return false
+	local course = courses[joueur]
+	if not donnees or gain <= 0 or (course ~= nil and not Regles.auraCompte(course)) then
+		return false -- données pas chargées, gain nul, ou course où l'on a volé (voir Regles.auraCompte)
 	end
 	donnees.aura += math.floor(gain)
 	majAura(joueur, donnees)
@@ -252,6 +279,9 @@ function Parcours.passerEtape(joueur: Player): boolean
 end
 
 function Parcours.demarrer()
+	etatCourse = Remotes.obtenir("EtatCourse")
+	arrivee = Remotes.obtenir("Arrivee")
+	demanderRecommencer = Remotes.obtenir("DemanderRecommencer")
 	Players.RespawnTime = Reglages.DELAI_REAPPARITION
 
 	for _, cp in CollectionService:GetTagged("Checkpoint") do

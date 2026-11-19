@@ -35,6 +35,10 @@ local Textes = {
 		dash = "La Vilaine ? Tu la survoles, tout simplement.",
 	},
 
+	-- Mode vol (testeurs) : les deux lignes de la mention.
+	volActif = "Vol actif",
+	volNonClasse = "Partie non classée",
+
 	-- Ascension.
 	hauteurRecord = "Record",
 	nonClasse = "non classé",

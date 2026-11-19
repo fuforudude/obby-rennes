@@ -26,6 +26,7 @@ local Composants = require(script.Parent.Composants)
 local IconesCapacites = require(script.Parent.IconesCapacites)
 local Panneaux = require(script.Parent.Panneaux)
 local Textes = require(script.Parent.Textes)
+local Vol = require(script.Parent.Vol)
 
 local joueur = Players.LocalPlayer
 
@@ -266,6 +267,7 @@ function Hud.monter()
 	-- Les composants de l'ascension, dans le même écran : capacités, annonce de déblocage.
 	IconesCapacites.monter(gui)
 	AnnonceCapacite.monter(gui)
+	Vol.monter(gui) -- n'écoute que EtatVol : rien n'est créé tant que le serveur n'envoie pas `true`
 
 	gui.Parent = joueur:WaitForChild("PlayerGui")
 
