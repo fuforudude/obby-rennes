@@ -2072,9 +2072,13 @@ return function(R)
 	-- moins du cadre, et aucune dalle n'est posée sous une autre à moins de 5,5 studs (ni sous le pied : la dernière
 	-- est au nord du toit, hors de l'emprise du pied). Donc aucun plafond bas au-dessus d'une plateforme du tuto
 	-- (la dalle du checkpoint 15, à 42, a 11 studs de libre) ni de l'accès.
+	-- Le durcissement de l'atrium (spec 2026-11-18) a relevé le dernier palier du tuto en (845, 42, 12), qui passait
+	-- à 5 studs sous « BureauVolant » : celui-ci recule donc de Z = 8 à Z = 5 (emprise Z 2..8 contre 9,5..14,5 pour
+	-- le palier, 1,5 stud de marge). Il reste dans l'aplomb de la salle de partiel (Z 2..14), donc les quatre sauts
+	-- ne changent pas.
 	-- Ce bloc est construit en dernier pour que les tirages aléatoires du chemin et du décor ne changent pas.
 	local acces = {
-		{ nom = "BureauVolant", x = 844, y = 48, z = 8, hx = 3, hz = 3, objet = objetBureau },
+		{ nom = "BureauVolant", x = 844, y = 48, z = 5, hx = 3, hz = 3, objet = objetBureau },
 		{ nom = "ArmoireDeLaVerriere", x = 836, y = 54, z = 10, hx = 3, hz = 3, objet = objetArmoire },
 		{ nom = "PanneauDuToit", x = 836, y = 60, z = 20, hx = 3, hz = 3, objet = objetPanneau },
 	}
