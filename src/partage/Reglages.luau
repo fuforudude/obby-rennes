@@ -178,7 +178,7 @@ local Reglages = {
 	-- d'un test « Clients et serveurs » ont des identifiants négatifs (-1, -2...).
 	-- Une partie où l'on a volé n'est plus classée (ni temps, ni hauteur, ni aura au classement) jusqu'à « Recommencer ».
 	TESTEURS = table.freeze({
-		-- [123456789] = true,
+		[648492337] = true, -- fuforudude, propriétaire du jeu
 	} :: { [number]: boolean }),
 	-- Vitesse du vol (studs/s), dans les trois dimensions. 50 : de quoi traverser la carte vite sans que les murs
 	-- fins ne soient franchis (le dash tient 70 studs/s).
