@@ -10,3 +10,6 @@ ServerPackages/
 *.rbxl.lock
 *.rbxlx.lock
 sourcemap.json
+
+# Définitions des types Roblox pour luau-lsp (téléchargées par outils/analyser-types.mjs)
+.types/
