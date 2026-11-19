@@ -131,16 +131,19 @@ local function ecrire(tableau: Tableau, idJoueur: number, valeur: number): boole
 	if not store then
 		return false
 	end
-	local ok, erreur = pcall(function()
-		store:UpdateAsync(tostring(idJoueur), function(ancien)
-			if typeof(ancien) == "number" then
-				local meilleur = if tableau.croissant then ancien <= valeur else ancien >= valeur
-				if meilleur then
-					return nil -- on garde la valeur déjà classée
-				end
+	-- Rendre `nil` annule l'écriture (comportement documenté d'UpdateAsync) : c'est ce qui garde la valeur déjà classée.
+	-- Les types de Roblox pour OrderedDataStore n'admettent que `number` en retour, d'où le cast ci-dessous.
+	local function garderLeMeilleur(ancien: number?): number?
+		if typeof(ancien) == "number" then
+			local meilleur = if tableau.croissant then ancien <= valeur else ancien >= valeur
+			if meilleur then
+				return nil -- on garde la valeur déjà classée
 			end
-			return valeur
-		end)
+		end
+		return valeur
+	end
+	local ok, erreur = pcall(function()
+		store:UpdateAsync(tostring(idJoueur), garderLeMeilleur :: (number?) -> number)
 	end)
 	if not ok then
 		warn(`[Classement] {tableau.tag} : valeur non enregistrée ({erreur})`)

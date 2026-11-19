@@ -513,7 +513,9 @@ function Effets.course(personnage: Model, court: boolean)
 		a1.Position = Vector3.new(0.6, -pied, 0)
 		a1.Parent = rec.racine
 		local trainee = creerTrainee(a0, a1, COULEURS.course, Reglages.COURSE_TRAINEE_DUREE, 0.6)
-		rec.course = { a0, a1, trainee }
+		-- Annoté : sans ça Luau déduit `{ Attachment }` des deux premiers éléments et refuse la `Trail`.
+		local objets: { Instance } = { a0, a1, trainee }
+		rec.course = objets
 		adopter(rec, a0)
 		adopter(rec, a1)
 		adopter(rec, trainee)

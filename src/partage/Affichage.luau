@@ -111,7 +111,7 @@ function Affichage.capacite(valeur: any): Capacite?
 	if type(valeur) ~= "string" then
 		return nil
 	end
-	for _, capacite in ORDRE_CAPACITES do
+	for _, capacite: Capacite in ORDRE_CAPACITES do
 		if capacite == valeur then
 			return capacite
 		end
@@ -127,7 +127,7 @@ function Affichage.icones(capacites: any, doubleSautPret: boolean?, dashPret: bo
 	if type(capacites) ~= "table" then
 		return resultat
 	end
-	for _, capacite in ORDRE_CAPACITES do
+	for _, capacite: Capacite in ORDRE_CAPACITES do
 		if capacites[capacite] == true then
 			local consommee = (capacite == "doubleSaut" and doubleSautPret == false)
 				or (capacite == "dash" and dashPret == false)
@@ -140,7 +140,7 @@ end
 --- L'annonce d'un déblocage : la capacité et la touche (rien sur mobile, où l'on parle du bouton). `nil` si la
 --- capacité reçue n'existe pas.
 function Affichage.annonce(capacite: any, tactile: boolean): Annonce?
-	local connue = Affichage.capacite(capacite)
+	local connue: Capacite? = Affichage.capacite(capacite)
 	if not connue then
 		return nil
 	end

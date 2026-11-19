@@ -13,6 +13,10 @@ local Reglages = require(ReplicatedStorage.Partage.Reglages)
 local Regles = require(ReplicatedStorage.Partage.Regles)
 local Remotes = require(ReplicatedStorage.Partage.Remotes)
 
+-- `pcall` d'une fonction qui ne rend rien : Luau déduit alors `(boolean)` et refuse `local ok, erreur = pcall(...)`, alors
+-- qu'à l'exécution le second résultat est bien le message d'erreur. Cast local, sans effet à l'exécution.
+local pcallAvecErreur: (...any) -> (boolean, any) = pcall :: any
+
 local etatCourse = Remotes.obtenir("EtatCourse")
 local arrivee = Remotes.obtenir("Arrivee")
 local demanderRecommencer = Remotes.obtenir("DemanderRecommencer")
@@ -191,7 +195,7 @@ local function recommencer(joueur: Player)
 	-- D'abord on ferme la tentative d'ascension en cours (attribut EnAscension à false) : sans ça, le joueur serait
 	-- remis au pied de l'ascension et non au départ du tuto. Aucune aura n'est touchée, rien n'est classé.
 	for _, fonction in avantRecommencer do
-		local ok, erreur = pcall(fonction, joueur)
+		local ok, erreur = pcallAvecErreur(fonction, joueur)
 		if not ok then
 			warn(`[Parcours] abandon avant « Recommencer » en échec : {erreur}`)
 		end

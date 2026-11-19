@@ -23,6 +23,10 @@ local RegleEffets = require(ReplicatedStorage.Partage.EffetsCapacites)
 local Reglages = require(ReplicatedStorage.Partage.Reglages)
 local Remotes = require(ReplicatedStorage.Partage.Remotes)
 
+-- `pcall` d'une fonction qui ne rend rien : Luau déduit alors `(boolean)` et refuse `local ok, erreur = pcall(...)`, alors
+-- qu'à l'exécution le second résultat est bien le message d'erreur. Cast local, sans effet à l'exécution.
+local pcallAvecErreur: (...any) -> (boolean, any) = pcall :: any
+
 local TAG = "DeblocageCapacite"
 -- Après une apparition (ou une téléportation décidée par le serveur), on ne compare plus pendant ce délai (s) : le
 -- personnage est posé quelque part par un autre service, et la réplication de sa position arrive avec du retard.
@@ -190,7 +194,7 @@ end
 local function surveiller()
 	local maintenant = os.clock()
 	for joueur, suivi in suivis do
-		local ok, erreur = pcall(mesurer, joueur, suivi, maintenant)
+		local ok, erreur = pcallAvecErreur(mesurer, joueur, suivi, maintenant)
 		if not ok then
 			warn(`[Capacites] surveillance de {joueur.Name} : {erreur}`)
 		end
