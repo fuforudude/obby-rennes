@@ -8,6 +8,7 @@ local Donnees = require(script.Donnees)
 local Evenements = require(script.Evenements)
 local Obstacles = require(script.Obstacles)
 local Parcours = require(script.Parcours)
+local Vol = require(script.Vol)
 
 -- Un service qui plante au démarrage est signalé (nom et erreur dans la console) sans empêcher les suivants de
 -- démarrer : une seule pièce ou un seul module cassé ne doit pas éteindre tout le jeu.
@@ -26,3 +27,4 @@ demarrer("Ascension", Ascension) -- s'abonne aussi au chargement des données : 
 demarrer("Donnees", Donnees)
 demarrer("Boutique", Boutique)
 demarrer("Capacites", Capacites) -- déblocages et surveillance des déplacements
+demarrer("Vol", Vol) -- mode vol des testeurs : après la surveillance et le parcours qu'il pilote

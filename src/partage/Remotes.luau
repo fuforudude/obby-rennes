@@ -13,6 +13,10 @@
 --   EffetCapacite(joueur: Player, capacite: string)  « ce joueur vient de faire un dash ou un double saut » : les
 --                                     autres clients jouent l'effet (vrille, traînée, onde) sur son personnage.
 --                                     Envoyé à tous les joueurs SAUF celui d'origine ; capacite = "dash" ou "doubleSaut"
+--   EtatVol(actif: boolean)           la réponse qui fait foi à DemanderVol : « tu voles » (true) ou « tu ne voles plus »
+--                                     (false). Envoyée aussi quand le serveur arrête le vol (mort, réapparition). Le client
+--                                     n'active JAMAIS le vol avant de l'avoir reçue avec true. Jamais envoyée à un joueur hors
+--                                     liste : rien ne lui laisse deviner que le mode existe (serveur/Vol, partage/Vol).
 -- Client → serveur
 --   DemanderRecommencer()             repartir de la coloc, chrono à zéro
 --   ToucheParEvenement(objet: Instance)  « cet événement (tag Evenement) m'a touché » : le serveur vérifie que le
@@ -21,6 +25,9 @@
 --                                     vérifie le type, la capacité (débloquée), que le joueur est vivant et la cadence
 --                                     (au plus un par capacité toutes les EFFET_DELAI_MIN s), puis relaie EffetCapacite
 --                                     (serveur/Capacites, règle pure dans partage/EffetsCapacites)
+--   DemanderVol()                     « je veux basculer mon vol » (touche F). Aucun argument. Le serveur vérifie l'identifiant
+--                                     contre Reglages.TESTEURS, le personnage vivant et une cadence minimale (VOL_DELAI_MIN),
+--                                     puis répond par EtatVol. Hors liste : ignoré, sans réponse (serveur/Vol).
 -- (« Passer l'étape » passe par MarketplaceService : le client affiche l'achat, le serveur le traite.)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -60,6 +67,8 @@ local NOMS = {
 	"ToucheParEvenement",
 	"EffetCapacite",
 	"SignalerEffet",
+	"DemanderVol",
+	"EtatVol",
 }
 local NOM_DOSSIER = "Remotes"
 
