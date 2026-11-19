@@ -34,7 +34,9 @@ export type Physique = {
 
 local PHYSIQUE_DEFAUT: Physique = table.freeze({ vitesseMarche = 16, hauteurSaut = 7.2, gravite = 196.2 })
 
-local TOUTES: { Capacite } = table.freeze({ "course", "doubleSaut", "dash" })
+-- Annoté avant `table.freeze` : sinon Luau élargit les littéraux en `string` et refuse de les ranger dans `{ Capacite }`.
+local LISTE_TOUTES: { Capacite } = { "course", "doubleSaut", "dash" }
+local TOUTES = table.freeze(LISTE_TOUTES)
 
 local Capacites = {}
 

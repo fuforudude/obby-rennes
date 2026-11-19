@@ -46,6 +46,10 @@ local Reglages = require(ReplicatedStorage.Partage.Reglages)
 local Regles = require(ReplicatedStorage.Partage.Regles)
 local Remotes = require(ReplicatedStorage.Partage.Remotes)
 
+-- `pcall` d'une fonction qui ne rend rien : Luau déduit alors `(boolean)` et refuse `local ok, erreur = pcall(...)`, alors
+-- qu'à l'exécution le second résultat est bien le message d'erreur. Cast local, sans effet à l'exécution.
+local pcallAvecErreur: (...any) -> (boolean, any) = pcall :: any
+
 local etatAscension = Remotes.obtenir("EtatAscension")
 
 -- Attribut posé sur le Player : « c'est Ascension.luau qui place ce joueur » (lu par Parcours.luau).
@@ -191,7 +195,7 @@ local function renvoyerApresChute(joueur: Player)
 	end
 	renvoiEnCours[joueur] = true
 	task.spawn(function()
-		local ok, erreur = pcall(replacerAuPied, joueur)
+		local ok, erreur = pcallAvecErreur(replacerAuPied, joueur)
 		renvoiEnCours[joueur] = nil
 		if not ok then
 			warn(`[Ascension] renvoi au pied de {joueur.Name} en échec : {erreur}`)
@@ -308,7 +312,7 @@ end
 --- plus de record, plus d'état envoyé jusqu'au redémarrage).
 local function releverTous()
 	for joueur, tentative in tentatives do
-		local ok, erreur = pcall(relever, joueur, tentative)
+		local ok, erreur = pcallAvecErreur(relever, joueur, tentative)
 		if not ok then
 			warn(`[Ascension] relevé de {joueur.Name} en échec : {erreur}`)
 		end
@@ -322,7 +326,7 @@ local function releverTous()
 			local donnees = Donnees.obtenir(joueur)
 			if donnees and RegleAscension.aQuelqueChoseAMontrer(donnees.meilleureHauteur) then
 				dernierEtatRepos[joueur] = instant
-				local ok, erreur = pcall(envoyerEtat, joueur)
+				local ok, erreur = pcallAvecErreur(envoyerEtat, joueur)
 				if not ok then
 					warn(`[Ascension] état hors tentative de {joueur.Name} en échec : {erreur}`)
 				end

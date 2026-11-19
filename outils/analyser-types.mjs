@@ -10,19 +10,12 @@ import { fileURLToPath } from "node:url";
 
 const racine = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-// Périmètre analysé : le code des règles (partage) et le serveur. src/client n'est pas encore analysé.
-const DOSSIERS = ["src/partage", "src/serveur"];
+// Périmètre analysé : tout le code du jeu (règles partagées, serveur, client).
+const DOSSIERS = ["src/partage", "src/serveur", "src/client"];
 
 // À TRAITER : fichiers qui avaient déjà des erreurs de types avant la mise en place de cette analyse (leurs erreurs ne
 // sont pas affichées). Corriger un fichier = le retirer de cette liste ; ne jamais y en ajouter un nouveau.
-const A_TRAITER = [
-	"src/partage/Affichage.luau", // 4 : littéraux de chaînes élargis en `string` (capacité, annonce)
-	"src/partage/Capacites.luau", // 1 : liste de capacités typée `{ string }` au lieu de l'union de littéraux
-	"src/serveur/Ascension.luau", // 3 : `local ok, erreur = pcall(f)` avec f sans valeur de retour
-	"src/serveur/Capacites.luau", // 1 : même cause (pcall)
-	"src/serveur/Parcours.luau", // 1 : même cause (pcall), plus un avertissement d'API obsolète (LoadCharacter)
-	"src/serveur/Classement.luau", // 1 : un `nil` passé là où un nombre est attendu (ligne 139)
-];
+const A_TRAITER = [];
 
 // Les définitions des types Roblox, à la version de luau-lsp épinglée dans rokit.toml.
 const rokit = readFileSync(join(racine, "rokit.toml"), "utf8");
