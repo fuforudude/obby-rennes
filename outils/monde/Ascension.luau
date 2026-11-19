@@ -9,24 +9,45 @@
 -- le toit de Sup de Vinci (outils/monde/Parcours.luau) se franchit en trois dalles qui montent droit (48, 54, 60),
 -- et le quatrième saut pose sur le **pied de l'ascension**, une plateforme qui flotte 10 studs au-dessus du toit. De là, 258 studs de montée en spirale autour de la fac : morceaux d'immeubles rennais retournés, bus STAR,
 -- rames de métro, grues, échafaudages, panneaux publicitaires, canapés, armoires, bureaux, bouées, poubelles,
--- pancartes du cortège et une galette-saucisse géante. Quatre paliers (tous les 60 studs) et le sommet.
+-- pancartes du cortège et une galette-saucisse géante. **Aucun palier, aucun checkpoint** : tomber renvoie au pied
+-- (spec docs/specs/2026-11-18-tour-exigeante.md, esprit Only Up).
+--
+-- Difficulté maximale partout (décision de l'utilisateur). Chaque saut est posé à une part voulue du vide tenable
+-- (`serre`, de 0,86 en bas à 0,96 en haut) et six tranches de 43 studs montent en exigence. Trois sortes de sauts
+-- rendent chaque capacité **indispensable** (le contrôle le prouve en rejouant la recherche de chemin sans elle) :
+-- - porte du dash : 13,5 studs de vide à plat (le vide maximal sans dash est de 9,75) ;
+-- - porte de la course : 15,3 studs de vide à plat (sans courir, 14,5 au plus, dash compris) ;
+-- - porte du double saut : 8 studs de montée (sans lui, 4,5 au plus).
+-- Une respiration très courte par tranche évite d'enchaîner soixante sauts extrêmes sans reprendre son souffle.
 --
 -- Lisibilité : on ne pose les pieds que sur des **dalles horizontales**, saturées et cernées de la couleur de leur
 -- tranche (contour SelectionBox). Tout le reste — les objets qui portent les dalles et le décor de fond — est
 -- fantôme (sans collision, sans toucher, sans requête) et penché : rien de plat et de coloré ne peut tromper.
 --
--- Ce que le jeu attend (contrats de docs/specs/2026-11-18-capacites-et-ascension.md) :
+-- Ce que le jeu attend (contrats de docs/specs/2026-11-18-tour-exigeante.md) :
 -- - tag « PiedAscension » : la plateforme de départ, où la chute renvoie ;
--- - tag « Palier » + attributs « Numero » (1 à 4) et « Hauteur » : palier acquis définitivement ; enfant « Boutique »
---   (Model vide, attribut « Emplacement ») : la place de la boutique du jalon suivant ;
--- - « Hauteur » est toujours le Y absolu du dessus de la pièce (126, 186, 246, 306 pour les paliers) ; la hauteur
---   gagnée depuis le départ est l'attribut « HauteurRelative » (le pied, taillé à 66, le porte aussi) ;
+-- - « Hauteur » est toujours le Y absolu du dessus de la pièce ; la hauteur gagnée depuis le départ est l'attribut
+--   « HauteurRelative » (le pied, taillé à 66, le porte aussi, à 0) ;
 -- - tag « EtageAscension » + attribut « Numero » : plaque à toucher qui compte un étage franchi (aura) ;
 -- - tag « SommetAscension » : l'arrivée ;
--- - tags « TableauHauteur » / « TableauAscension » : panneaux dont le serveur remplit le TextLabel « Liste ».
--- Rien n'est mortel ici : le « Mortel » de la ville (Parcours) sert de détecteur de chute.
+-- - tags « TableauHauteur » / « TableauAscension » : panneaux dont le serveur remplit le TextLabel « Liste » ;
+-- - les six familles d'obstacles, de plus en plus denses en montant (2, 3, 4, 5, 7 puis 9 par tranche de 43 studs,
+--   30 en tout) :
+--   - « PiegeMur » (Model) + attributs « Direction » (Vector3 unitaire, sens de sortie), « Distance », « DureeSortie »
+--     (temps passé dehors), « DureeRentree » (temps passé rentré, c'est la fenêtre de passage), « Portee »,
+--     « Poussee » ; enfant « Pointe » (BasePart). Seul indice avant déclenchement : la fente et la trace d'usure ;
+--   - « Laser » (BasePart) + « Depart », « Arrivee » (Vector3 absolus du centre de la barre), « Periode »,
+--     « Decalage » : balayage aller-retour régulier, mortel au contact (le serveur tue) ;
+--   - « Effondrable » (BasePart du chemin) + « DelaiChute » (0,5) et « DelaiRetour » ;
+--   - « Balancier » (BasePart solide) + « Pivot », « Axe », « Amplitude », « Periode », « Decalage » et « Poussee » :
+--     les grandes pancartes qui basculent ;
+--   - « Mobile » (BasePart du chemin) + « Deplacement » et « Duree » ; « Tournant » + « Vitesse » : comme dans le
+--     tuto, mais plus rapides (1,7 à 1,85 rad/s contre 1,6, et des bras deux fois plus longs ; au-delà, la fenêtre
+--     de passage tombe sous 1,2 s).
+-- Aucune pièce n'est taguée « Mortel » ici : le « Mortel » de la ville (Parcours) sert de détecteur de chute, et les
+-- lasers tuent par leur propre tag.
 --
--- Sauts (personnage par défaut, les trois capacités débloquées) : on ne monte jamais de plus de 8 studs et on ne
+-- Sauts (personnage par défaut, les trois capacités débloquées) : on ne monte jamais de plus de 9 studs et on ne
 -- franchit jamais plus de 16 studs de vide, la montée et le vide étant liés (plus on monte, moins on avance).
 -- Chaque dalle est posée à la distance calculée de la précédente : un chemin existe par construction.
 -- Contrôle : lune run outils/monde/verifier-ascension.luau
@@ -40,9 +61,9 @@ return function(R)
 
 	local CX, CZ = 845, 0 -- l'axe de l'ascension : le centre de Sup de Vinci
 	local BASE = 66 -- dessus du pied de l'ascension (le toit de la fac est à 56)
-	local ECART_PALIER = 60
-	local PALIERS = { BASE + 60, BASE + 120, BASE + 180, BASE + 240 } -- 126, 186, 246, 306
-	local SOMMET = BASE + 258 -- 324 : 258 studs au-dessus du départ
+	local NB_TRANCHES = 6
+	local TRANCHE = 43 -- 6 × 43 = 258 : la hauteur de la tour, découpée en six tranches de couleur
+	local SOMMET = BASE + NB_TRANCHES * TRANCHE -- 324 : 258 studs au-dessus du départ
 	local ECART_ETAGE = 15
 
 	-- Palette : celle du jeu (outils/monde/Parcours.luau).
@@ -69,13 +90,14 @@ return function(R)
 		saucisse = Color3.fromRGB(175, 85, 60),
 		bus = Color3.fromRGB(235, 235, 240),
 	}
-	-- Une couleur par tranche : on voit d'un coup d'œil où l'on en est dans la montée.
+	-- Une couleur par tranche de 43 studs : on voit d'un coup d'œil où l'on en est dans la montée.
 	local tranches = {
-		Color3.fromRGB(60, 140, 255), -- pied -> palier 1 (bleu Vinci)
-		Color3.fromRGB(255, 80, 190), -- palier 1 -> 2 (rose rue de la Soif)
-		Color3.fromRGB(255, 200, 30), -- palier 2 -> 3 (jaune cortège)
-		Color3.fromRGB(120, 230, 40), -- palier 3 -> 4 (vert tour)
-		Color3.fromRGB(70, 220, 255), -- palier 4 -> sommet (cyan)
+		Color3.fromRGB(60, 140, 255), -- 0 à 43 (bleu Vinci)
+		Color3.fromRGB(255, 80, 190), -- 43 à 86 (rose rue de la Soif)
+		Color3.fromRGB(255, 140, 40), -- 86 à 129 (orange coloc)
+		Color3.fromRGB(255, 200, 30), -- 129 à 172 (jaune cortège)
+		Color3.fromRGB(120, 230, 40), -- 172 à 215 (vert tour)
+		Color3.fromRGB(70, 220, 255), -- 215 à 258 (cyan sommet)
 	}
 	local ACCES = Color3.fromRGB(255, 140, 60) -- l'accès depuis la salle de partiel (orange coloc)
 
@@ -92,7 +114,7 @@ return function(R)
 	local dAcces = dossier("Acces")
 	local dPied = dossier("Pied")
 	local dChemin = dossier("Chemin")
-	local dPaliers = dossier("Paliers")
+	local dObstacles = dossier("Obstacles")
 	local dEtages = dossier("Etages")
 	local dSommet = dossier("Sommet")
 	local dDecor = dossier("Decor")
@@ -171,8 +193,8 @@ return function(R)
 		return fantome(c)
 	end
 
-	-- Pièce fantôme placée par le CFrame de son centre : tout le décor penché de l'ascension.
-	local function piece(parent, nom, sx, sy, sz, cf, couleur, materiau)
+	-- Pièce ancrée placée par le CFrame de son centre, telle quelle (solide) : les obstacles qui poussent.
+	local function brut(parent, nom, sx, sy, sz, cf, couleur, materiau)
 		local p = Instance.new("Part")
 		p.Name = nom
 		p.Anchored = true
@@ -183,7 +205,12 @@ return function(R)
 		p.TopSurface = Enum.SurfaceType.Smooth
 		p.BottomSurface = Enum.SurfaceType.Smooth
 		p.Parent = parent
-		return fantome(p)
+		return p
+	end
+
+	-- Pièce fantôme placée par le CFrame de son centre : tout le décor penché de l'ascension.
+	local function piece(parent, nom, sx, sy, sz, cf, couleur, materiau)
+		return fantome(brut(parent, nom, sx, sy, sz, cf, couleur, materiau))
 	end
 
 	-- Pan incliné fantôme (WedgePart) : sa face verticale est du côté +Z local, la pente descend vers -Z local.
@@ -490,7 +517,7 @@ return function(R)
 		"ASCENSEUR EN PANNE",
 		"GALETTE-SAUCISSE 24/7",
 		"ÇA MONTE ENCORE",
-		"RATTRAPAGE AU 4e PALIER",
+		"AUCUN FILET, AUCUN PALIER",
 		"PENSE À RESPIRER",
 		"STAR · LIGNE VERTICALE",
 		"TOUT EN HAUT ?",
@@ -1111,15 +1138,10 @@ return function(R)
 		return { x = prec.x + dx * d, z = prec.z + dz * d, y = prec.y + montee, hx = hx, hz = hz }
 	end
 
-	-- La couleur de la tranche où l'on se trouve.
+	-- La couleur de la tranche de 43 studs où l'on se trouve.
 	local function teinteDe(y: number)
-		local k = 1
-		for _, h in PALIERS do
-			if y > h + 0.01 then
-				k += 1
-			end
-		end
-		return tranches[math.min(k, #tranches)]
+		local k = math.floor((y - BASE) / TRANCHE) + 1
+		return tranches[math.clamp(k, 1, #tranches)]
 	end
 
 	---------------------------------------------------------------------------------------------------------------
@@ -1141,7 +1163,7 @@ return function(R)
 	local fronton = fantome(bloc(dPied, "Portique", 1.2, 4, 26, CX - 13, BASE + 17, CZ, Color3.fromRGB(20, 20, 30)))
 	texte(Enum.NormalId.Right, "L'ASCENSION", tranches[1]).Parent = fronton
 	local regles = fantome(bloc(dPied, "Regles", 12, 6, 0.4, CX + 2, BASE + 11, CZ - 14, Color3.fromRGB(20, 20, 30)))
-	texte(Enum.NormalId.Back, "Tomber ramène ici.\nLes paliers restent acquis.", couleurs.or_).Parent = regles
+	texte(Enum.NormalId.Back, "Tomber ramène ici.\nAucun palier : 258 studs d'un trait.", couleurs.or_).Parent = regles
 	tableau(dPied, CX - 9, BASE, CZ + 14.5, Enum.NormalId.Front, "TableauHauteur", "Plus haut montés", tranches[1])
 	tableau(
 		dPied,
@@ -1178,227 +1200,505 @@ return function(R)
 	end
 
 	---------------------------------------------------------------------------------------------------------------
-	-- Le chemin : cinq tranches, chacune terminée par un palier (le sommet pour la dernière). Dans une tranche, la
-	-- montée et le vide grandissent avec l'altitude ; les abords d'un palier restent faciles (on y arrive essoufflé).
-	local segments = {
-		{
-			cible = 60,
-			pas = 12,
-			monteeMax = 6,
-			videMin = 3.5,
-			videMax = 9,
-			serre = 0.72,
-			demi = { 3.6, 4.6 },
-			rayon = 24,
-			dAngle = 30,
-		},
-		{
-			cible = 60,
-			pas = 12,
-			monteeMax = 7.5,
-			videMin = 4.5,
-			videMax = 12,
-			serre = 0.8,
-			demi = { 3.2, 4.2 },
-			rayon = 27,
-			dAngle = 34,
-		},
-		{
-			cible = 60,
-			pas = 12,
-			monteeMax = 8,
-			videMin = 5.5,
-			videMax = 14,
-			serre = 0.86,
-			demi = { 2.9, 3.9 },
-			rayon = 30,
-			dAngle = 38,
-		},
-		{
-			cible = 60,
-			pas = 12,
-			monteeMax = 8,
-			videMin = 6.5,
-			videMax = 15.5,
-			serre = 0.9,
-			demi = { 2.7, 3.6 },
-			rayon = 33,
-			dAngle = 40,
-		},
-		{
-			cible = 18,
-			pas = 4,
-			monteeMax = 6,
-			videMin = 4,
-			videMax = 9,
-			serre = 0.78,
-			demi = { 3.4, 4.4 },
-			rayon = 20,
-			dAngle = 34,
-		},
-	}
-	local MONTEE_MIN = 3.5 -- deux pas de suite montent donc de 7 studs : jamais de plafond bas au-dessus d'une dalle
-	local MONTEE_ABORDS, VIDE_ABORDS = 4, 6.5 -- le pas qui arrive sur un palier et celui qui en repart
+	-- Les six familles d'obstacles. Tout ce qui bouge est posé à côté ou au-dessus d'une dalle du chemin : on le voit
+	-- venir, on attend sa fenêtre, on saute. Le contrôle (outils/monde/verifier-ascension.luau) simule chaque cycle et
+	-- exige au moins 1,2 s de passage libre, et qu'aucun obstacle ne couvre à lui seul toute la dalle.
+	local compte = { PiegeMur = 0, Laser = 0, Effondrable = 0, Balancier = 0, Mobile = 0, Tournant = 0 }
+	local function rang(famille: string): number
+		compte[famille] += 1
+		return compte[famille]
+	end
 
-	local chemin: { { pas: Pas, part: any } } = {} -- toutes les plateformes, du pied au sommet, dans l'ordre
-	local piedPas: Pas = { x = CX, z = CZ, y = BASE, hx = 13, hz = 13 }
-	table.insert(chemin, { pas = piedPas, part = pied })
-
-	-- Palier : grande plateforme sûre, bien visible, avec la place de la boutique du jalon suivant.
-	local function construirePalier(numero: number, pas: Pas)
-		local p = dalle(
-			dPaliers,
-			`Palier{numero}`,
-			pas.hx * 2,
-			pas.hz * 2,
-			pas.x,
-			pas.y,
-			pas.z,
-			couleurs.or_,
-			Enum.Material.Metal
-		)
-		etiqueter(p, "Palier")
-		p:SetAttribute("Numero", numero)
-		p:SetAttribute("Hauteur", pas.y)
-		p:SetAttribute("HauteurRelative", pas.y - BASE)
-		contour(p, couleurs.or_, 0.24)
-		etiquette(p, `PALIER {numero} · {math.floor(pas.y - BASE + 0.5)} studs`, couleurs.or_, 8, 400)
-		lumiere(p, couleurs.or_, 36, 1.5)
-		fantome(
-			bloc(
-				dPaliers,
-				"Lisere",
-				pas.hx * 2 + 2,
-				0.4,
-				pas.hz * 2 + 2,
-				pas.x,
-				pas.y + 0.1,
-				pas.z,
-				couleurs.or_,
-				Enum.Material.Neon
-			)
-		)
-		-- La place de la boutique (jalon suivant) : un Model vide, et au sol la marque de son emplacement.
-		local ex, ez = pas.x + pas.hx * 0.5, pas.z - pas.hz * 0.5
-		local boutique = Instance.new("Model")
-		boutique.Name = "Boutique"
-		boutique:SetAttribute("Emplacement", Vector3.new(ex, pas.y, ez))
-		boutique.Parent = p
-		local marque = fantome(
-			bloc(dPaliers, "PlaceBoutique", 8, 0.3, 8, ex, pas.y + 0.2, ez, couleurs.checkpoint, Enum.Material.Neon)
-		)
-		marque.Transparency = 0.4
-		local enseigne =
-			fantome(bloc(dPaliers, "EnseigneBoutique", 8, 2.4, 0.3, ex, pas.y + 9, ez - 4, Color3.fromRGB(20, 20, 30)))
-		texte(Enum.NormalId.Back, "BOUTIQUE (bientôt)", couleurs.checkpoint).Parent = enseigne
-		for _, d in { -1, 1 } do
-			fantome(
-				bloc(
-					dPaliers,
-					"PiedEnseigne",
-					0.4,
-					7,
-					0.4,
-					ex + d * 3.6,
-					pas.y + 7,
-					ez - 4,
-					couleurs.acier,
-					Enum.Material.Metal
-				)
-			)
+	-- Direction horizontale radiale (vers l'extérieur de la tour) en un point : c'est là qu'il y a de la place pour
+	-- faire tourner une barre ou dresser un mur sans heurter le reste du chemin.
+	local function radiale(x: number, z: number, sens: number)
+		local dx, dz = x - CX, z - CZ
+		local m = math.sqrt(dx * dx + dz * dz)
+		if m < 0.5 then
+			dx, dz, m = 1, 0, 1
 		end
-		-- Un morceau de place rennaise sous le palier : pavés, banc, lampadaire.
-		piece(
-			dPaliers,
-			"Paves",
-			pas.hx * 2 + 4,
-			2.5,
-			pas.hz * 2 + 4,
-			CFrame.new(pas.x, pas.y - 2.3, pas.z) * CFrame.Angles(math.rad(3), 0, math.rad(-2)),
-			couleurs.pierre,
-			Enum.Material.Cobblestone
+		return sens * dx / m, sens * dz / m
+	end
+
+	-- Jusqu'où va la dalle dans la direction (rx, rz) : la fonction d'appui de sa boîte. C'est ce qu'il faut pour
+	-- poser un mât ou un mur « juste à côté » d'une dalle, quelle que soit sa forme et le sens où l'on regarde.
+	local function porteeVers(hx: number, hz: number, rx: number, rz: number): number
+		return math.abs(rx) * hx + math.abs(rz) * hz
+	end
+
+	-- Où le bord de la dalle coupe le rayon qui part de son centre dans la direction (rx, rz). C'est ce qu'il faut
+	-- pour qu'un bras tournant vienne vraiment raser la dalle : la fonction d'appui, elle, donne le coin le plus
+	-- éloigné, qui n'est pas sur ce rayon.
+	local function borduresurRayon(hx: number, hz: number, rx: number, rz: number): number
+		local t = math.huge
+		if math.abs(rx) > 1e-6 then
+			t = math.min(t, hx / math.abs(rx))
+		end
+		if math.abs(rz) > 1e-6 then
+			t = math.min(t, hz / math.abs(rz))
+		end
+		return t
+	end
+
+	-- Laser : barre de néon qui balaie la dalle d'un bord à l'autre, à hauteur de poitrine. Mortelle au contact (le
+	-- serveur tue). Rythme fixe et apprenable : aller-retour régulier calé sur l'horloge du serveur.
+	local function poserLaser(p)
+		local x, y, z, hx, hz = reperes(p)
+		local n = rang("Laser")
+		-- Le balayage suit le petit côté de la dalle ; la barre est posée en travers, plus longue qu'elle.
+		local selonX = hx <= hz
+		local ux = if selonX then 1 else 0
+		local uz = 1 - ux
+		local course = (if selonX then hx else hz) + 5.5
+		local longueur = (if selonX then hz else hx) * 2 + 9
+		local centre = Vector3.new(x, y + 3, z)
+		local depart = centre - Vector3.new(ux * course, 0, uz * course)
+		local arrivee = centre + Vector3.new(ux * course, 0, uz * course)
+		local barre = brut(
+			dObstacles,
+			`Laser{n}`,
+			if selonX then 0.5 else longueur,
+			0.5,
+			if selonX then longueur else 0.5,
+			CFrame.new(depart),
+			Color3.fromRGB(255, 50, 60),
+			Enum.Material.Neon
 		)
-		piece(
-			dPaliers,
-			"Banc",
-			6,
-			0.6,
-			1.6,
-			CFrame.new(pas.x - pas.hx * 0.5, pas.y + 1.3, pas.z + pas.hz * 0.5),
-			couleurs.ponton,
-			Enum.Material.Wood
-		)
-		local lampe = fantome(
-			bloc(
-				dPaliers,
-				"Lampadaire",
-				0.5,
-				12,
-				0.5,
-				pas.x - pas.hx * 0.6,
-				pas.y + 12,
-				pas.z - pas.hz * 0.6,
-				Color3.fromRGB(45, 50, 60),
+		barre.CanCollide = false
+		barre.CanQuery = false
+		barre.CanTouch = true -- le serveur tue au contact
+		barre:SetAttribute("Depart", depart)
+		barre:SetAttribute("Arrivee", arrivee)
+		barre:SetAttribute("Periode", entre(6, 7.5))
+		barre:SetAttribute("Decalage", entre(0, 6))
+		barre:AddTag("Laser")
+		lumiere(barre, Color3.fromRGB(255, 60, 70), 18, 2)
+		-- Les deux bornes qui tiennent le rail : on voit d'où part le faisceau et jusqu'où il va.
+		for _, bout in { depart, arrivee } do
+			local borne = piece(
+				dObstacles,
+				"BorneLaser",
+				1.4,
+				2.6,
+				1.4,
+				CFrame.new(bout.X, bout.Y - 0.6, bout.Z),
+				Color3.fromRGB(40, 40, 48),
 				Enum.Material.Metal
 			)
+			borne.CastShadow = false
+		end
+		return barre
+	end
+
+	-- Barre tournante : un mât planté dans le vide, à l'extérieur de la spirale, dont le bras vient raser la dalle.
+	-- Plus rapide que dans le tuto (1,6 rad/s) : 1,7 à 1,85. Le bras est long et le mât loin, pour que la barre ne
+	-- balaie qu'un bord de la dalle : c'est ce qui laisse plus de 1,2 s de passage par tour.
+	local function poserTournant(p)
+		local x, y, z, hx, hz = reperes(p)
+		local n = rang("Tournant")
+		local rx, rz = radiale(x, z, 1)
+		local d = borduresurRayon(hx, hz, rx, rz) + 10 -- distance du mât au bord de la dalle, dans l'axe
+		local px, pz = x + rx * d, z + rz * d
+		local bras = 10 - 0.1 -- le bout du bras rase le bord de la dalle (marge de contact comprise), sans la couvrir
+		local a = math.atan2(-rz, rx) -- l'angle qui met l'axe X local sur la radiale
+		local barre = brut(
+			dObstacles,
+			`Tournant{n}`,
+			bras * 2,
+			1.2,
+			1,
+			CFrame.new(px, y + 2.8, pz) * CFrame.Angles(0, a + math.pi / 2, 0), -- au repos : en travers, hors de la dalle
+			couleurs.acier,
+			Enum.Material.DiamondPlate
 		)
-		local tete = fantome(
-			bloc(
-				dPaliers,
-				"Lampe",
+		barre.CanQuery = false -- comme dans le tuto : la barre pousse, on ne se tient pas dessus
+		barre:SetAttribute("Vitesse", entre(1.7, 1.85)) -- plus vite que le tuto (1,6), sans fermer la fenêtre
+		barre:AddTag("Tournant")
+		piece(
+			dObstacles,
+			"MatTournant",
+			1.6,
+			16,
+			1.6,
+			CFrame.new(px, y - 4, pz),
+			Color3.fromRGB(55, 58, 66),
+			Enum.Material.Metal
+		)
+		for _, bout in { -1, 1 } do
+			piece(
+				dObstacles,
+				"BoutTournant",
 				1.6,
-				0.8,
 				1.6,
-				lampe.CFrame.Position.X,
-				pas.y + 12.6,
-				lampe.CFrame.Position.Z,
-				Color3.fromRGB(255, 230, 160),
+				1.6,
+				CFrame.new(px, y + 2.8, pz)
+					* CFrame.Angles(0, a + math.pi / 2, 0)
+					* CFrame.new(bout * (bras - 0.8), 0, 0),
+				couleurs.pancarte,
 				Enum.Material.Neon
 			)
+		end
+		return barre
+	end
+
+	-- Pancarte qui bascule : un grand panneau pendu à une poutre, dans l'esprit des pendules de forteresse. Elle barre
+	-- le passage et projette (attribut Poussee). Au repos elle pend au milieu de la dalle ; sur les bords de son
+	-- amplitude elle se relève assez haut pour libérer le passage.
+	local BALANCIER_BRAS = 6.5
+	local function poserBalancier(p, accent)
+		local x, y, z, hx, hz = reperes(p)
+		local n = rang("Balancier")
+		local sens = if n % 2 == 0 then -1 else 1
+		local ux, uz = radiale(x, z, sens) -- le plan de balancement est radial : la pancarte sort dans le vide
+		local axe = Vector3.new(-uz, 0, ux) -- l'axe de la charnière, horizontal et perpendiculaire au balancement
+		local pivot = Vector3.new(x, y + 11.5, z)
+		local a = math.atan2(-uz, ux)
+		local pancarte = brut(
+			dObstacles,
+			`Balancier{n}`,
+			0.6,
+			5.5,
+			math.max(hx, hz) * 2 + 2,
+			CFrame.new(x, y + 11.5 - BALANCIER_BRAS, z) * CFrame.Angles(0, a, 0),
+			couleurs.pancarte,
+			Enum.Material.WoodPlanks
 		)
-		lumiere(tete, Color3.fromRGB(255, 220, 160), 18, 1.2)
-		arbreFlottant(dPaliers, pas.x + pas.hx * 0.7, pas.y, pas.z + pas.hz * 0.7)
+		pancarte:SetAttribute("Pivot", pivot)
+		pancarte:SetAttribute("Axe", axe)
+		pancarte:SetAttribute("Amplitude", entre(74, 82))
+		pancarte:SetAttribute("Periode", entre(4.6, 5.4))
+		pancarte:SetAttribute("Decalage", entre(0, 4))
+		pancarte:SetAttribute("Poussee", 1.6)
+		pancarte:AddTag("Balancier")
+		texte(Enum.NormalId.Right, choix(SLOGANS), Color3.fromRGB(35, 30, 20), couleurs.pancarte).Parent = pancarte
+		-- La poutre et ses deux chandelles : on voit d'où pend la pancarte.
+		piece(
+			dObstacles,
+			"PoutreBalancier",
+			1,
+			1,
+			math.max(hx, hz) * 2 + 8,
+			CFrame.new(pivot.X, pivot.Y, pivot.Z) * CFrame.Angles(0, a, 0),
+			couleurs.acier,
+			Enum.Material.Metal
+		)
+		for _, c in { -1, 1 } do
+			piece(
+				dObstacles,
+				"ChandelleBalancier",
+				0.8,
+				12,
+				0.8,
+				CFrame.new(pivot.X, pivot.Y - 6, pivot.Z)
+					* CFrame.Angles(0, a, 0)
+					* CFrame.new(0, 0, c * (math.max(hx, hz) + 3.4)),
+				couleurs.acier,
+				Enum.Material.Metal
+			)
+		end
+		contour(pancarte, accent, 0.1)
+		return pancarte
+	end
+
+	-- Piège de mur : un pan de mur dressé au bord de la dalle. Seul indice avant qu'il parte : la fente et la trace
+	-- d'usure laissée par les passages précédents (décision de l'utilisateur : pas de voyant, pas de clignotement).
+	-- La barre sort d'un coup quand on entre dans sa portée, pousse fort, puis rentre : « DureeSortie » est le temps
+	-- passé dehors, « DureeRentree » le temps rentré — c'est la fenêtre de passage.
+	local PIEGE_DEMI_POINTE = 2
+	local function poserPiegeMur(p)
+		local x, y, z, hx, hz = reperes(p)
+		local n = rang("PiegeMur")
+		local sens = if n % 2 == 0 then -1 else 1
+		local nx, nz = radiale(x, z, sens) -- la normale qui va de la dalle vers le mur
+		local appui = porteeVers(hx, hz, nx, nz)
+		local demi = math.max(hx, hz)
+		-- Le mur est assez loin pour que la pointe RENTRÉE (dont le bout affleure la face intérieure, à d − 1,2)
+		-- laisse la dalle entièrement libre, marge de contact du client comprise : c'est la fenêtre de passage.
+		local d = appui + 3.6
+		local distance = d - 0.2 -- sortie complète : le bout dépasse le centre de la dalle de 1 stud
+		local mx, mz = x + nx * d, z + nz * d
+		local a = math.atan2(-nz, nx) -- l'axe X local du mur pointe vers l'extérieur, le long de la normale
+		local repere = CFrame.new(mx, y + 4, mz) * CFrame.Angles(0, a, 0)
+		local modele = Instance.new("Model")
+		modele.Name = `PiegeMur{n}`
+		modele.Parent = dObstacles
+		modele:SetAttribute("Direction", Vector3.new(-nx, 0, -nz))
+		modele:SetAttribute("Distance", distance)
+		modele:SetAttribute("DureeSortie", entre(0.7, 1))
+		modele:SetAttribute("DureeRentree", entre(1.6, 2.2))
+		modele:SetAttribute("Portee", d + demi + 4)
+		modele:SetAttribute("Poussee", 120)
+		modele:AddTag("PiegeMur")
+		piece(modele, "Mur", 2.4, 14, demi * 2 + 5, repere, couleurs.beton, Enum.Material.Concrete)
+		-- L'indice, et lui seul : une fente dans la face intérieure et la traînée d'usure sous la fente.
+		piece(
+			modele,
+			"Fente",
+			0.3,
+			1.7,
+			7,
+			repere * CFrame.new(-1.25, -1, 0),
+			Color3.fromRGB(22, 22, 26),
+			Enum.Material.Slate
+		)
+		piece(
+			modele,
+			"Usure",
+			0.25,
+			1.1,
+			5.2,
+			repere * CFrame.new(-1.27, -2.6, 0),
+			Color3.fromRGB(128, 112, 92),
+			Enum.Material.CorrodedMetal
+		)
+		piece(
+			modele,
+			"Caisson",
+			3,
+			4,
+			5,
+			repere * CFrame.new(2.4, -1, 0),
+			Color3.fromRGB(48, 50, 58),
+			Enum.Material.Metal
+		)
+		-- La pointe, rentrée : son bout affleure la face intérieure du mur (local X = -1,2).
+		local pointe = brut(
+			modele,
+			"Pointe",
+			PIEGE_DEMI_POINTE * 2,
+			1.1,
+			1.1,
+			repere * CFrame.new(PIEGE_DEMI_POINTE - 1.2, -1, 0),
+			couleurs.acier,
+			Enum.Material.DiamondPlate
+		)
+		pointe.CanCollide = false
+		pointe.CanQuery = false
+		pointe.CanTouch = true -- le serveur applique l'impulsion au contact
+		modele.PrimaryPart = pointe
+		return modele
+	end
+
+	-- Plateforme qui s'effondre : elle tombe 0,5 s après le premier contact et revient quelques secondes plus tard.
+	local function poserEffondrable(p)
+		local x, y, z, hx, hz = reperes(p)
+		rang("Effondrable")
+		p.Color = Color3.fromRGB(226, 214, 186)
+		p.Material = Enum.Material.WoodPlanks
+		p:SetAttribute("DelaiChute", 0.5)
+		p:SetAttribute("DelaiRetour", entre(3, 4.5))
+		p:AddTag("Effondrable")
+		for _, c in { -1, 1 } do
+			piece(
+				dObstacles,
+				"PoutreRompue",
+				hx * 1.4,
+				0.5,
+				0.5,
+				CFrame.new(x + c * hx * 0.5, y - 1.6, z - c * hz * 0.5) * CFrame.Angles(0, 0, math.rad(c * 14)),
+				couleurs.ponton,
+				Enum.Material.Wood
+			)
+		end
 		return p
 	end
+
+	-- Plateforme mobile : elle glisse en travers du chemin (jamais vers la dalle d'avant : elle la heurterait).
+	local function poserMobile(p, dx: number, dz: number)
+		local x, y, z, hx, hz = reperes(p)
+		rang("Mobile")
+		local amplitude = 11
+		local ux, uz = -dz, dx -- perpendiculaire au sens de la marche
+		local deplacement = Vector3.new(ux * amplitude, 0, uz * amplitude)
+		p.CFrame = CFrame.new(x - ux * amplitude / 2, p.CFrame.Position.Y, z - uz * amplitude / 2)
+		p.Material = Enum.Material.DiamondPlate
+		p:SetAttribute("Deplacement", deplacement)
+		p:SetAttribute("Duree", entre(2.2, 3))
+		p:AddTag("Mobile")
+		-- Le rail : on voit sur quelle course la nacelle va et vient.
+		piece(
+			dObstacles,
+			"RailMobile",
+			if math.abs(ux) > math.abs(uz) then amplitude + hx * 2 else 0.4,
+			0.4,
+			if math.abs(ux) > math.abs(uz) then 0.4 else amplitude + hz * 2,
+			CFrame.new(x, y - 1.2, z),
+			Color3.fromRGB(60, 64, 72),
+			Enum.Material.Metal
+		)
+		return p
+	end
+
+	---------------------------------------------------------------------------------------------------------------
+	-- Le chemin : six tranches de 43 studs, de plus en plus exigeantes et de plus en plus peuplées. `serre` est la
+	-- part du vide tenable qu'on s'autorise : c'est LE bouton de difficulté (0,86 en bas, 0,96 en haut).
+	--
+	-- Trois sortes de sauts « porte » rendent chaque capacité indispensable (deux par tranche, jamais les mêmes
+	-- deux fois de suite) :
+	-- - « course » : 15,3 studs de vide à plat, quand le vide maximal sans courir est de 14,5 (6,5 + 8 de dash) ;
+	-- - « dash » : 13,5 studs de vide à plat, quand le vide maximal sans dash est de 9,75 (6,5 × 1,5) ;
+	-- - « double » : 8 studs de montée, quand la montée maximale d'un saut simple est de 4,5.
+	-- Une « respiration » par tranche (2 studs de montée, 3 de vide) laisse reprendre son souffle.
+	local GATE_COURSE_VIDE = 15.3
+	local GATE_DASH_VIDE = 13.5
+	local GATE_DOUBLE_MONTEE = 8
+	local MONTEE_MIN = 1.6
+	local PORTES = {
+		course = { montee = 0.2, vide = GATE_COURSE_VIDE },
+		dash = { montee = 0.4, vide = GATE_DASH_VIDE },
+		double = { montee = GATE_DOUBLE_MONTEE, vide = 3 },
+		respiration = { montee = 2, vide = 3 },
+	}
+
+	local segments = {
+		{
+			pas = 10,
+			serre = 0.86,
+			monteeMax = 7,
+			videMin = 10.5,
+			videMax = 13,
+			demi = { 3.6, 4.6 },
+			rayon = 24,
+			dAngle = 31,
+			special = { [3] = "double", [7] = "course", [9] = "respiration" },
+			obstacles = { "Mobile", "Tournant" },
+		},
+		{
+			pas = 10,
+			serre = 0.89,
+			monteeMax = 7.5,
+			videMin = 11,
+			videMax = 13.5,
+			demi = { 3.4, 4.4 },
+			rayon = 26,
+			dAngle = 33,
+			special = { [4] = "dash", [8] = "double", [10] = "respiration" },
+			obstacles = { "Laser", "Effondrable", "Balancier" },
+		},
+		{
+			pas = 10,
+			serre = 0.92,
+			monteeMax = 8,
+			videMin = 11.5,
+			videMax = 14,
+			demi = { 3.2, 4.2 },
+			rayon = 28,
+			dAngle = 35,
+			special = { [4] = "course", [8] = "dash", [10] = "respiration" },
+			obstacles = { "PiegeMur", "Laser", "Mobile", "Tournant" },
+		},
+		{
+			pas = 11,
+			serre = 0.94,
+			monteeMax = 8.4,
+			videMin = 12,
+			videMax = 14.5,
+			demi = { 3, 4 },
+			rayon = 30,
+			dAngle = 36,
+			special = { [4] = "double", [8] = "course", [11] = "respiration" },
+			obstacles = { "Balancier", "PiegeMur", "Laser", "Effondrable", "Mobile", "Tournant" },
+		},
+		{
+			pas = 11,
+			serre = 0.95,
+			monteeMax = 8.6,
+			videMin = 12.5,
+			videMax = 15,
+			demi = { 2.9, 3.8 },
+			rayon = 32,
+			dAngle = 38,
+			special = { [4] = "dash", [9] = "double", [11] = "respiration" },
+			obstacles = { "Laser", "Balancier", "PiegeMur", "Tournant", "Effondrable", "Mobile", "Laser" },
+		},
+		{
+			pas = 11,
+			serre = 0.96,
+			monteeMax = 8.6,
+			videMin = 13,
+			videMax = 15.5,
+			demi = { 2.8, 3.7 },
+			rayon = 33,
+			dAngle = 39,
+			special = { [4] = "course", [8] = "dash", [11] = "respiration" },
+			obstacles = {
+				"PiegeMur",
+				"Laser",
+				"Tournant",
+				"Balancier",
+				"Mobile",
+				"Effondrable",
+				"Laser",
+				"PiegeMur",
+			},
+		},
+	}
+
+	local chemin: { { pas: Pas, part: any } } = {} -- toutes les plateformes, du pied au sommet, dans l'ordre
+	local speciales = {} -- les dalles qui bougent ou tombent : pas de plaque d'étage dessus
+	local piedPas: Pas = { x = CX, z = CZ, y = BASE, hx = 13, hz = 13 }
+	table.insert(chemin, { pas = piedPas, part = pied })
 
 	local angle = math.rad(205) -- on part vers le sud-ouest (le drapeau breton de la fac est au nord-est)
 	local prec = piedPas
 	for s, seg in segments do
 		local n = seg.pas
-		local objectif = if s < #segments then PALIERS[s] else SOMMET
-		-- Un grand saut presque à plat par tranche intermédiaire : c'est le seul endroit où le vide peut atteindre
-		-- 15 studs (course + dash), puisque le vide tenable se referme dès qu'on monte.
-		local dash = if s >= 2 and s < #segments then n // 2 else -1
-		local function monteeMaxDe(j: number): number
-			if j == dash then
-				return 2
+		local objectif = BASE + s * TRANCHE
+		local special = seg.special or {}
+		local function monteeDe(j: number, defaut: number): number
+			local porte = PORTES[special[j] or ""]
+			return if porte then porte.montee else defaut
+		end
+		-- Les pas qui reçoivent un obstacle : jamais une porte de capacité (elle doit rester lisible), jamais le
+		-- sommet. Ils sont étalés sur la tranche.
+		local libres = {}
+		for j = 1, n do
+			local role = special[j]
+			local estSommet = s == #segments and j == n
+			if (role == nil or role == "respiration") and not estSommet then
+				table.insert(libres, j)
 			end
-			return if j == 1 or j == n then MONTEE_ABORDS else seg.monteeMax
 		end
-		local function monteeMinDe(j: number): number
-			return if j == dash then 0.5 else MONTEE_MIN
+		local surPas = {}
+		local pris = {}
+		for k, famille in seg.obstacles do
+			local rang = math.clamp(math.floor(k * #libres / (#seg.obstacles + 1) + 0.5), 1, #libres)
+			while pris[rang] and rang < #libres do
+				rang += 1
+			end
+			while pris[rang] and rang > 1 do
+				rang -= 1
+			end
+			pris[rang] = true
+			surPas[libres[rang]] = famille
 		end
+
 		for i = 1, n do
-			local restants = n - i
+			-- Montée : ce qu'il reste à monter, réparti sur les pas restants en respectant leurs bornes.
 			local reste = objectif - prec.y
 			local sommeMax, sommeMin = 0, 0
 			for j = i + 1, n do
-				sommeMax += monteeMaxDe(j)
-				sommeMin += monteeMinDe(j)
+				sommeMax += monteeDe(j, seg.monteeMax)
+				sommeMin += monteeDe(j, MONTEE_MIN)
 			end
-			local bas = math.max(monteeMinDe(i), reste - sommeMax)
-			local haut = math.min(monteeMaxDe(i), reste - sommeMin)
+			local bas = math.max(monteeDe(i, MONTEE_MIN), reste - sommeMax)
+			local haut = math.min(monteeDe(i, seg.monteeMax), reste - sommeMin)
 			haut = math.max(haut, bas)
-			local montee = if restants == 0 then reste else entre(bas, haut)
-			local videVoulu = if i == dash
-				then entre(math.max(11, seg.videMax - 3), seg.videMax)
-				else entre(seg.videMin, seg.videMax)
-			-- `serre` est la part du vide tenable qu'on s'autorise : c'est LE bouton de difficulté de la tranche.
-			local ecart = math.min(videVoulu, (videTenable(montee) - 0.7) * seg.serre)
-			if i == 1 or i == n then
-				ecart = math.min(ecart, VIDE_ABORDS)
+			local montee = if i == n then reste else entre(bas, haut)
+			-- Vide : celui de la porte, ou la part `serre` du vide tenable à cette montée.
+			local porte = PORTES[special[i] or ""]
+			local famille = surPas[i]
+			local ecart
+			if porte then
+				ecart = porte.vide
+			else
+				local voulu = entre(seg.videMin, seg.videMax)
+				-- Une nacelle mobile s'aborde un peu moins à la limite : sa course décale le saut, et il faut
+				-- qu'il reste possible plus d'une seconde par cycle (contrôle des fenêtres de passage).
+				local pres = famille == "Mobile" or surPas[i - 1] == "Mobile"
+				local part = if pres then 0.8 else seg.serre
+				ecart = math.max(2.2, math.min(voulu, (videTenable(montee) - 0.35) * part))
 			end
-			ecart = math.max(ecart, 2.2)
 			-- Direction : la spirale autour de la fac, avec un rayon qui respire.
 			angle += math.rad(seg.dAngle + entre(-8, 14))
 			local rayon = seg.rayon + 8 * math.sin(angle * 1.7 + s)
@@ -1411,20 +1711,34 @@ return function(R)
 			local modele = OBJETS[math.random(1, #OBJETS)]
 			local demi = entre(seg.demi[1], seg.demi[2])
 			local hx, hz = demi, demi
-			if modele.long then
+			if modele.long and famille ~= "Mobile" and famille ~= "Effondrable" then
 				if math.abs(dx) >= math.abs(dz) then
 					hx, hz = demi * 1.9, demi * 0.8
 				else
 					hx, hz = demi * 0.8, demi * 1.9
 				end
 			end
-			if i == n then
-				local c = if s < #segments then 11 else 13
-				hx, hz = c, c
+			if famille == "Mobile" then
+				hx, hz = demi + 0.8, demi + 0.8 -- une nacelle un peu plus large : on y atterrit en mouvement
+			end
+			if i == n and s == #segments then
+				hx, hz = 13, 13
 			end
 			local suivant = poser(prec, dx, dz, ecart, montee, hx, hz)
 			local part
-			if i < n then
+			if i == n and s == #segments then
+				part = dalle(
+					dSommet,
+					"SommetAscension",
+					hx * 2,
+					hz * 2,
+					suivant.x,
+					suivant.y,
+					suivant.z,
+					couleurs.or_,
+					Enum.Material.Metal
+				)
+			else
 				part = dalle(
 					dChemin,
 					`Pas{s}_{i}`,
@@ -1437,21 +1751,27 @@ return function(R)
 					Enum.Material.Concrete
 				)
 				part.Color = melange(teinteDe(suivant.y), Color3.fromRGB(245, 245, 250), 0.45)
-				modele.construire(dChemin, part, teinteDe(suivant.y))
-			elseif s < #segments then
-				part = construirePalier(s, suivant)
-			else
-				part = dalle(
-					dSommet,
-					"SommetAscension",
-					hx * 2,
-					hz * 2,
-					suivant.x,
-					suivant.y,
-					suivant.z,
-					couleurs.or_,
-					Enum.Material.Metal
-				)
+				-- Les dalles qui bougent ou s'effondrent gardent leur silhouette propre : rien de lourd dessous.
+				if famille ~= "Mobile" and famille ~= "Effondrable" then
+					modele.construire(dChemin, part, teinteDe(suivant.y))
+				else
+					contour(part, teinteDe(suivant.y))
+				end
+			end
+			if famille == "Laser" then
+				poserLaser(part)
+			elseif famille == "Tournant" then
+				poserTournant(part)
+			elseif famille == "Balancier" then
+				poserBalancier(part, teinteDe(suivant.y))
+			elseif famille == "PiegeMur" then
+				poserPiegeMur(part)
+			elseif famille == "Effondrable" then
+				poserEffondrable(part)
+				speciales[part] = true
+			elseif famille == "Mobile" then
+				poserMobile(part, dx, dz)
+				speciales[part] = true
 			end
 			table.insert(chemin, { pas = suivant, part = part })
 			prec = suivant
@@ -1512,15 +1832,28 @@ return function(R)
 	confettis.Parent = canon
 
 	---------------------------------------------------------------------------------------------------------------
-	-- Les étages : une plaque à toucher tous les 15 studs de hauteur, sur la plateforme du chemin qui atteint la
-	-- hauteur voulue. C'est elle qui compte l'étage franchi (aura croissante, côté serveur).
+	-- Les étages : une plaque à toucher tous les 15 studs de hauteur, sur la plateforme du chemin dont la hauteur
+	-- est la plus proche. C'est elle qui compte l'étage franchi (aura croissante, côté serveur). Jamais sur une
+	-- dalle qui bouge ou qui tombe : la plaque, elle, reste en place — on prend alors la voisine la plus proche,
+	-- ce qui garde les étages à peu près réguliers.
 	local depuis, numero = 2, 0
 	for cible = BASE + ECART_ETAGE, SOMMET + 0.01, ECART_ETAGE do
+		local choisi, ecartMin = nil, math.huge
 		for k = depuis, #chemin do
 			local maillon = chemin[k]
-			if maillon.pas.y >= cible - 0.01 then
+			if maillon.pas.y > cible + ECART_ETAGE then
+				break
+			end
+			local e = math.abs(maillon.pas.y - cible)
+			if not speciales[maillon.part] and e < ecartMin then
+				choisi, ecartMin = k, e
+			end
+		end
+		do
+			local maillon = if choisi then chemin[choisi] else nil
+			if maillon then
 				numero += 1
-				depuis = k + 1
+				depuis = (choisi :: number) + 1
 				local p = maillon.part
 				local x, y, z, hx, hz = reperes(p)
 				local teinte = teinteDe(y)
@@ -1555,7 +1888,6 @@ return function(R)
 					Enum.Material.Neon
 				)
 				faisceau.Transparency = 0.6
-				break
 			end
 		end
 	end
@@ -1760,9 +2092,13 @@ return function(R)
 
 	---------------------------------------------------------------------------------------------------------------
 	-- Lisibilité, dernier mot : toute pièce où l'on pose les pieds porte un contour de la couleur de sa tranche
-	-- (celles des objets et des paliers l'ont déjà) ; rien d'autre n'en porte.
+	-- (celles des objets l'ont déjà) ; rien d'autre n'en porte. Les obstacles qui poussent (barres tournantes,
+	-- pancartes qui basculent) sont solides sans être du sol : ils gardent leur propre allure.
 	for _, p in ascension:GetDescendants() do
-		if p:IsA("BasePart") and p.CanCollide and p.CanQuery and not p:FindFirstChild("Contour") then
+		if not (p:IsA("BasePart") and p.CanCollide and p.CanQuery) or p:FindFirstChild("Contour") then
+			continue
+		end
+		if not (p:HasTag("Tournant") or p:HasTag("Balancier")) then
 			contour(p, teinteDe(p.CFrame.Position.Y))
 		end
 	end
