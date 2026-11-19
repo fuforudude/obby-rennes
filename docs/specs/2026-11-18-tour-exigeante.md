@@ -54,7 +54,7 @@ Prises par l'utilisateur le 2026-11-18.
 
 ## Contrats entre agents
 ### Nouveaux tags de la carte
-- **`PiegeMur`** sur un `Model` : attributs `Direction` (Vector3 unitaire, sens de sortie), `Distance` (studs), `DureeSortie` (s), `DureeRentree` (s), `Portee` (studs, rayon de déclenchement), `Poussee` (studs/s). Enfant `Pointe` (BasePart, la partie qui sort). Le serveur la fait sortir quand un joueur entre dans la portée, et applique l'impulsion au contact.
+- **`PiegeMur`** sur un `Model` : attributs `Direction` (Vector3 unitaire, sens de sortie), `Distance` (studs), `DureeSortie` et `DureeRentree` (s, **durées des deux mouvements** : la pointe frappe pendant les deux), `Repos` (s, le temps rentré avant de pouvoir repartir — **c'est la fenêtre de passage**, 1,2 s au moins ; la carte le pose toujours, sinon `Reglages.PIEGE_REPOS` s'applique en silence), `Portee` (studs, rayon de déclenchement), `Poussee` (studs/s, facultatif : `PIEGE_POUSSEE` par défaut, raboté par le serveur à `PIEGE_POUSSEE_MAX` = 65 pour rester sous `DASH_VITESSE`). Enfant `Pointe` (BasePart, la partie qui sort). Le serveur la fait sortir quand un joueur entre dans la portée, et applique l'impulsion au contact.
 - **`Laser`** sur une `BasePart` : attributs `Depart`, `Arrivee` (Vector3 absolus), `Periode`, `Decalage` (s). Balayage aller-retour régulier calé sur `workspace:GetServerTimeNow()`. **Mortel au contact.** Même principe d'horaire que `src/partage/Horaires.luau` (réutilise-le).
 - **`Effondrable`** sur une `BasePart` : attributs `DelaiChute` (s, défaut 0,5) et `DelaiRetour` (s). Au premier contact, elle tombe puis revient.
 - **`Balancier`** (existant) gagne l'attribut facultatif `Poussee` (multiplicateur de force, défaut 1) : les pancartes qui basculent l'utilisent.

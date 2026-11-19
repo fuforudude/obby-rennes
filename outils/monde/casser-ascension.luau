@@ -5,7 +5,9 @@
 --   marches      une marche de plus entre chaque dalle du chemin : tout se franchit au saut simple
 --                -> « un chemin du pied au sommet existe sans course / sans doubleSaut / sans dash »
 --   lasers       période des lasers ramenée à 1,5 s -> « fenêtre de passage garantie … < 1,2 s »
---   pieges       DureeRentree des pièges de mur ramenée à 0,4 s -> « DureeRentree … 1,2 s au moins attendues »
+--   pieges       Repos des pièges de mur ramené à 0,4 s -> « attribut Repos … 1,2 s au moins attendues »
+--   repos        attribut Repos retiré -> « attribut Repos nil » (pas de repli silencieux sur PIEGE_REPOS)
+--   poussee      Poussee des pièges portée à 120 studs/s -> « poussée 120 studs/s > 65 »
 --   balanciers   pancartes gonflées à 40 studs -> « à lui seul, il couvre toute la dalle »
 --   mobiles      Duree des plateformes mobiles ramenée à 0,3 s -> « le saut d'arrivée … par cycle »
 --   effondrables DelaiRetour porté à 20 s -> « DelaiRetour … de 1,2 à 8 s attendues »
@@ -23,7 +25,10 @@ local CFrame, Vector3 = roblox.CFrame, roblox.Vector3
 local panne = process.args[1]
 local sortie = process.args[2] or "ascension-cassee.rbxm"
 local source = process.args[3] or "monde/Ascension.rbxm"
-assert(panne, "panne attendue : marches, lasers, pieges, balanciers, mobiles, effondrables ou tournants")
+assert(
+	panne,
+	"panne attendue : marches, lasers, pieges, repos, poussee, balanciers, mobiles, effondrables ou tournants"
+)
 
 local modele = roblox.deserializeModel(fs.readFile(source))[1]
 
@@ -82,13 +87,36 @@ function pannes.lasers(): string
 	return `{n} lasers ramenés à une période de 1,5 s`
 end
 
+-- La fenêtre de passage d'un piège de mur, c'est son repos (la pointe frappe pendant la sortie ET la rentrée :
+-- src/partage/Pieges.luau). Trop court, la dalle n'est plus traversable.
 function pannes.pieges(): string
 	local n = 0
 	for _, m in tagues("PiegeMur") do
-		m:SetAttribute("DureeRentree", 0.4)
+		m:SetAttribute("Repos", 0.4)
 		n += 1
 	end
-	return `{n} pièges de mur ramenés à 0,4 s de rentrée`
+	return `{n} pièges de mur ramenés à 0,4 s de repos`
+end
+
+-- Repos absent : le serveur retomberait en silence sur Reglages.PIEGE_REPOS. Le contrôle doit l'exiger.
+function pannes.repos(): string
+	local n = 0
+	for _, m in tagues("PiegeMur") do
+		m:SetAttribute("Repos", nil)
+		n += 1
+	end
+	return `{n} pièges de mur privés de leur attribut Repos`
+end
+
+-- Poussée au-dessus du plafond du serveur : le joueur ne peut plus se rattraper au dash, et le serveur raboterait
+-- la valeur sans rien dire.
+function pannes.poussee(): string
+	local n = 0
+	for _, m in tagues("PiegeMur") do
+		m:SetAttribute("Poussee", 120)
+		n += 1
+	end
+	return `{n} pièges de mur poussant à 120 studs/s`
 end
 
 function pannes.balanciers(): string
