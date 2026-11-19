@@ -36,6 +36,10 @@ jobs:
         with:
           node-version: 22
 
+      # Seule étape qui vérifie les types (`--!strict`) : StyLua, Selene et Rojo n'en regardent aucun.
+      - name: Types Luau (luau-lsp)
+        run: node outils/analyser-types.mjs
+
       - name: Tests de l'outil de publication (Node)
         run: node --test outils/publier.test.mjs
 

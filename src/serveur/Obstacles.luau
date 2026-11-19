@@ -196,7 +196,7 @@ end
 
 -- `positions` n'est donné qu'aux images où l'on scanne.
 local function majPiege(piege: Piege, horloge: number, positions: { Vector3 }?)
-	local phase, avancement = Pieges.phasePiege(horloge - piege.debut, piege.parametres)
+	local phase: Pieges.PhasePiege, avancement = Pieges.phasePiege(horloge - piege.debut, piege.parametres)
 	if
 		positions
 		and Pieges.doitDeclencher(phase, distanceAuPlusProche(positions, piege.pose.Position), piege.parametres.portee)
@@ -255,9 +255,10 @@ end
 local function balancier(part: BasePart)
 	local pivot = part:GetAttribute("Pivot")
 	local axe = part:GetAttribute("Axe")
-	local amplitude = part:GetAttribute("Amplitude")
-	local periode = part:GetAttribute("Periode")
-	local decalage = part:GetAttribute("Decalage") or 0
+	-- Types déclarés d'avance : `nombreFini` valide la valeur juste après, mais Luau ne s'en sert pas pour affiner le type.
+	local amplitude = part:GetAttribute("Amplitude") :: number
+	local periode = part:GetAttribute("Periode") :: number
+	local decalage = (part:GetAttribute("Decalage") or 0) :: number
 	if
 		typeof(pivot) ~= "Vector3"
 		or typeof(axe) ~= "Vector3"
@@ -367,10 +368,7 @@ end
 -- FallenPartsDestroyHeight) : elle est alors réancrée, invisible et traversable. `DelaiRetour` secondes après la
 -- chute, elle est remise à sa place d'origine et redevient franchissable.
 local function effondrable(part: BasePart)
-	local parametres = Pieges.effondrableDepuisAttributs(part:GetAttributes(), {
-		delaiChute = Reglages.EFFONDRABLE_DELAI,
-		delaiRetour = Reglages.EFFONDRABLE_RETOUR,
-	})
+	local parametres = Pieges.effondrableDepuisAttributs(part:GetAttributes(), Pieges.defautsEffondrable())
 	if not parametres then
 		warn(`[Obstacles] {part:GetFullName()} : attributs DelaiChute / DelaiRetour invalides`)
 		return
@@ -437,11 +435,7 @@ end
 -- La pointe reste ancrée et c'est le serveur qui la déplace : tous les joueurs la voient au même endroit, et une
 -- pièce ancrée ne peut pas être poussée hors de son mur par un joueur qui s'y jette.
 local function piegeMur(modele: Model)
-	local parametres = Pieges.piegeDepuisAttributs(modele:GetAttributes(), {
-		portee = Reglages.PIEGE_PORTEE,
-		poussee = Reglages.PIEGE_POUSSEE,
-		repos = Reglages.PIEGE_REPOS,
-	})
+	local parametres = Pieges.piegeDepuisAttributs(modele:GetAttributes(), Pieges.defautsPiege())
 	if not parametres then
 		warn(
 			`[Obstacles] {modele:GetFullName()} : attributs Direction / Distance / DureeSortie / DureeRentree / Portee / Poussee invalides`
@@ -486,16 +480,24 @@ function Obstacles.demarrer()
 		Laser = laser,
 		Effondrable = effondrable,
 	}
+	-- Un objet mal configuré ne doit jamais empêcher les suivants (ni les autres services : voir init.server.luau) de
+	-- démarrer : l'erreur est signalée avec le nom de l'objet, puis on passe au suivant.
 	for tag, preparer in parts do
 		for _, objet in CollectionService:GetTagged(tag) do
 			if objet:IsA("BasePart") then
-				preparer(objet)
+				local ok, erreur = pcall(preparer :: (BasePart) -> any, objet)
+				if not ok then
+					warn(`[Obstacles] {objet:GetFullName()} ({tag}) : erreur à la préparation : {erreur}`)
+				end
 			end
 		end
 	end
 	for _, objet in CollectionService:GetTagged("PiegeMur") do
 		if objet:IsA("Model") then
-			piegeMur(objet)
+			local ok, erreur = pcall(piegeMur :: (Model) -> any, objet)
+			if not ok then
+				warn(`[Obstacles] {objet:GetFullName()} (PiegeMur) : erreur à la préparation : {erreur}`)
+			end
 		else
 			warn(`[Obstacles] {objet:GetFullName()} : le tag PiegeMur se pose sur un Model`)
 		end

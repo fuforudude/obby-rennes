@@ -27,6 +27,39 @@ return function()
 		return a
 	end
 
+	-- Les défauts que le SERVICE passe vraiment (Pieges.defautsPiege / defautsEffondrable, lus dans Reglages) : les
+	-- autres tests de ce fichier passent leurs propres tables, donc ne voyaient pas un champ oublié par l'appelant.
+	describe("défauts construits à partir des réglages du jeu", function()
+		local Reglages = require(ReplicatedStorage.Partage.Reglages)
+
+		it("les défauts du piège de mur sont complets : la lecture d'une pointe bien décrite aboutit", function()
+			local p = Pieges.piegeDepuisAttributs(attributsPiege(), Pieges.defautsPiege()) :: any
+			expect(p).to.be.ok()
+			expect(p.portee).to.equal(Reglages.PIEGE_PORTEE)
+			expect(p.poussee).to.equal(Reglages.PIEGE_POUSSEE)
+			expect(p.repos).to.equal(Reglages.PIEGE_REPOS)
+		end)
+
+		it("les défauts du piège de mur plafonnent la poussée de la carte au plafond des réglages", function()
+			local p = Pieges.piegeDepuisAttributs(attributsPiege({ Poussee = 1000 }), Pieges.defautsPiege()) :: any
+			expect(p.poussee).to.equal(Reglages.PIEGE_POUSSEE_MAX)
+		end)
+
+		it("chaque défaut du piège de mur est un nombre fini et positif", function()
+			for _, valeur in Pieges.defautsPiege() do
+				expect(type(valeur)).to.equal("number")
+				expect(valeur > 0 and valeur < math.huge).to.equal(true) -- ni 0, ni négatif, ni infini, ni NaN
+			end
+		end)
+
+		it("les défauts de la plateforme qui s'effondre sont complets", function()
+			local e = Pieges.effondrableDepuisAttributs({}, Pieges.defautsEffondrable()) :: any
+			expect(e).to.be.ok()
+			expect(e.delaiChute).to.equal(Reglages.EFFONDRABLE_DELAI)
+			expect(e.delaiRetour).to.equal(Reglages.EFFONDRABLE_RETOUR)
+		end)
+	end)
+
 	describe("piège de mur : lecture des attributs de la carte", function()
 		it("lit une pointe bien décrite, et complète portée et poussée par les réglages", function()
 			local p = Pieges.piegeDepuisAttributs(attributsPiege(), DEFAUTS_PIEGE)

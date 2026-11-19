@@ -22,6 +22,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Horaires = require(ReplicatedStorage.Partage.Horaires)
+local Reglages = require(ReplicatedStorage.Partage.Reglages)
 
 export type ParametresPiege = {
 	direction: Vector3, -- unitaire et horizontale : le sens dans lequel la pointe sort et pousse
@@ -70,6 +71,26 @@ local function nombrePositif(valeur: any, defaut: number): number?
 end
 
 local Pieges = {}
+
+--- Les défauts du piège de mur, pris dans Reglages. C'est LA table que le service serveur passe à
+--- `piegeDepuisAttributs`, et celle que les tests utilisent : un champ oublié ici se voit donc dans les tests, et le
+--- vérificateur de types refuse une table incomplète.
+function Pieges.defautsPiege(): DefautsPiege
+	return {
+		portee = Reglages.PIEGE_PORTEE,
+		poussee = Reglages.PIEGE_POUSSEE,
+		pousseeMax = Reglages.PIEGE_POUSSEE_MAX,
+		repos = Reglages.PIEGE_REPOS,
+	}
+end
+
+--- Les défauts de la plateforme qui s'effondre, pris dans Reglages (même rôle que `defautsPiege`).
+function Pieges.defautsEffondrable(): DefautsEffondrable
+	return {
+		delaiChute = Reglages.EFFONDRABLE_DELAI,
+		delaiRetour = Reglages.EFFONDRABLE_RETOUR,
+	}
+end
 
 --- Lit les attributs d'un Model `PiegeMur` (table attribut -> valeur, par exemple `modele:GetAttributes()`).
 --- Rend nil si un attribut manque, a le mauvais type ou n'a pas de sens : l'appelant avertit et ignore le piège.
