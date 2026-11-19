@@ -15,6 +15,6 @@
     "generateur": "outils/monde/Ascension.luau",
     "sortie": "monde/Ascension.rbxm",
     "auteur": "claude",
-    "note": "L'ascension chaotique qui flotte au-dessus de Sup de Vinci : accès depuis la salle de partiel par la verrière du toit (4 sauts), pied avec ses deux tableaux de classement, 258 studs de montée en spirale, 4 paliers, 17 étages, sommet. Contrôle : outils/monde/verifier-ascension.luau."
+    "note": "L'ascension chaotique qui flotte au-dessus de Sup de Vinci : accès depuis la salle de partiel par la verrière du toit (4 sauts), pied avec ses deux tableaux de classement, 258 studs de montée en spirale en difficulté maximale, aucun palier ni checkpoint, 30 obstacles des six familles de plus en plus denses, 17 étages, sommet. Contrôle : outils/monde/verifier-ascension.luau (chemin impossible sans chacune des trois capacités, fenêtre de passage >= 1,2 s par obstacle)."
   }
 }
