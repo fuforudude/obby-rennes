@@ -38,7 +38,7 @@ Un joueur qui n'est pas sur la liste appuie sur F : rien ne se passe, aucun mess
 3. Un joueur hors liste appuie sur F : il ne se passe rien. Même en envoyant directement le remote en boucle depuis un client modifié, il ne vole pas et le serveur ne plante pas.
 4. Pendant le vol, la surveillance anti-triche ne ramène jamais le joueur en arrière et ne l'exclut pas.
 5. Dès la première activation du vol, la course en cours et la tentative d'ascension en cours sont non classables : à l'arrivée, l'écran affiche « non classé », aucun record personnel n'est écrit et aucun classement mondial n'est mis à jour.
-6. « Recommencer » depuis la coloc rend les parties à nouveau classables.
+6. « Recommencer » depuis la coloc rend les parties à nouveau classables. La marque « a volé » ne vit qu'en mémoire du serveur et n'est pas sauvegardée : une déconnexion l'efface, mais le joueur qui revient avec une étape sauvegardée reprend sa partie, et une reprise n'est jamais classable. Seul « Recommencer » redonne donc une partie classable.
 7. Un joueur qui vole jusqu'à un checkpoint le valide et sa progression est sauvegardée : c'est voulu, un testeur doit pouvoir repartir de là la fois suivante. Seuls les classements et les records sont protégés.
 8. Le vol ne traverse pas les murs : le personnage reste solide.
 9. Un testeur qui meurt ou se déconnecte en volant ne reste pas en vol à sa réapparition.

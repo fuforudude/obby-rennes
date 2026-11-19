@@ -379,7 +379,7 @@ return function()
 		end
 
 		--- Le joueur vole pendant `ticks` relevés (50 studs/s sur le plan), puis sort : rend le tampon, l'instant et l'abscisse
-		--- de sortie. La sortie fait ce que fait serveur/Capacites.sortirVol : la fenêtre repart de la position de sortie.
+		--- de sortie. La sortie appelle Capacites.sortirVol, la fonction pure que serveur/Capacites.sortirVol appelle aussi.
 		local function volPuisSortie(ticks: number)
 			local tampon = {}
 			local x = 0
@@ -389,7 +389,7 @@ return function()
 				expect(verdict).never.to.be.ok()
 			end
 			local instant = ticks * PERIODE
-			Capacites.amorcer(tampon, instant, x, 80, 0)
+			Capacites.sortirVol(tampon, releve(instant, x, 80, 0))
 			return tampon, instant, x
 		end
 
@@ -456,6 +456,15 @@ return function()
 				end
 			end
 		)
+
+		it("sortirVol : un seul relevé reste, la position de sortie ; sans relevé, le tampon est vidé", function()
+			local tampon = { releve(0, 500, 500, 500), releve(1, 600, 600, 600) }
+			Capacites.sortirVol(tampon, releve(2, 7, 8, 9))
+			expect(#tampon).to.equal(1)
+			expect(tampon[1].x).to.equal(7)
+			Capacites.sortirVol(tampon, nil)
+			expect(#tampon).to.equal(0)
+		end)
 
 		it("hors vol, le verdict est celui de la fenêtre glissante (inchangé)", function()
 			local tampon = {}

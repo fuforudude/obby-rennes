@@ -215,6 +215,17 @@ function Capacites.evaluerFenetre(capacites: Debloquees?, tampon: Tampon, physiq
 	return Capacites.evaluerDeplacement(capacites, m.horizontal, m.montee, m.duree, physique), m
 end
 
+--- Le joueur cesse de voler : LA fonction que serveur/Capacites.sortirVol appelle (et que les tests appellent). La fenêtre
+--- repart de la position de sortie (`releve`, un seul relevé) : le prochain relevé est comparé à elle, sans période sans
+--- verdict. Sans relevé (pas de racine), le tampon est vidé : la fenêtre se reconstruira. Le tampon est modifié et rendu.
+function Capacites.sortirVol(tampon: Tampon, releve: Releve?): Tampon
+	if releve == nil then
+		table.clear(tampon)
+		return tampon
+	end
+	return Capacites.amorcer(tampon, releve.instant, releve.x, releve.y, releve.z)
+end
+
 --- Un relevé de la surveillance serveur, vol compris : LA fonction que le service appelle à chaque période.
 --- Hors vol : le relevé entre dans la fenêtre glissante, qui est jugée (verdict, mesure) comme avant.
 --- En vol (mode testeur, serveur/Vol) : aucun verdict, et la fenêtre est RÉAMORCÉE sur ce relevé (un seul relevé : la

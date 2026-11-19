@@ -147,9 +147,20 @@ function Vol.demarrer()
 	demarre = true
 	joueur.CharacterRemoving:Connect(arreter)
 	-- Les remotes : sans bloquer le démarrage du reste du client.
+	-- Chacun protégé : un remote manquant ne doit pas rendre l'autre direction muette en silence (comme Composants.remote).
 	task.spawn(function()
-		Remotes.obtenir("EtatVol").OnClientEvent:Connect(surEtat)
-		demanderVol = Remotes.obtenir("DemanderVol")
+		local okDemande, demande = pcall(Remotes.obtenir, "DemanderVol")
+		if okDemande then
+			demanderVol = demande
+		else
+			warn(`[Vol] remote DemanderVol indisponible ({demande})`)
+		end
+		local okEtat, etat = pcall(Remotes.obtenir, "EtatVol")
+		if okEtat then
+			etat.OnClientEvent:Connect(surEtat)
+		else
+			warn(`[Vol] remote EtatVol indisponible ({etat})`)
+		end
 	end)
 end
 

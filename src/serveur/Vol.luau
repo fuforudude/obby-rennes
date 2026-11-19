@@ -5,7 +5,7 @@
 -- Hors liste, la demande est ignorée sans réponse : rien ne laisse deviner que le mode existe, même en la spammant.
 --
 -- Ce que fait l'accord d'un vol (dans cet ordre) :
---   1. Parcours.marquerVol : la course du joueur n'est plus classable et son aura est figée (Regles.estClassable,
+--   1. Parcours.marquerVol (le vol est refusé s'il rend false) : la course du joueur n'est plus classable et son aura est figée (Regles.estClassable,
 --      Regles.auraCompte), et serveur/Ascension y lit la même marque (Parcours.aVole) pour la tentative d'ascension.
 --      Ça dure jusqu'à « Recommencer » (la course est alors remplacée par une neuve). Le vol valide en revanche les
 --      checkpoints et sauvegarde l'étape : c'est voulu.
@@ -27,8 +27,8 @@ local Reglages = require(ReplicatedStorage.Partage.Reglages)
 local Remotes = require(ReplicatedStorage.Partage.Remotes)
 local RegleVol = require(ReplicatedStorage.Partage.Vol)
 
-local demanderVol = Remotes.obtenir("DemanderVol")
-local etatVol = Remotes.obtenir("EtatVol")
+local demanderVol: RemoteEvent
+local etatVol: RemoteEvent
 
 local enVol: { [Player]: boolean } = {}
 local dernieres: { [any]: number } = {} -- heure de la dernière bascule acceptée, par joueur
@@ -75,8 +75,12 @@ local function surDemande(joueur: Player)
 		return
 	end
 	if nouvel then
+		-- D'abord : la course est non classable avant le premier mètre de vol. Course introuvable : pas de vol.
+		if not Parcours.marquerVol(joueur) then
+			etatVol:FireClient(joueur, false) -- seul un testeur arrive ici : on lui redit qu'il ne vole pas
+			return
+		end
 		enVol[joueur] = true
-		Parcours.marquerVol(joueur) -- d'abord : la course est non classable avant le premier mètre de vol
 		Capacites.entrerVol(joueur)
 		etatVol:FireClient(joueur, true)
 	else
@@ -122,16 +126,13 @@ end
 
 local Vol = {}
 
---- Le joueur vole-t-il en ce moment ?
-function Vol.enVol(joueur: Player): boolean
-	return enVol[joueur] == true
-end
-
 function Vol.demarrer()
 	if demarre then
 		return
 	end
 	demarre = true
+	demanderVol = Remotes.obtenir("DemanderVol")
+	etatVol = Remotes.obtenir("EtatVol")
 	if not RegleVol.listeValide(Reglages.TESTEURS) then
 		warn("[Vol] Reglages.TESTEURS mal formée (attendu { [identifiant] = true }) : personne ne volera")
 	end

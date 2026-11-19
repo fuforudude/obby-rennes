@@ -17,9 +17,9 @@ local Remotes = require(ReplicatedStorage.Partage.Remotes)
 -- qu'à l'exécution le second résultat est bien le message d'erreur. Cast local, sans effet à l'exécution.
 local pcallAvecErreur: (...any) -> (boolean, any) = pcall :: any
 
-local etatCourse = Remotes.obtenir("EtatCourse")
-local arrivee = Remotes.obtenir("Arrivee")
-local demanderRecommencer = Remotes.obtenir("DemanderRecommencer")
+local etatCourse: RemoteEvent
+local arrivee: RemoteEvent
+local demanderRecommencer: RemoteEvent
 
 local checkpoints: { [number]: BasePart } = {}
 local courses: { [Player]: Regles.Course } = {}
@@ -220,13 +220,16 @@ function Parcours.avantRecommencer(fonction: (Player) -> ())
 	table.insert(avantRecommencer, fonction)
 end
 
---- Le joueur vient de voler (serveur/Vol) : sa course n'est plus classable et son aura est figée, jusqu'à « Recommencer »
---- (qui remplace la course par une neuve). Sans effet si ses données ne sont pas chargées : le vol n'est alors pas accordé.
-function Parcours.marquerVol(joueur: Player)
+--- Le joueur va voler (serveur/Vol) : sa course n'est plus classable et son aura est figée, jusqu'à « Recommencer » (qui
+--- remplace la course par une neuve). Rend false quand il n'y a pas de course à marquer (données pas chargées, ou course pas
+--- encore posée) : l'appelant doit alors REFUSER le vol, on n'accorde pas un vol qu'on ne sait pas marquer.
+function Parcours.marquerVol(joueur: Player): boolean
 	local course = courses[joueur]
-	if course then
-		course.vol = true
+	if course == nil then
+		return false
 	end
+	course.vol = true
+	return true
 end
 
 --- Le joueur a-t-il volé depuis son dernier « Recommencer » ? Lu par serveur/Ascension pour que la tentative en cours
@@ -276,6 +279,9 @@ function Parcours.passerEtape(joueur: Player): boolean
 end
 
 function Parcours.demarrer()
+	etatCourse = Remotes.obtenir("EtatCourse")
+	arrivee = Remotes.obtenir("Arrivee")
+	demanderRecommencer = Remotes.obtenir("DemanderRecommencer")
 	Players.RespawnTime = Reglages.DELAI_REAPPARITION
 
 	for _, cp in CollectionService:GetTagged("Checkpoint") do

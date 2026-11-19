@@ -50,7 +50,7 @@ local Remotes = require(ReplicatedStorage.Partage.Remotes)
 -- qu'à l'exécution le second résultat est bien le message d'erreur. Cast local, sans effet à l'exécution.
 local pcallAvecErreur: (...any) -> (boolean, any) = pcall :: any
 
-local etatAscension = Remotes.obtenir("EtatAscension")
+local etatAscension: RemoteEvent
 
 -- Attribut posé sur le Player : « c'est Ascension.luau qui place ce joueur » (lu par Parcours.luau).
 local ATTRIBUT_EN_ASCENSION = "EnAscension"
@@ -409,6 +409,7 @@ end
 local Ascension = {}
 
 function Ascension.demarrer()
+	etatAscension = Remotes.obtenir("EtatAscension")
 	lirePied()
 	lireEtagesEtSommet()
 

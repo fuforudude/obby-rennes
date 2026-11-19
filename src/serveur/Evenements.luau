@@ -15,7 +15,7 @@ local Reglages = require(ReplicatedStorage.Partage.Reglages)
 local Remotes = require(ReplicatedStorage.Partage.Remotes)
 local Signalement = require(ReplicatedStorage.Partage.Signalement)
 
-local toucheParEvenement = Remotes.obtenir("ToucheParEvenement")
+local toucheParEvenement: RemoteEvent
 
 local dernierSignalement: { [Player]: number } = {}
 
@@ -72,6 +72,7 @@ end
 local Evenements = {}
 
 function Evenements.demarrer()
+	toucheParEvenement = Remotes.obtenir("ToucheParEvenement")
 	toucheParEvenement.OnServerEvent:Connect(surSignalement)
 	Players.PlayerRemoving:Connect(function(joueur)
 		dernierSignalement[joueur] = nil

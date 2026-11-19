@@ -34,9 +34,9 @@ local DELAI_APPARITION = 3
 local DELAI_TELEPORTATION = 1.5
 local DELAI_CORRECTION = 1 -- après un retour en arrière : le temps que le client applique la correction
 
-local capaciteDebloquee = Remotes.obtenir("CapaciteDebloquee")
-local signalerEffet = Remotes.obtenir("SignalerEffet")
-local effetCapacite = Remotes.obtenir("EffetCapacite")
+local capaciteDebloquee: RemoteEvent
+local signalerEffet: RemoteEvent
+local effetCapacite: RemoteEvent
 
 -- Suivi d'un joueur : les relevés de la fenêtre glissante, la dernière position valide (au sol), et l'état de la
 -- tentative.
@@ -292,7 +292,16 @@ function Capacites.sortirVol(joueur: Player)
 		return
 	end
 	suivi.enVol = false
-	amorcerSurRacine(joueur, suivi, os.clock())
+	-- Le geste (la fenêtre repart de la sortie) est celui de la fonction pure Mouvement.sortirVol, testée telle quelle.
+	local personnage = joueur.Character
+	local racine = personnage and personnage:FindFirstChild("HumanoidRootPart")
+	if racine and racine:IsA("BasePart") then
+		local position = racine.Position
+		Mouvement.sortirVol(suivi.tampon, { instant = os.clock(), x = position.X, y = position.Y, z = position.Z })
+		suivi.valide = position
+	else
+		Mouvement.sortirVol(suivi.tampon, nil)
+	end
 end
 
 --- Les capacités débloquées du joueur (copie ; vide tant que ses données ne sont pas chargées).
@@ -368,6 +377,9 @@ function Capacites.demarrer()
 		return
 	end
 	demarre = true
+	capaciteDebloquee = Remotes.obtenir("CapaciteDebloquee")
+	signalerEffet = Remotes.obtenir("SignalerEffet")
+	effetCapacite = Remotes.obtenir("EffetCapacite")
 
 	for _, piece in CollectionService:GetTagged(TAG) do
 		brancherPiece(piece)
