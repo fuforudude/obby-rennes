@@ -690,8 +690,10 @@ end
 --   pour la fenêtre, puisque c'est celui qui s'attarde le moins aux deux bouts ;
 -- - Tournant : un tour complet en 2π / « Vitesse » autour de la verticale de son centre ;
 -- - Balancier : la sinusoïde de src/partage/Horaires.luau, d'amplitude « Amplitude » autour de « Pivot » ;
--- - PiegeMur : la pointe est dehors pendant « DureeSortie » puis rentrée pendant « DureeRentree » (c'est la fenêtre
---   de passage), et on suppose le pire : un joueur qui reste dans la portée, donc le cycle qui se répète.
+-- - PiegeMur : le cycle de src/partage/Pieges.luau (`phasePiege`) — la pointe sort en « DureeSortie », rentre en
+--   « DureeRentree » (elle frappe pendant les deux, cf. src/serveur/Obstacles.luau), puis reste rentrée « Repos »
+--   secondes : c'est ça, la fenêtre de passage. On suppose le pire : un joueur qui reste dans la portée, donc un
+--   déclenchement dès la fin du repos, donc le cycle qui se répète.
 -- Pour chaque dalle qu'un obstacle peut toucher (sa boîte balayée, élargie des marges de contact du client,
 -- rencontre le volume où se trouve le centre d'un personnage debout dessus), on simule 120 s et on exige, dans
 -- toute tranche d'une période plus 2 s, une fenêtre libre d'au moins 1,2 s — la méthode de
@@ -706,6 +708,9 @@ local MARGE = Vector3.new(
 	Reglages.EVENEMENT_MARGE_HORIZONTALE
 )
 local FENETRE_MIN, DUREE_SIMULEE, PAS_SIM = 1.2, 120, 0.02
+-- Plafond de poussée d'un piège de mur (src/partage/Pieges.luau le rabote à cette valeur). Recopié si la branche
+-- n'a pas encore le réglage, comme la formule des balanciers plus haut.
+local POUSSEE_MAX = Reglages.PIEGE_POUSSEE_MAX or 65
 local NB_TRANCHES = 6
 
 local function nombre(v): boolean
@@ -866,6 +871,7 @@ for _, m in obstacles.PiegeMur do
 	local nom = m:GetFullName()
 	local direction, distance = m:GetAttribute("Direction"), m:GetAttribute("Distance")
 	local sortie, rentree = m:GetAttribute("DureeSortie"), m:GetAttribute("DureeRentree")
+	local repos = m:GetAttribute("Repos")
 	local portee, poussee = m:GetAttribute("Portee"), m:GetAttribute("Poussee")
 	local pointe = m:FindFirstChild("Pointe")
 	compter("PiegeMur", if pointe and pointe:IsA("BasePart") then pointe.CFrame.Position.Y else 0)
@@ -873,15 +879,38 @@ for _, m in obstacles.PiegeMur do
 		defaut(`{nom} : attribut Direction absent ou non unitaire`)
 		continue
 	end
-	for intitule, valeur in { Distance = distance, DureeSortie = sortie, Portee = portee, Poussee = poussee } do
+	for intitule, valeur in { Distance = distance, DureeSortie = sortie, DureeRentree = rentree, Portee = portee } do
 		if not nombre(valeur) or valeur <= 0 then
 			defaut(`{nom} : attribut {intitule} absent ou invalide`)
 		end
 	end
-	if not nombre(rentree) or rentree < FENETRE_MIN then
+	-- « Repos » est la fenêtre de passage : la carte la pose, on ne laisse pas Reglages.PIEGE_REPOS décider en
+	-- silence à sa place (un piège réglé trop serré passerait alors inaperçu).
+	if not nombre(repos) or repos < FENETRE_MIN then
 		defaut(
-			`{nom} : DureeRentree {tostring(rentree)} s — c'est la fenêtre de passage, {FENETRE_MIN} s au moins attendues`
+			`{nom} : attribut Repos {tostring(repos)} — c'est la fenêtre de passage, {FENETRE_MIN} s au moins attendues`
 		)
+	end
+	-- La poussée ne doit jamais tuer : au-delà de PIEGE_POUSSEE_MAX (sous DASH_VITESSE), un dash lancé dans l'autre
+	-- sens ne reprend plus la main (décision de l'utilisateur : les pièges poussent fort, ils ne tuent pas). Le
+	-- serveur rabote silencieusement une valeur trop grande ; on la refuse ici, avant la partie. L'attribut est
+	-- facultatif — mais on contrôle aussi la valeur par défaut du jeu, c'est elle qui s'applique alors.
+	if poussee ~= nil and (not nombre(poussee) or poussee <= 0) then
+		defaut(`{nom} : attribut Poussee présent mais invalide`)
+	else
+		local effective = if nombre(poussee) then poussee else Reglages.PIEGE_POUSSEE
+		if effective > POUSSEE_MAX then
+			defaut(
+				string.format(
+					"%s : poussée %.0f studs/s > %.0f (plafond du serveur, sous DASH_VITESSE %.0f) — le joueur ne "
+						.. "pourrait plus se rattraper au dash, et le serveur raboterait la valeur en silence",
+					nom,
+					effective,
+					POUSSEE_MAX,
+					Reglages.DASH_VITESSE
+				)
+			)
+		end
 	end
 	if not pointe or not pointe:IsA("BasePart") then
 		defaut(`{nom} : pas d'enfant « Pointe » (BasePart)`)
@@ -904,19 +933,29 @@ for _, m in obstacles.PiegeMur do
 			defaut(`{d:GetFullName()} : un piège de mur ne s'annonce pas par une lumière`)
 		end
 	end
-	if not nombre(distance) or not nombre(sortie) or not nombre(rentree) then
+	if not nombre(distance) or not nombre(sortie) or not nombre(rentree) or not nombre(repos) then
 		continue
 	end
 	local cf0, taille = pointe.CFrame, pointe.Size
-	local dehors = CFrame.new(direction * distance) * cf0
-	local periode = sortie + rentree
+	local periode = sortie + rentree + repos
 	table.insert(mouvants, {
 		nom = nom,
 		famille = "PiegeMur",
 		periode = periode,
 		hauteur = cf0.Position.Y,
+		-- `phasePiege` de src/partage/Pieges.luau : avancement 0 -> 1 pendant la sortie, 1 -> 0 pendant la rentrée,
+		-- 0 pendant le repos. La pointe frappe tant qu'elle bouge, pas seulement une fois dehors.
 		poseA = function(t)
-			return (if t % periode < sortie then dehors else cf0), taille
+			local e = t % periode
+			local avancement
+			if e < sortie then
+				avancement = e / sortie
+			elseif e < sortie + rentree then
+				avancement = 1 - (e - sortie) / rentree
+			else
+				avancement = 0
+			end
+			return CFrame.new(direction * distance * avancement) * cf0, taille
 		end,
 	})
 end

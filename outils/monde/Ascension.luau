@@ -1402,8 +1402,11 @@ return function(R)
 
 	-- Piège de mur : un pan de mur dressé au bord de la dalle. Seul indice avant qu'il parte : la fente et la trace
 	-- d'usure laissée par les passages précédents (décision de l'utilisateur : pas de voyant, pas de clignotement).
-	-- La barre sort d'un coup quand on entre dans sa portée, pousse fort, puis rentre : « DureeSortie » est le temps
-	-- passé dehors, « DureeRentree » le temps rentré — c'est la fenêtre de passage.
+	-- La barre sort d'un coup quand on entre dans sa portée, pousse fort, puis rentre. Le cycle est celui que lit le
+	-- serveur (src/partage/Pieges.luau, `phasePiege`) : « DureeSortie » et « DureeRentree » sont les durées des deux
+	-- mouvements (la pointe est dangereuse pendant les deux, soit DureeSortie + DureeRentree), et « Repos » est le
+	-- temps rentré avant de pouvoir repartir — c'est la fenêtre de passage, et c'est pour ça qu'on la pose
+	-- explicitement au lieu de laisser Reglages.PIEGE_REPOS décider à la place de la carte.
 	local PIEGE_DEMI_POINTE = 2
 	local function poserPiegeMur(p)
 		local x, y, z, hx, hz = reperes(p)
@@ -1424,10 +1427,12 @@ return function(R)
 		modele.Parent = dObstacles
 		modele:SetAttribute("Direction", Vector3.new(-nx, 0, -nz))
 		modele:SetAttribute("Distance", distance)
-		modele:SetAttribute("DureeSortie", entre(0.7, 1))
-		modele:SetAttribute("DureeRentree", entre(1.6, 2.2))
+		modele:SetAttribute("DureeSortie", entre(0.12, 0.18)) -- elle jaillit
+		modele:SetAttribute("DureeRentree", entre(0.35, 0.5)) -- elle se rétracte un peu plus lentement : on la voit
+		modele:SetAttribute("Repos", entre(1.8, 2.4)) -- la fenêtre de passage (1,2 s au moins, marge comprise)
 		modele:SetAttribute("Portee", d + demi + 4)
-		modele:SetAttribute("Poussee", 120)
+		-- Pas d'attribut Poussee : Reglages.PIEGE_POUSSEE (60) s'applique, et il est sous DASH_VITESSE (70), donc un
+		-- dash lancé dans l'autre sens reprend la main. Au-dessus, le piège tuerait, ce que la spec refuse.
 		modele:AddTag("PiegeMur")
 		piece(modele, "Mur", 2.4, 14, demi * 2 + 5, repere, couleurs.beton, Enum.Material.Concrete)
 		-- L'indice, et lui seul : une fente dans la face intérieure et la traînée d'usure sous la fente.
