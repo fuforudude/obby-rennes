@@ -147,13 +147,30 @@ const cassees = [
   ["casser-ascension", "mobiles", "verifier-ascension", ["par cycle"]],
   ["casser-ascension", "effondrables", "verifier-ascension", ["DelaiRetour 20 s"]],
   ["casser-ascension", "tournants", "verifier-ascension", ["pas plus rapide que le tuto"]],
+  ["casser-ascension", "tag-sans-simulateur", "verifier-ascension", ["tag « Fragile » sans simulateur"]],
+  // Contrôle null : c'est la fabrique elle-même (la génération trafiquée) qui doit échouer avec le message.
+  ["casser-ascension", "famille-inconnue", null, ["famille d'obstacle inconnue « Ascenseur »"]],
 ];
 rmSync(dossierCasse, { recursive: true, force: true });
 mkdirSync(dossierCasse, { recursive: true });
 for (const [fabrique, panne, controle, attendus] of cassees) {
-  etape(`Carte cassée ${fabrique} ${panne} refusée par ${controle}`, () => {
+  etape(`Carte cassée ${fabrique} ${panne} refusée par ${controle ?? "la génération"}`, () => {
     const fichier = join("build", "cartes-cassees", `${fabrique}-${panne}.rbxm`);
     const f = lancer(...lune(`outils/monde/${fabrique}.luau`, panne, fichier));
+    if (controle === null) {
+      if (f.code === 0) {
+        echouer(`générateur cassé ${fabrique} ${panne}`, f.sortie, "la génération l'accepte : elle ne prouve plus rien");
+      }
+      const manquants = attendus.filter((m) => !f.sortie.includes(m));
+      if (manquants.length > 0) {
+        echouer(
+          `générateur cassé ${fabrique} ${panne}`,
+          f.sortie,
+          `la génération échoue, mais sans le message attendu : ${manquants.map((m) => `« ${m} »`).join(", ")}`,
+        );
+      }
+      return;
+    }
     if (f.code !== 0) {
       echouer(`fabrication de ${fabrique} ${panne}`, f.sortie, `code ${f.code}`);
     }
