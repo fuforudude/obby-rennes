@@ -1057,7 +1057,7 @@ return function(R, biblio)
 	-- le contrôle sur les 16 étapes) : titre = nom de zone le plus long, corps = anecdote, ligne vide, vanne.
 	local panneaux = dossier(racine, "PanneauxAnecdotes")
 	local LARGEUR, HAUTEUR = 12, 7.5
-	local ZONE_LA_PLUS_LONGUE = "Sur le toit du Parlement" -- 24 caractères
+	local ZONE_LA_PLUS_LONGUE = "Le dernier bar avant le partiel" -- n°10, le plus large à l'écran (n°15 de peu derrière)
 	local CORPS_LE_PLUS_LONG =
 		"Le viaduc de la ligne B est l'un des ouvrages les plus photographiés de Rennes, et les rames y passent toutes les quatre minutes, même quand tu es en retard.\n\nRéveil à 7 h 52, métro bloqué, partiel à 8 h : ton aura est en danger critique." -- ~235 caractères
 

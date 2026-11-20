@@ -71,7 +71,7 @@ local LISTE: { Etape } = {
 	},
 	{
 		numero = 10,
-		zone = "Rue de la Soif",
+		zone = "Le dernier bar avant le partiel",
 		anecdote = "Les maisons à pans de bois du vieux Rennes ont échappé à l'incendie de 1720 ; certaines datent des XVe et XVIe siècles.",
 		blague = "Ton rizz ne marche pas sur les colombages. Saute.",
 	},
@@ -101,7 +101,7 @@ local LISTE: { Etape } = {
 	},
 	{
 		numero = 15,
-		zone = "Sup de Vinci",
+		zone = "Sup de Vinci · salle de partiel",
 		anecdote = "Sup de Vinci, campus de Rennes : la ligne d'arrivée. Tu es à l'heure, le partiel peut commencer.",
 		blague = "Arrivé à 7 h 59. Le partiel est reporté : c'était dans le mail de 23 h 47. +5000 aura quand même.",
 	},

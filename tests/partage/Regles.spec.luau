@@ -439,6 +439,33 @@ return function()
 			expect((d.anciensRecordsTour :: any)[7]).never.to.be.ok()
 		end)
 
+		it("estPlusRecente : une sauvegarde d'une version plus haute que le code est reconnue", function()
+			local brutes = sauvegardeV1()
+			brutes.version = Regles.VERSION_DONNEES + 1
+			expect(Regles.estPlusRecente(brutes)).to.equal(true)
+			brutes.version = Regles.VERSION_DONNEES + 0.5
+			expect(Regles.estPlusRecente(brutes)).to.equal(true)
+		end)
+
+		it("estPlusRecente : version actuelle, ancienne, absente ou abîmée ne le sont pas", function()
+			local brutes = sauvegardeV1()
+			brutes.version = Regles.VERSION_DONNEES
+			expect(Regles.estPlusRecente(brutes)).to.equal(false)
+			brutes.version = 1
+			expect(Regles.estPlusRecente(brutes)).to.equal(false)
+			brutes.version = nil
+			expect(Regles.estPlusRecente(brutes)).to.equal(false)
+			brutes.version = "99"
+			expect(Regles.estPlusRecente(brutes)).to.equal(false)
+			brutes.version = 0 / 0
+			expect(Regles.estPlusRecente(brutes)).to.equal(false)
+			brutes.version = math.huge
+			expect(Regles.estPlusRecente(brutes)).to.equal(false)
+			expect(Regles.estPlusRecente(nil)).to.equal(false)
+			expect(Regles.estPlusRecente("abîmé")).to.equal(false)
+			expect(Regles.estPlusRecente(Regles.donneesNeuves())).to.equal(false)
+		end)
+
 		it("une version de tour abîmée garde les records (lue comme la première tour)", function()
 			local brutes = sauvegardeV1()
 			brutes.version = 2
@@ -508,6 +535,63 @@ return function()
 				expect(relue.anciensRecordsTour["1"].meilleureHauteur).to.equal(214)
 			end
 		)
+
+		it("profil d'une tour plus récente que le serveur : rien n'est archivé ni remis à zéro", function()
+			local d = joueurDeLaTour1()
+			d.versionTour = 3
+			d.meilleureHauteur = 120
+			d.meilleurTempsAscension = 70
+			d.anciensRecordsTour["2"] = { meilleureHauteur = 300, meilleurTempsAscension = 60 }
+			Regles.appliquerVersionTour(d, 2) -- ancien serveur pendant un déploiement
+			expect(d.versionTour).to.equal(3)
+			expect(d.meilleureHauteur).to.equal(120)
+			expect(d.meilleurTempsAscension).to.equal(70)
+			expect(d.anciensRecordsTour["2"].meilleureHauteur).to.equal(300)
+			expect(d.anciensRecordsTour["2"].meilleurTempsAscension).to.equal(60)
+			expect(d.anciensRecordsTour["3"]).never.to.be.ok()
+		end)
+
+		it(
+			"une archive déjà présente est fusionnée (plus grande hauteur, meilleur temps), jamais écrasée",
+			function()
+				local d = joueurDeLaTour1() -- 214 studs, 96.4 s
+				d.anciensRecordsTour["1"] = { meilleureHauteur = 250, meilleurTempsAscension = 120 }
+				Regles.appliquerVersionTour(d, 2)
+				expect(d.anciensRecordsTour["1"].meilleureHauteur).to.equal(250)
+				expect(d.anciensRecordsTour["1"].meilleurTempsAscension).to.equal(96.4)
+
+				local e = joueurDeLaTour1()
+				e.meilleurTempsAscension = 0 -- jamais arrivé au sommet sur ce profil
+				e.anciensRecordsTour["1"] = { meilleureHauteur = 100, meilleurTempsAscension = 80 }
+				Regles.appliquerVersionTour(e, 2)
+				expect(e.anciensRecordsTour["1"].meilleureHauteur).to.equal(214)
+				expect(e.anciensRecordsTour["1"].meilleurTempsAscension).to.equal(80)
+
+				local f = joueurDeLaTour1()
+				f.anciensRecordsTour["1"] = { meilleureHauteur = 50, meilleurTempsAscension = 0 }
+				Regles.appliquerVersionTour(f, 2)
+				expect(f.anciensRecordsTour["1"].meilleureHauteur).to.equal(214)
+				expect(f.anciensRecordsTour["1"].meilleurTempsAscension).to.equal(96.4)
+			end
+		)
+
+		it("version de tour abîmée dans la sauvegarde : records archivés sous la tour 1, pas perdus", function()
+			for _, abimee in { "deux", -1, 0, 1.5, 0 / 0 } do
+				local brutes = {
+					version = 2,
+					etape = 3,
+					meilleureHauteur = 214,
+					meilleurTempsAscension = 96.4,
+					versionTour = abimee,
+				}
+				local d = Regles.migrer(brutes, 15)
+				Regles.appliquerVersionTour(d, 2)
+				expect(d.versionTour).to.equal(2)
+				expect(d.meilleureHauteur).to.equal(0)
+				expect(d.anciensRecordsTour["1"].meilleureHauteur).to.equal(214)
+				expect(d.anciensRecordsTour["1"].meilleurTempsAscension).to.equal(96.4)
+			end
+		end)
 
 		it("un joueur sans record de tour n'archive rien", function()
 			local d = Regles.donneesNeuves()

@@ -12,6 +12,9 @@
 --   nom-de-zone        carte intacte, table dont le n°3 change de nom -> verifier-contrats : « zone n°3 »
 --   Ces deux-là écrivent la table trafiquée à côté de la carte (même nom, en .luau) : on la passe au contrôle par
 --   parcours=<fichier.luau> (outils/tout-verifier.mjs le fait dès que le fichier existe).
+--   lecteur-absent     carte intacte, mais le lecteur du tag Laser dans TAGS_CONNUS est un fichier qui n'existe pas
+--                      -> verifier-contrats : « le lecteur du tag « Laser » ». Écrit à côté de la carte un
+--                      <nom>.tags.luau, passé au contrôle par tags=<fichier> (outils/tout-verifier.mjs aussi).
 --
 -- Le fichier écrit est jetable ; on le passe en premier argument au contrôle :
 --   lune run outils/monde/casser-contrats.luau zone-10 parcours-casse.rbxm
@@ -25,7 +28,7 @@ local Reglages = require("./physique").Reglages
 local panne = process.args[1]
 local sortie = process.args[2] or "parcours-casse.rbxm"
 local source = process.args[3] or "monde/Parcours.rbxm"
-assert(panne, "panne attendue : sans-checkpoint-7, tag-inconnu ou zone-10")
+assert(panne, "panne attendue (voir l'en-tête de ce fichier)")
 
 local modele = roblox.deserializeModel(fs.readFile(source))[1]
 
@@ -79,8 +82,17 @@ pannes["nom-de-zone"] = function(): string
 	return `zone n°3 renommée : {tableTrafiquee('d.checkpoints[4].nomArche = "Zone trafiquée"')}`
 end
 
+pannes["lecteur-absent"] = function(): string
+	local chemin = string.gsub(sortie, "%.rbxm$", "") .. ".tags.luau"
+	fs.writeFile(chemin, 'return { Laser = "src/serveur/Obstacles/LaserDisparu.luau" }\n')
+	return `lecteur du tag Laser remplacé par un fichier absent : {chemin}`
+end
+
 local faire = pannes[panne]
-assert(faire, `panne « {panne} » inconnue (sans-checkpoint-7, tag-inconnu, zone-10, table-courte ou nom-de-zone)`)
+assert(
+	faire,
+	`panne « {panne} » inconnue (sans-checkpoint-7, tag-inconnu, zone-10, table-courte, nom-de-zone ou lecteur-absent)`
+)
 local resume = faire()
 fs.writeFile(sortie, roblox.serializeModel({ modele }))
 print(`{source} -> {sortie} : {resume}`)

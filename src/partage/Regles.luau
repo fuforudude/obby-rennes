@@ -143,18 +143,30 @@ local function tempsValide(x: any): number
 	return if typeof(x) == "number" and x == x and x > 0 and x < math.huge then x else 0
 end
 
+-- Version de schéma lue dans des données brutes : absente ou abîmée (pas un nombre fini >= 1) vaut 1.
+local function lireVersion(brutes: { [any]: any }): number
+	local version = brutes.version
+	return if typeof(version) == "number" and version >= 1 and version < math.huge then version else 1
+end
+
+--- La sauvegarde vient-elle d'un code plus récent que celui-ci (`version` > VERSION_DONNEES) ? Arrive pendant un
+--- déploiement, quand un ancien serveur charge un joueur déjà passé par un nouveau. `migrer` ne sait pas lire ces
+--- données sans jeter les champs qu'il ne connaît pas : src/serveur/Donnees.luau ne les touche pas et renvoie le joueur.
+function Regles.estPlusRecente(entree: any): boolean
+	return typeof(entree) == "table" and lireVersion(entree) > VERSION_DONNEES
+end
+
 --- Remet des données lues (peut-être anciennes ou abîmées) dans la forme actuelle, sans rien perdre d'utile.
 --- Lit `version` (absente ou abîmée : 1), applique les MIGRATIONS de cette version à l'actuelle sur une copie, puis
---- valide chaque champ. Une version plus récente que celle du code (retour en arrière du jeu) n'applique rien.
+--- valide chaque champ. Ne JAMAIS l'appeler sur une sauvegarde plus récente que le code (`estPlusRecente`) : elle
+--- garderait les seuls champs connus et réécrirait la version à la baisse, donc perdrait des données une fois sauvegardée.
 function Regles.migrer(entree: any, nbEtapes: number): Donnees
 	local d = Regles.donneesNeuves()
 	if typeof(entree) ~= "table" then
 		return d
 	end
 	local brutes = table.clone(entree)
-	local version = brutes.version
-	version = if typeof(version) == "number" and version == version and version >= 1 then math.floor(version) else 1
-	for v = version, VERSION_DONNEES - 1 do
+	for v = math.floor(lireVersion(brutes)), VERSION_DONNEES - 1 do
 		MIGRATIONS[v](brutes)
 	end
 	local etape = brutes.etape
@@ -211,17 +223,25 @@ function Regles.migrer(entree: any, nbEtapes: number): Donnees
 end
 
 --- Met les records de tour à la version de tour du jeu (Reglages.VERSION_TOUR). Même version : rien ne bouge.
---- Autre version : les records de l'ancienne tour sont rangés dans `anciensRecordsTour` (sous leur version, s'il y
---- en a), et ceux de la nouvelle tour repartent de 0. Parcours, aura et capacités ne sont jamais touchés.
---- VERSION_TOUR ne fait que monter : une archive déjà présente sous la même version serait remplacée.
+--- Version plus ancienne dans le profil : les records de l'ancienne tour sont rangés dans `anciensRecordsTour` (sous
+--- leur version, fusionnés avec une archive déjà présente : plus grande hauteur, meilleur temps), et ceux de la
+--- nouvelle tour repartent de 0. Profil d'une tour plus récente que ce serveur (ancien serveur pendant un
+--- déploiement) : rien ne bouge, pour ne pas archiver ni effacer des records qui ne sont pas les siens.
+--- Parcours, aura et capacités ne sont jamais touchés.
 function Regles.appliquerVersionTour(d: Donnees, versionTour: number)
-	if d.versionTour == versionTour then
+	if d.versionTour >= versionTour then
 		return
 	end
 	if d.meilleureHauteur > 0 or d.meilleurTempsAscension > 0 then
-		d.anciensRecordsTour[tostring(d.versionTour)] = {
-			meilleureHauteur = d.meilleureHauteur,
-			meilleurTempsAscension = d.meilleurTempsAscension,
+		local cle = tostring(d.versionTour)
+		local archive = d.anciensRecordsTour[cle]
+		local temps = d.meilleurTempsAscension
+		if archive and Regles.estRecord(temps, archive.meilleurTempsAscension) then
+			temps = archive.meilleurTempsAscension
+		end
+		d.anciensRecordsTour[cle] = {
+			meilleureHauteur = math.max(d.meilleureHauteur, if archive then archive.meilleureHauteur else 0),
+			meilleurTempsAscension = temps,
 		}
 	end
 	d.meilleureHauteur = 0
