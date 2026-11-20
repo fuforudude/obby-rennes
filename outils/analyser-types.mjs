@@ -1,6 +1,6 @@
 // Analyse de types Luau (luau-lsp) : `--!strict` est en tête de chaque fichier, mais seul cet outil le vérifie
 // (StyLua, Selene et « rojo build » ne regardent pas les types). Il attrape par exemple une table de défauts
-// incomplète passée à une fonction typée (le champ `pousseeMax` oublié par src/serveur/Obstacles.luau).
+// incomplète passée à une fonction typée (le champ `pousseeMax` oublié par src/serveur/Obstacles/PiegeMur.luau).
 // Usage (depuis n'importe où) : node outils/analyser-types.mjs   -> code de sortie 1 au moindre TypeError.
 // Lancé par « roblox verifier » et par .github/workflows/verifier.yml.
 import { spawnSync } from "node:child_process";

@@ -752,7 +752,7 @@ end
 -- - Tournant : un tour complet en 2π / « Vitesse » autour de la verticale de son centre ;
 -- - Balancier : la sinusoïde de src/partage/Horaires.luau, d'amplitude « Amplitude » autour de « Pivot » ;
 -- - PiegeMur : le cycle de src/partage/Pieges.luau (`phasePiege`) — la pointe sort en « DureeSortie », rentre en
---   « DureeRentree » (elle frappe pendant les deux, cf. src/serveur/Obstacles.luau), puis reste rentrée « Repos »
+--   « DureeRentree » (elle frappe pendant les deux, cf. src/serveur/Obstacles/PiegeMur.luau), puis reste rentrée « Repos »
 --   secondes : c'est ça, la fenêtre de passage. On suppose le pire : un joueur qui reste dans la portée, donc un
 --   déclenchement dès la fin du repos, donc le cycle qui se répète.
 -- Pour chaque dalle qu'un obstacle peut toucher (sa boîte balayée, élargie des marges de contact du client,
@@ -1178,7 +1178,7 @@ end
 ---------------------------------------------------------------------------------------------------------------
 -- Plateformes mobiles : le saut qui y arrive et celui qui en part doivent rester possibles au moins 1,2 s par
 -- cycle. On suit le chemin retenu du pied au sommet pour savoir d'où l'on vient et où l'on va. Le va-et-vient est
--- celui du jeu (src/serveur/Obstacles.luau : tween Sine InOut qui repart en arrière, donc une période de 2 × Duree
+-- celui du jeu (src/serveur/Obstacles/Mobile.luau : tween Sine InOut qui repart en arrière, donc une période de 2 × Duree
 -- et une position en (1 − cos(π t / Duree)) / 2).
 print("\n-- Plateformes mobiles --")
 local rangDansChemin: { [Plateforme]: number } = {}
