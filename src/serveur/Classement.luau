@@ -246,8 +246,10 @@ end
 function Classement.demarrer()
 	tableauTemps.store = ouvrir(Reglages.STORE_CLASSEMENT)
 	tableauAura.store = ouvrir(Reglages.STORE_AURA)
-	tableauHauteur.store = ouvrir(Reglages.STORE_HAUTEUR)
-	tableauAscension.store = ouvrir(Reglages.STORE_ASCENSION)
+	-- Les classements de la tour suivent la version de tour : une nouvelle tour, des classements neufs.
+	local nomsTour = Ascension.nomsClassementsTour(Reglages.VERSION_TOUR)
+	tableauHauteur.store = ouvrir(nomsTour.hauteur)
+	tableauAscension.store = ouvrir(nomsTour.temps)
 	task.spawn(function()
 		while true do
 			for _, tableau in tableaux do

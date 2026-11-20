@@ -131,7 +131,12 @@ local Reglages = {
 	-- −2 studs : juste sous le dessus du pied, assez bas pour qu'y marcher ne déclenche rien.
 	ASCENSION_HAUTEUR_GARDE = -2,
 
-	-- Obstacles de la tour (src/serveur/Obstacles.luau ; règles pures et testées dans src/partage/Pieges.luau).
+	-- Plateforme fragile du tuto (tag Fragile, src/serveur/Obstacles/Fragile.luau) : elle s'efface FRAGILE_DELAI
+	-- secondes après le premier contact, reste absente FRAGILE_ABSENCE secondes, puis revient. Pas d'attribut de carte.
+	FRAGILE_DELAI = 0.5,
+	FRAGILE_ABSENCE = 3,
+
+	-- Obstacles de la tour (src/serveur/Obstacles/ ; règles pures et testées dans src/partage/Pieges.luau).
 	-- Les valeurs ci-dessous ne servent que quand la pièce de la carte ne porte pas l'attribut correspondant :
 	-- une carte peut toujours régler un piège plus dur ou plus doux que les autres.
 	--
@@ -196,8 +201,11 @@ local Reglages = {
 	STORE_JOUEURS = "Joueurs_v1",
 	STORE_CLASSEMENT = "MeilleursTemps_v1",
 	STORE_AURA = "Aura_v1",
-	STORE_HAUTEUR = "HauteurAscension_v1",
-	STORE_ASCENSION = "TempsAscension_v1",
+	-- Version de la tour. La passer à 2 (quand la tour change vraiment) fait repartir à vide les classements de la
+	-- tour (« HauteurAscension_v2 », « TempsAscension_v2 » : partage/Ascension.nomsClassementsTour) et les records de
+	-- tour des joueurs (meilleure hauteur, meilleur temps d'ascension : Regles.appliquerVersionTour). Le parcours, son
+	-- classement, l'aura et les capacités ne bougent pas ; les anciens records restent stockés. Ne fait que monter.
+	VERSION_TOUR = 1,
 
 	-- Contrôles de carte (outils/monde/verifier-sauts.luau et verifier-ascension.luau), le jeu ne les lit pas.
 	-- « Modèle prudent » du saut : il juge si un saut est jouable sans rage, volontairement sous la physique réelle

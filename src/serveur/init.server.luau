@@ -1,30 +1,25 @@
 --!strict
--- Point d'entrée du serveur : démarre les services dans l'ordre où ils dépendent les uns des autres.
-local Ascension = require(script.Ascension)
-local Boutique = require(script.Boutique)
-local Capacites = require(script.Capacites)
-local Classement = require(script.Classement)
-local Donnees = require(script.Donnees)
-local Evenements = require(script.Evenements)
-local Obstacles = require(script.Obstacles)
-local Parcours = require(script.Parcours)
-local Vol = require(script.Vol)
-
+-- Point d'entrée du serveur : démarre les services de la liste, dans cet ordre. Aucun abonnement ne dépend de
+-- l'ordre : `Donnees.surChargement` rejoue les joueurs déjà chargés à un abonné qui arrive après.
 -- Un service qui plante au démarrage est signalé (nom et erreur dans la console) sans empêcher les suivants de
 -- démarrer : une seule pièce ou un seul module cassé ne doit pas éteindre tout le jeu.
-local function demarrer(nom: string, service: { demarrer: () -> () })
-	local ok, erreur = xpcall(service.demarrer :: () -> any, debug.traceback)
+type Service = { demarrer: () -> () }
+
+local SERVICES: { { nom: string, module: Service } } = {
+	{ nom = "Obstacles", module = require(script.Obstacles) },
+	{ nom = "Evenements", module = require(script.Evenements) },
+	{ nom = "Classement", module = require(script.Classement) },
+	{ nom = "Parcours", module = require(script.Parcours) },
+	{ nom = "Ascension", module = require(script.Ascension) },
+	{ nom = "Donnees", module = require(script.Donnees) },
+	{ nom = "Boutique", module = require(script.Boutique) },
+	{ nom = "Capacites", module = require(script.Capacites) }, -- déblocages et surveillance des déplacements
+	{ nom = "Vol", module = require(script.Vol) }, -- mode vol des testeurs : après la surveillance et le parcours qu'il pilote
+}
+
+for _, service in SERVICES do
+	local ok, erreur = xpcall(service.module.demarrer :: () -> any, debug.traceback)
 	if not ok then
-		warn(`[Serveur] {nom}.demarrer() a échoué : {erreur}`)
+		warn(`[Serveur] {service.nom}.demarrer() a échoué : {erreur}`)
 	end
 end
-
-demarrer("Obstacles", Obstacles)
-demarrer("Evenements", Evenements)
-demarrer("Classement", Classement)
-demarrer("Parcours", Parcours) -- s'abonne au chargement des données : avant Donnees.demarrer()
-demarrer("Ascension", Ascension) -- s'abonne aussi au chargement des données : avant Donnees.demarrer()
-demarrer("Donnees", Donnees)
-demarrer("Boutique", Boutique)
-demarrer("Capacites", Capacites) -- déblocages et surveillance des déplacements
-demarrer("Vol", Vol) -- mode vol des testeurs : après la surveillance et le parcours qu'il pilote
