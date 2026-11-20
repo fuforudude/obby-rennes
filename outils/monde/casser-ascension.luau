@@ -12,11 +12,17 @@
 --   mobiles      Duree des plateformes mobiles ramenée à 0,3 s -> « le saut d'arrivée … par cycle »
 --   effondrables DelaiRetour porté à 20 s -> « DelaiRetour … de 1,2 à 8 s attendues »
 --   tournants    Vitesse ramenée à 1,2 rad/s -> « pas plus rapide que le tuto »
+--   tag-sans-simulateur  tag « Fragile » (un piège du tuto, connu du jeu) posé sur une dalle du chemin
+--                -> « tag « Fragile » sans simulateur » (aucune famille du registre FAMILLES ne le contrôle)
+--   famille-inconnue     le générateur outils/monde/Ascension.luau, avec une famille « Ascenseur » glissée dans
+--                la première tranche de `segments` : c'est **la génération** qui doit échouer (« famille d'obstacle
+--                inconnue « Ascenseur » ») ; cette fabrique sort alors en erreur et n'écrit rien.
 --
 -- Le fichier écrit est jetable : on le passe en premier argument au contrôle, par exemple
 --   lune run outils/monde/casser-ascension.luau lasers
 --   lune run outils/monde/verifier-ascension.luau /tmp/ascension-cassee.rbxm
 local fs = require("@lune/fs")
+local luau = require("@lune/luau")
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 
@@ -27,7 +33,8 @@ local sortie = process.args[2] or "ascension-cassee.rbxm"
 local source = process.args[3] or "monde/Ascension.rbxm"
 assert(
 	panne,
-	"panne attendue : marches, lasers, pieges, repos, poussee, balanciers, mobiles, effondrables ou tournants"
+	"panne attendue : marches, lasers, pieges, repos, poussee, balanciers, mobiles, effondrables, tournants, "
+		.. "tag-sans-simulateur ou famille-inconnue"
 )
 
 local modele = roblox.deserializeModel(fs.readFile(source))[1]
@@ -153,6 +160,32 @@ function pannes.tournants(): string
 		n += 1
 	end
 	return `{n} barres tournantes ramenées à 1,2 rad/s (le tuto en fait 1,6)`
+end
+
+-- Un piège connu du jeu (TAGS_CONNUS de verifier-contrats) mais que verifier-ascension ne sait pas simuler : sa
+-- fenêtre de passage ne serait contrôlée par personne.
+pannes["tag-sans-simulateur"] = function(): string
+	for _, d in modele:GetDescendants() do
+		if d:IsA("BasePart") and d.Name:match("^Pas%d+_%d+$") then
+			d:AddTag("Fragile")
+			return `tag « Fragile » posé sur {d.Name}`
+		end
+	end
+	error(`aucune dalle « Pas<tranche>_<rang> » dans {source}`)
+end
+
+-- Une famille que le registre `poseurs` ne connaît pas : avant le registre, la chaîne de `if` ne posait rien, en
+-- silence. La génération doit maintenant échouer ; si elle passe, on écrit sa carte et tout-verifier le signale.
+pannes["famille-inconnue"] = function(): string
+	local generateur = "outils/monde/Ascension.luau"
+	local code = fs.readFile(generateur)
+	local motif = "obstacles = {"
+	local debut, fin = string.find(code, motif, 1, true)
+	assert(debut and fin, `« {motif} » introuvable dans {generateur} : la panne ne sait plus où glisser la famille`)
+	code = string.sub(code, 1, fin) .. ' "Ascenseur",' .. string.sub(code, fin + 1)
+	local construire = luau.load(code, { debugName = `{generateur} (famille-inconnue)` })()
+	modele = construire(roblox)
+	return "le générateur a accepté la famille « Ascenseur »"
 end
 
 local faire = pannes[panne]

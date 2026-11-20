@@ -61,7 +61,104 @@ return function(R)
 
 	local CX, CZ = 845, 0 -- l'axe de l'ascension : le centre de Sup de Vinci
 	local BASE = 66 -- dessus du pied de l'ascension (le toit de la fac est à 56)
-	local NB_TRANCHES = 6
+
+	-- Le chemin : six tranches de 43 studs, de plus en plus exigeantes et de plus en plus peuplées. Une entrée par
+	-- tranche, dans l'ordre de la montée : ajouter une tranche = ajouter une entrée (la hauteur de la tour suit).
+	-- - `couleur` : celle de la tranche (dalles, contours, lumières) : on voit d'un coup d'œil où l'on en est ;
+	-- - `serre` : la part du vide tenable qu'on s'autorise, LE bouton de difficulté (0,86 en bas, 0,96 en haut) ;
+	-- - `special` : les sauts « porte » (voir PORTES plus bas) et la respiration, par rang de pas ;
+	-- - `obstacles` : les familles posées sur la tranche, une par pas ; chacune doit avoir son poseur (registre
+	--   `poseurs` plus bas), sinon la génération échoue.
+	local segments = {
+		{
+			couleur = Color3.fromRGB(60, 140, 255), -- 0 à 43 (bleu Vinci)
+			pas = 10,
+			serre = 0.86,
+			monteeMax = 7,
+			videMin = 10.5,
+			videMax = 13,
+			demi = { 3.6, 4.6 },
+			rayon = 24,
+			dAngle = 31,
+			special = { [3] = "double", [7] = "course", [9] = "respiration" },
+			obstacles = { "Mobile", "Tournant" },
+		},
+		{
+			couleur = Color3.fromRGB(255, 80, 190), -- 43 à 86 (rose rue de la Soif)
+			pas = 10,
+			serre = 0.89,
+			monteeMax = 7.5,
+			videMin = 11,
+			videMax = 13.5,
+			demi = { 3.4, 4.4 },
+			rayon = 26,
+			dAngle = 33,
+			special = { [4] = "dash", [8] = "double", [10] = "respiration" },
+			obstacles = { "Laser", "Effondrable", "Balancier" },
+		},
+		{
+			couleur = Color3.fromRGB(255, 140, 40), -- 86 à 129 (orange coloc)
+			pas = 10,
+			serre = 0.92,
+			monteeMax = 8,
+			videMin = 11.5,
+			videMax = 14,
+			demi = { 3.2, 4.2 },
+			rayon = 28,
+			dAngle = 35,
+			special = { [4] = "course", [8] = "dash", [10] = "respiration" },
+			obstacles = { "PiegeMur", "Laser", "Mobile", "Tournant" },
+		},
+		{
+			couleur = Color3.fromRGB(255, 200, 30), -- 129 à 172 (jaune cortège)
+			pas = 11,
+			serre = 0.94,
+			monteeMax = 8.4,
+			videMin = 12,
+			videMax = 14.5,
+			demi = { 3, 4 },
+			rayon = 30,
+			dAngle = 36,
+			special = { [4] = "double", [8] = "course", [11] = "respiration" },
+			obstacles = { "Balancier", "PiegeMur", "Laser", "Effondrable", "Mobile", "Tournant" },
+		},
+		{
+			couleur = Color3.fromRGB(120, 230, 40), -- 172 à 215 (vert tour)
+			pas = 11,
+			serre = 0.95,
+			monteeMax = 8.6,
+			videMin = 12.5,
+			videMax = 15,
+			demi = { 2.9, 3.8 },
+			rayon = 32,
+			dAngle = 38,
+			special = { [4] = "dash", [9] = "double", [11] = "respiration" },
+			obstacles = { "Laser", "Balancier", "PiegeMur", "Tournant", "Effondrable", "Mobile", "Laser" },
+		},
+		{
+			couleur = Color3.fromRGB(70, 220, 255), -- 215 à 258 (cyan sommet)
+			pas = 11,
+			serre = 0.96,
+			monteeMax = 8.6,
+			videMin = 13,
+			videMax = 15.5,
+			demi = { 2.8, 3.7 },
+			rayon = 33,
+			dAngle = 39,
+			special = { [4] = "course", [8] = "dash", [11] = "respiration" },
+			obstacles = {
+				"PiegeMur",
+				"Laser",
+				"Tournant",
+				"Balancier",
+				"Mobile",
+				"Effondrable",
+				"Laser",
+				"PiegeMur",
+			},
+		},
+	}
+	local NB_TRANCHES = #segments
 	local TRANCHE = 43 -- 6 × 43 = 258 : la hauteur de la tour, découpée en six tranches de couleur
 	local SOMMET = BASE + NB_TRANCHES * TRANCHE -- 324 : 258 studs au-dessus du départ
 	local ECART_ETAGE = 15
@@ -89,15 +186,6 @@ return function(R)
 		galette = Color3.fromRGB(205, 160, 95),
 		saucisse = Color3.fromRGB(175, 85, 60),
 		bus = Color3.fromRGB(235, 235, 240),
-	}
-	-- Une couleur par tranche de 43 studs : on voit d'un coup d'œil où l'on en est dans la montée.
-	local tranches = {
-		Color3.fromRGB(60, 140, 255), -- 0 à 43 (bleu Vinci)
-		Color3.fromRGB(255, 80, 190), -- 43 à 86 (rose rue de la Soif)
-		Color3.fromRGB(255, 140, 40), -- 86 à 129 (orange coloc)
-		Color3.fromRGB(255, 200, 30), -- 129 à 172 (jaune cortège)
-		Color3.fromRGB(120, 230, 40), -- 172 à 215 (vert tour)
-		Color3.fromRGB(70, 220, 255), -- 215 à 258 (cyan sommet)
 	}
 	local ACCES = Color3.fromRGB(255, 140, 60) -- l'accès depuis la salle de partiel (orange coloc)
 
@@ -1141,7 +1229,7 @@ return function(R)
 	-- La couleur de la tranche de 43 studs où l'on se trouve.
 	local function teinteDe(y: number)
 		local k = math.floor((y - BASE) / TRANCHE) + 1
-		return tranches[math.clamp(k, 1, #tranches)]
+		return segments[math.clamp(k, 1, #segments)].couleur
 	end
 
 	---------------------------------------------------------------------------------------------------------------
@@ -1151,20 +1239,40 @@ return function(R)
 	etiqueter(pied, "PiedAscension")
 	pied:SetAttribute("Hauteur", BASE)
 	pied:SetAttribute("HauteurRelative", 0)
-	contour(pied, tranches[1], 0.22)
-	etiquette(pied, "PIED DE L'ASCENSION", tranches[1], 7, 400)
-	lumiere(pied, tranches[1], 40, 1.6)
-	fantome(bloc(dPied, "Lisere", 28, 0.4, 28, CX, BASE + 0.1, CZ, tranches[1], Enum.Material.Neon))
+	contour(pied, segments[1].couleur, 0.22)
+	etiquette(pied, "PIED DE L'ASCENSION", segments[1].couleur, 7, 400)
+	lumiere(pied, segments[1].couleur, 40, 1.6)
+	fantome(bloc(dPied, "Lisere", 28, 0.4, 28, CX, BASE + 0.1, CZ, segments[1].couleur, Enum.Material.Neon))
 	for _, c in { -1, 1 } do
 		fantome(
-			bloc(dPied, "PilierPortique", 1, 14, 1, CX - 13, BASE + 14, CZ + c * 12, tranches[1], Enum.Material.Metal)
+			bloc(
+				dPied,
+				"PilierPortique",
+				1,
+				14,
+				1,
+				CX - 13,
+				BASE + 14,
+				CZ + c * 12,
+				segments[1].couleur,
+				Enum.Material.Metal
+			)
 		)
 	end
 	local fronton = fantome(bloc(dPied, "Portique", 1.2, 4, 26, CX - 13, BASE + 17, CZ, Color3.fromRGB(20, 20, 30)))
-	texte(Enum.NormalId.Right, "L'ASCENSION", tranches[1]).Parent = fronton
+	texte(Enum.NormalId.Right, "L'ASCENSION", segments[1].couleur).Parent = fronton
 	local regles = fantome(bloc(dPied, "Regles", 12, 6, 0.4, CX + 2, BASE + 11, CZ - 14, Color3.fromRGB(20, 20, 30)))
 	texte(Enum.NormalId.Back, "Tomber ramène ici.\nAucun palier : 258 studs d'un trait.", couleurs.or_).Parent = regles
-	tableau(dPied, CX - 9, BASE, CZ + 14.5, Enum.NormalId.Front, "TableauHauteur", "Plus haut montés", tranches[1])
+	tableau(
+		dPied,
+		CX - 9,
+		BASE,
+		CZ + 14.5,
+		Enum.NormalId.Front,
+		"TableauHauteur",
+		"Plus haut montés",
+		segments[1].couleur
+	)
 	tableau(
 		dPied,
 		CX + 9,
@@ -1203,9 +1311,9 @@ return function(R)
 	-- Les six familles d'obstacles. Tout ce qui bouge est posé à côté ou au-dessus d'une dalle du chemin : on le voit
 	-- venir, on attend sa fenêtre, on saute. Le contrôle (outils/monde/verifier-ascension.luau) simule chaque cycle et
 	-- exige au moins 1,2 s de passage libre, et qu'aucun obstacle ne couvre à lui seul toute la dalle.
-	local compte = { PiegeMur = 0, Laser = 0, Effondrable = 0, Balancier = 0, Mobile = 0, Tournant = 0 }
+	local compte: { [string]: number } = {} -- rang de chaque obstacle dans sa famille (registre `poseurs`)
 	local function rang(famille: string): number
-		compte[famille] += 1
+		compte[famille] = (compte[famille] or 0) + 1
 		return compte[famille]
 	end
 
@@ -1509,7 +1617,7 @@ return function(R)
 	end
 
 	-- Plateforme mobile : elle glisse en travers du chemin (jamais vers la dalle d'avant : elle la heurterait).
-	local function poserMobile(p, dx: number, dz: number)
+	local function poserMobile(p, _teinte, dx: number, dz: number)
 		local x, y, z, hx, hz = reperes(p)
 		rang("Mobile")
 		local amplitude = 11
@@ -1535,8 +1643,7 @@ return function(R)
 	end
 
 	---------------------------------------------------------------------------------------------------------------
-	-- Le chemin : six tranches de 43 studs, de plus en plus exigeantes et de plus en plus peuplées. `serre` est la
-	-- part du vide tenable qu'on s'autorise : c'est LE bouton de difficulté (0,86 en bas, 0,96 en haut).
+	-- Le chemin, tranche par tranche (`segments`, en tête de la construction).
 	--
 	-- Trois sortes de sauts « porte » rendent chaque capacité indispensable (deux par tranche, jamais les mêmes
 	-- deux fois de suite) :
@@ -1555,89 +1662,37 @@ return function(R)
 		respiration = { montee = 2, vide = 3 },
 	}
 
-	local segments = {
-		{
-			pas = 10,
-			serre = 0.86,
-			monteeMax = 7,
-			videMin = 10.5,
-			videMax = 13,
-			demi = { 3.6, 4.6 },
-			rayon = 24,
-			dAngle = 31,
-			special = { [3] = "double", [7] = "course", [9] = "respiration" },
-			obstacles = { "Mobile", "Tournant" },
-		},
-		{
-			pas = 10,
-			serre = 0.89,
-			monteeMax = 7.5,
-			videMin = 11,
-			videMax = 13.5,
-			demi = { 3.4, 4.4 },
-			rayon = 26,
-			dAngle = 33,
-			special = { [4] = "dash", [8] = "double", [10] = "respiration" },
-			obstacles = { "Laser", "Effondrable", "Balancier" },
-		},
-		{
-			pas = 10,
-			serre = 0.92,
-			monteeMax = 8,
-			videMin = 11.5,
-			videMax = 14,
-			demi = { 3.2, 4.2 },
-			rayon = 28,
-			dAngle = 35,
-			special = { [4] = "course", [8] = "dash", [10] = "respiration" },
-			obstacles = { "PiegeMur", "Laser", "Mobile", "Tournant" },
-		},
-		{
-			pas = 11,
-			serre = 0.94,
-			monteeMax = 8.4,
-			videMin = 12,
-			videMax = 14.5,
-			demi = { 3, 4 },
-			rayon = 30,
-			dAngle = 36,
-			special = { [4] = "double", [8] = "course", [11] = "respiration" },
-			obstacles = { "Balancier", "PiegeMur", "Laser", "Effondrable", "Mobile", "Tournant" },
-		},
-		{
-			pas = 11,
-			serre = 0.95,
-			monteeMax = 8.6,
-			videMin = 12.5,
-			videMax = 15,
-			demi = { 2.9, 3.8 },
-			rayon = 32,
-			dAngle = 38,
-			special = { [4] = "dash", [9] = "double", [11] = "respiration" },
-			obstacles = { "Laser", "Balancier", "PiegeMur", "Tournant", "Effondrable", "Mobile", "Laser" },
-		},
-		{
-			pas = 11,
-			serre = 0.96,
-			monteeMax = 8.6,
-			videMin = 13,
-			videMax = 15.5,
-			demi = { 2.8, 3.7 },
-			rayon = 33,
-			dAngle = 39,
-			special = { [4] = "course", [8] = "dash", [11] = "respiration" },
-			obstacles = {
-				"PiegeMur",
-				"Laser",
-				"Tournant",
-				"Balancier",
-				"Mobile",
-				"Effondrable",
-				"Laser",
-				"PiegeMur",
-			},
-		},
+	-- Registre des poseurs : une entrée par famille d'obstacle que `segments` peut nommer. `poser(dalle, teinte, dx,
+	-- dz)` habille la dalle (teinte de sa tranche, (dx, dz) le sens de la marche) ; `dalleNue` : la dalle bouge ou
+	-- tombe, elle garde sa silhouette propre (rien de lourd dessous) et ne reçoit pas de plaque d'étage.
+	-- Nouvelle famille = un poseur ici, son simulateur dans outils/monde/verifier-ascension.luau (registre
+	-- FAMILLES), son tag dans TAGS_CONNUS (outils/monde/verifier-contrats.luau).
+	local poseurs: { [string]: { poser: (any, any, number, number) -> any, dalleNue: boolean? } } = {
+		Laser = { poser = poserLaser },
+		Tournant = { poser = poserTournant },
+		Balancier = { poser = poserBalancier },
+		PiegeMur = { poser = poserPiegeMur },
+		Effondrable = { poser = poserEffondrable, dalleNue = true },
+		Mobile = { poser = poserMobile, dalleNue = true },
 	}
+	-- Une famille sans poseur ne poserait rien, en silence : on refuse de construire, avant le moindre tirage du
+	-- chemin.
+	for s, seg in segments do
+		for _, famille in seg.obstacles do
+			if not poseurs[famille] then
+				local connues = {}
+				for nom in poseurs do
+					table.insert(connues, nom)
+				end
+				table.sort(connues)
+				error(
+					`Ascension : segments[{s}] nomme la famille d'obstacle inconnue « {famille} » (aucun poseur ; `
+						.. `connues : {table.concat(connues, ", ")})`,
+					0
+				)
+			end
+		end
+	end
 
 	local chemin: { { pas: Pas, part: any } } = {} -- toutes les plateformes, du pied au sommet, dans l'ordre
 	local speciales = {} -- les dalles qui bougent ou tombent : pas de plaque d'étage dessus
@@ -1693,6 +1748,8 @@ return function(R)
 			-- Vide : celui de la porte, ou la part `serre` du vide tenable à cette montée.
 			local porte = PORTES[special[i] or ""]
 			local famille = surPas[i]
+			local poseur = if famille then poseurs[famille] else nil
+			local dalleNue = poseur ~= nil and poseur.dalleNue == true
 			local ecart
 			if porte then
 				ecart = porte.vide
@@ -1716,7 +1773,7 @@ return function(R)
 			local modele = OBJETS[math.random(1, #OBJETS)]
 			local demi = entre(seg.demi[1], seg.demi[2])
 			local hx, hz = demi, demi
-			if modele.long and famille ~= "Mobile" and famille ~= "Effondrable" then
+			if modele.long and not dalleNue then
 				if math.abs(dx) >= math.abs(dz) then
 					hx, hz = demi * 1.9, demi * 0.8
 				else
@@ -1757,26 +1814,17 @@ return function(R)
 				)
 				part.Color = melange(teinteDe(suivant.y), Color3.fromRGB(245, 245, 250), 0.45)
 				-- Les dalles qui bougent ou s'effondrent gardent leur silhouette propre : rien de lourd dessous.
-				if famille ~= "Mobile" and famille ~= "Effondrable" then
+				if not dalleNue then
 					modele.construire(dChemin, part, teinteDe(suivant.y))
 				else
 					contour(part, teinteDe(suivant.y))
 				end
 			end
-			if famille == "Laser" then
-				poserLaser(part)
-			elseif famille == "Tournant" then
-				poserTournant(part)
-			elseif famille == "Balancier" then
-				poserBalancier(part, teinteDe(suivant.y))
-			elseif famille == "PiegeMur" then
-				poserPiegeMur(part)
-			elseif famille == "Effondrable" then
-				poserEffondrable(part)
-				speciales[part] = true
-			elseif famille == "Mobile" then
-				poserMobile(part, dx, dz)
-				speciales[part] = true
+			if poseur then
+				poseur.poser(part, teinteDe(suivant.y), dx, dz)
+				if dalleNue then
+					speciales[part] = true
+				end
 			end
 			table.insert(chemin, { pas = suivant, part = part })
 			prec = suivant
@@ -1830,9 +1878,9 @@ return function(R)
 	confettis.Size = NumberSequence.new(0.35)
 	confettis.EmissionDirection = Enum.NormalId.Bottom
 	confettis.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, tranches[1]),
+		ColorSequenceKeypoint.new(0, segments[1].couleur),
 		ColorSequenceKeypoint.new(0.5, couleurs.or_),
-		ColorSequenceKeypoint.new(1, tranches[2]),
+		ColorSequenceKeypoint.new(1, segments[2].couleur),
 	})
 	confettis.Parent = canon
 
