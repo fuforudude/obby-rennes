@@ -3,11 +3,15 @@
 --   lune run outils/monde/generer.luau Carte      une seule
 -- Une entrée « auteur » : « utilisateur » (retouchée à la main dans Studio puis enregistrée en .rbxm)
 -- n'est jamais régénérée : on écraserait son travail.
+-- Chaque construction reçoit R (les constructeurs Roblox de Lune) et la bibliothèque commune (outils/monde/biblio.luau :
+-- outils, palettes, source unique du parcours, Reglages) : `return function(R, biblio) … return modele end`.
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 local serde = require("@lune/serde")
+
+local biblio = require("./biblio")(roblox)
 
 local manifeste = serde.decode("json", fs.readFile("outils/monde/monde.json"))
 local demande = process.args[1]
@@ -22,7 +26,7 @@ for nom, entree in manifeste do
 		continue
 	end
 	local construire = luau.load(fs.readFile(entree.generateur), { debugName = entree.generateur })()
-	local modele = construire(roblox)
+	local modele = construire(roblox, biblio)
 	fs.writeFile(entree.sortie, roblox.serializeModel({ modele }))
 	print(`{nom} : {entree.sortie} écrit`)
 	faits += 1

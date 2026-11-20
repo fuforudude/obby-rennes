@@ -1,13 +1,18 @@
--- Usage : lune run outils/monde/verifier-contrats.luau [carte.rbxm ...]
--- (défaut : toutes les sorties de outils/monde/monde.json ; après lune run outils/monde/generer.luau).
+-- Usage : lune run outils/monde/verifier-contrats.luau [carte.rbxm ...] [parcours=table.luau]
+-- (défaut : toutes les sorties de outils/monde/monde.json, le registre des cartes, après lune run
+-- outils/monde/generer.luau ; table du parcours : outils/monde/donnees/parcours.luau).
 --
 -- Contrats carte ↔ jeu, sur l'ensemble des cartes données :
 -- - aucun tag inconnu : chaque tag posé est dans TAGS_CONNUS ci-dessous (ce que le jeu lit vraiment). Un tag mal
 --   orthographié ou un nouveau piège que personne ne lit serait sinon ignoré en silence ;
 -- - les checkpoints (tag « Checkpoint ») portent un Numero entier, et l'ensemble des Numero est exactement
---   0..NB_ETAPES (src/partage/Reglages.luau), chacun une seule fois : ni trou, ni doublon, ni numéro en trop.
+--   0..NB_ETAPES (src/partage/Reglages.luau), chacun une seule fois : ni trou, ni doublon, ni numéro en trop ;
+-- - la source unique des checkpoints (outils/monde/donnees/parcours.luau) a exactement NB_ETAPES + 1 entrées,
+--   numérotées 0..NB_ETAPES dans l'ordre, et le nom de zone écrit sur la carte (`nomArche`) est celui de
+--   src/partage/Etapes.luau (HUD, titre du panneau d'anecdote), sauf les numéros de NOMS_EN_ATTENTE.
 -- Code de sortie 1 au moindre défaut.
 local fs = require("@lune/fs")
+local luau = require("@lune/luau")
 local process = require("@lune/process")
 local roblox = require("@lune/roblox")
 local serde = require("@lune/serde")
@@ -37,7 +42,16 @@ local TAGS_CONNUS = {
 	TableauAscension = "src/serveur/Classement.luau",
 }
 
-local fichiers = process.args
+local fichiers = {}
+local cheminParcours = "outils/monde/donnees/parcours.luau"
+for _, arg in process.args do
+	local autre = string.match(arg, "^parcours=(.+)$")
+	if autre then
+		cheminParcours = autre
+	else
+		table.insert(fichiers, arg)
+	end
+end
 if #fichiers == 0 then
 	fichiers = {}
 	for _, entree in serde.decode("json", fs.readFile("outils/monde/monde.json")) do
@@ -91,6 +105,47 @@ end
 for n, poses in checkpoints do
 	if n < 0 or n > NB_ETAPES then
 		defaut(`checkpoint de Numero {n} hors de 0..{NB_ETAPES} : {table.concat(poses, ", ")}`)
+	end
+end
+
+-- Source unique des checkpoints : une entrée par checkpoint, dans l'ordre des numéros.
+local donnees = luau.load(fs.readFile(cheminParcours), { debugName = cheminParcours })()
+local table_ = donnees.checkpoints
+if #table_ ~= NB_ETAPES + 1 then
+	defaut(
+		`{cheminParcours} : la table des checkpoints a {#table_} entrées, NB_ETAPES + 1 = {NB_ETAPES + 1} attendues`
+	)
+end
+for i, c in table_ do
+	if c.numero ~= i - 1 then
+		defaut(
+			`{cheminParcours} : l'entrée {i} porte le numéro {tostring(c.numero)}, {i - 1} attendu (ordre des numéros)`
+		)
+	end
+end
+
+-- Noms de zone : le texte écrit sur la carte (arche ou nom flottant) et celui de src/partage/Etapes.luau (HUD, titre du
+-- panneau d'anecdote) nomment la même chose, la zone du checkpoint : ils doivent être identiques.
+-- EN ATTENTE DE DÉCISION (refonte modulaire, tâche 4) : n°10 et n°15 divergent, l'utilisateur choisit le texte à
+-- garder. Ces numéros sont signalés sans faire échouer le contrôle ; toute autre divergence est un défaut, et un
+-- numéro de cette liste redevenu identique aussi (le retirer de la liste une fois les textes alignés).
+local NOMS_EN_ATTENTE = { [10] = true, [15] = true }
+local Etapes = luau.load(fs.readFile("src/partage/Etapes.luau"), { debugName = "Etapes" })()
+for _, c in table_ do
+	local etape = Etapes.obtenir(c.numero)
+	local zone = etape and etape.zone
+	if zone == c.nomArche then
+		if NOMS_EN_ATTENTE[c.numero] then
+			defaut(`zone n°{c.numero} : noms alignés (« {zone} ») : retirer {c.numero} de NOMS_EN_ATTENTE`)
+		end
+	elseif NOMS_EN_ATTENTE[c.numero] then
+		print(
+			`  en attente de décision : zone n°{c.numero}, « {c.nomArche} » sur la carte, « {tostring(zone)} » dans Etapes`
+		)
+	else
+		defaut(
+			`zone n°{c.numero} : « {tostring(c.nomArche)} » sur la carte ({cheminParcours}), « {tostring(zone)} » dans src/partage/Etapes.luau`
+		)
 	end
 end
 

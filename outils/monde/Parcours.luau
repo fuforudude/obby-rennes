@@ -1,9 +1,8 @@
 -- Construction du parcours « Partiel maintenu » : les 15 étapes et le décor de Rennes.
 --
--- Renvoie une fonction qui reçoit R, les constructeurs Roblox (Instance, Vector3, Vector2, Color3, CFrame, Enum,
--- UDim2, NumberRange, NumberSequence, ColorSequence, ColorSequenceKeypoint), et rend le modèle construit :
--- - dans Lune, par outils/monde/generer.luau, qui écrit monde/Parcours.rbxm ;
--- - dans Studio, collée dans un execute_luau du MCP, pour un aperçu immédiat.
+-- Renvoie une fonction qui reçoit R (les constructeurs Roblox de Lune) et `biblio`, la bibliothèque commune des
+-- générateurs (outils/monde/biblio.luau : outils, palettes, source unique des checkpoints), et rend le modèle construit.
+-- outils/monde/generer.luau l'appelle et écrit monde/Parcours.rbxm (aperçu dans Studio : par Rojo).
 --
 -- Le tracé : un seul chemin, mais en trois dimensions. On part du balcon d'un immeuble, on descend par les balcons,
 -- on entre dans la fac par une fenêtre et on traverse l'amphi, on saute de rame en rame sur le viaduc, on traverse
@@ -28,6 +27,8 @@
 --
 -- Ce que le jeu attend (contrats avec src/serveur) :
 -- - tag « Checkpoint » + attribut « Numero » (0 à 15) : les checkpoints ; le 0 est la SpawnLocation du départ ;
+--   position, taille et nom de chacun dans outils/monde/donnees/parcours.luau (source unique, lue aussi par
+--   Evenements.luau et Ascension.luau) ;
 -- - tag « Mortel » : tue au toucher ;
 -- - tag « Fragile » : s'efface un instant après qu'on a marché dessus ;
 -- - tag « Mobile » + attributs « Deplacement » (Vector3) et « Duree » (s) : va-et-vient ;
@@ -36,12 +37,12 @@
 -- - tag « DeblocageCapacite » + attribut « Capacite » (« course », « doubleSaut » ou « dash ») : dalle qui débloque
 --   la capacité quand on marche dessus (trois en tout, une par zone d'apprentissage).
 
-return function(R)
+return function(R, biblio)
 	local Instance, Vector3, Color3, CFrame, Enum, UDim2 = R.Instance, R.Vector3, R.Color3, R.CFrame, R.Enum, R.UDim2
 	local Vector2, NumberRange, NumberSequence, ColorSequence, ColorSequenceKeypoint =
 		R.Vector2, R.NumberRange, R.NumberSequence, R.ColorSequence, R.ColorSequenceKeypoint
 
-	local SOL = -10 -- dessus du sol de la ville (décor) ; la zone mortelle est juste au-dessus, en -4
+	local SOL = biblio.SOL -- dessus du sol de la ville (décor) ; la zone mortelle est juste au-dessus, en -4
 
 	-- Direction artistique (règles de genre des obbys qui marchent, adaptées à Rennes) :
 	-- 1. Le chemin se lit d'un coup d'œil : ce qui se marche est saturé et cerné de la couleur de sa zone ;
@@ -50,46 +51,7 @@ return function(R)
 	-- 3. Ce qui tue est toujours cerné de rouge vif.
 	-- 4. Checkpoints très visibles : dalle lumineuse, grand numéro, arche (ou nom flottant à l'intérieur).
 	-- 5. Des repères de Rennes en fond, et des bâtiments qu'on traverse pour de vrai.
-	local couleurs = {
-		bois = Color3.fromRGB(196, 132, 74),
-		chaise = Color3.fromRGB(64, 120, 235),
-		papier = Color3.fromRGB(255, 252, 235),
-		metro = Color3.fromRGB(235, 50, 60),
-		quai = Color3.fromRGB(150, 155, 165),
-		banderole = Color3.fromRGB(255, 248, 225),
-		pancarte = Color3.fromRGB(255, 205, 40),
-		camion = Color3.fromRGB(255, 120, 40),
-		bac = Color3.fromRGB(40, 170, 90),
-		bacJaune = Color3.fromRGB(255, 210, 40),
-		jus = Color3.fromRGB(150, 210, 30),
-		facade = Color3.fromRGB(250, 236, 205),
-		colombage = Color3.fromRGB(95, 55, 35),
-		toit = Color3.fromRGB(85, 95, 120),
-		eau = Color3.fromRGB(40, 150, 230),
-		ponton = Color3.fromRGB(170, 115, 70),
-		pierre = Color3.fromRGB(235, 222, 190),
-		haie = Color3.fromRGB(45, 150, 60),
-		pelouse = Color3.fromRGB(120, 230, 70),
-		vinci = Color3.fromRGB(25, 85, 185),
-		or_ = Color3.fromRGB(255, 200, 40),
-		checkpoint = Color3.fromRGB(70, 220, 255),
-		danger = Color3.fromRGB(255, 40, 40),
-		feuillage = Color3.fromRGB(70, 175, 75),
-		tronc = Color3.fromRGB(110, 75, 50),
-		beton = Color3.fromRGB(205, 205, 210),
-	}
-	local accents = {
-		coloc = Color3.fromRGB(255, 140, 60),
-		fac = Color3.fromRGB(160, 90, 255),
-		metro = Color3.fromRGB(255, 60, 80),
-		cortege = Color3.fromRGB(255, 200, 30),
-		tour = Color3.fromRGB(120, 230, 40),
-		soif = Color3.fromRGB(255, 80, 190),
-		vilaine = Color3.fromRGB(40, 190, 255),
-		parlement = Color3.fromRGB(255, 215, 90),
-		thabor = Color3.fromRGB(60, 220, 120),
-		vinci = Color3.fromRGB(60, 140, 255),
-	}
+	local couleurs, accents = biblio.couleurs, biblio.accents
 	local accentDe: { [any]: any } = {} -- dossier de zone → sa couleur (contours posés à la fin)
 
 	local parcours = Instance.new("Model")
@@ -104,283 +66,13 @@ return function(R)
 	end
 
 	---------------------------------------------------------------------------------------------------------------
-	-- Outils de construction.
-
-	-- Bloc ancré. `dessus` est la hauteur de sa face supérieure : on raisonne en « où pose-t-on les pieds ».
-	local function bloc(parent, nom: string, sx, sy, sz, x, dessus, z, couleur, materiau)
-		local p = Instance.new("Part")
-		p.Name = nom
-		p.Anchored = true
-		p.Size = Vector3.new(sx, sy, sz)
-		p.CFrame = CFrame.new(x, dessus - sy / 2, z)
-		p.Color = couleur
-		p.Material = materiau or Enum.Material.SmoothPlastic
-		p.TopSurface = Enum.SurfaceType.Smooth
-		p.BottomSurface = Enum.SurfaceType.Smooth
-		p.Parent = parent
-		return p
-	end
-
-	-- Bloc donné par ses bornes (x1..x2, y1..y2, z1..z2) : pratique pour les murs et les planchers.
-	local function boite(parent, nom: string, x1, x2, y1, y2, z1, z2, couleur, materiau)
-		return bloc(parent, nom, x2 - x1, y2 - y1, z2 - z1, (x1 + x2) / 2, y2, (z1 + z2) / 2, couleur, materiau)
-	end
-
-	-- Dalle sur laquelle on marche (1 stud d'épaisseur).
-	local function dalle(parent, nom, sx, sz, x, dessus, z, couleur, materiau)
-		return bloc(parent, nom, sx, 1, sz, x, dessus, z, couleur, materiau)
-	end
-
-	-- Pilier qui descend jusqu'au sol (colonnes, bacs empilés).
-	local function pilier(parent, nom, sx, sz, x, dessus, z, couleur, materiau)
-		return bloc(parent, nom, sx, dessus - SOL, sz, x, dessus, z, couleur, materiau)
-	end
-
-	-- Décor : ne déclenche rien et ne prend pas de contour (il reste solide, sauf si on le dit).
-	local function decor(p)
-		p.CanTouch = false
-		p.CanQuery = false
-		return p
-	end
-
-	-- Décor de fond qu'on ne doit jamais pouvoir toucher : on le traverse et on tombe dans la zone mortelle.
-	local function fantome(p)
-		decor(p)
-		p.CanCollide = false
-		return p
-	end
-
-	-- Texte des SurfaceGui : TOUJOURS une taille fixe calculée, jamais TextScaled (en jeu, TextScaled rend un texte
-	-- minuscule sur ces panneaux ; la taille fixe est la seule qui a été vue lisible). Les deux constructions
-	-- (Parcours.luau et Evenements.luau) portent le même bloc ; outils/monde/verifier-evenements.luau le compare, s'en
-	-- sert pour contrôler les textes écrits à l'exécution et refuse tout TextScaled ou TextSize < 12 sur une SurfaceGui.
-	-- DEBUT TEXTE_PUR
-	local TAILLE_MIN, TAILLE_MAX = 12, 100 -- TextSize : Roblox le borne à 100
-	local REMPLISSAGE_LARGEUR = 0.95 -- marge d'erreur sur la largeur estimée des caractères
-
-	-- Par police : largeur moyenne (en fraction de la taille) d'une minuscule, d'une majuscule, d'un chiffre, d'une
-	-- espace et d'un autre signe ; puis hauteur d'une ligne (en fraction de la taille). Estimations prudentes ; la
-	-- police Code est à chasse fixe (0,6).
-	local METRIQUES = {
-		Gotham = { 0.54, 0.70, 0.62, 0.27, 0.42, 1.2 },
-		GothamBold = { 0.57, 0.73, 0.64, 0.27, 0.44, 1.2 },
-		GothamBlack = { 0.61, 0.78, 0.68, 0.28, 0.46, 1.2 },
-		Code = { 0.6, 0.6, 0.6, 0.6, 0.6, 1.1 },
-	}
-
-	local function largeurCaractere(c: number, m): number
-		if (c >= 97 and c <= 122) or (c >= 0xDF and c <= 0xFF) then
-			return m[1]
-		elseif (c >= 65 and c <= 90) or (c >= 0xC0 and c <= 0xDE) then
-			return m[2]
-		elseif c >= 48 and c <= 57 then
-			return m[3]
-		elseif c == 32 then
-			return m[4]
-		end
-		return m[5]
-	end
-
-	-- Le texte en paragraphes (séparés par \n), chacun une liste de largeurs de mots (en fraction de la taille).
-	local function decouperTexte(contenu: string, m)
-		local paragraphes = {}
-		for ligne in string.gmatch(contenu .. "\n", "([^\n]*)\n") do
-			local mots = {}
-			for mot in string.gmatch(ligne, "%S+") do
-				local w = 0
-				for _, c in utf8.codes(mot) do
-					w += largeurCaractere(c, m)
-				end
-				table.insert(mots, w)
-			end
-			table.insert(paragraphes, mots)
-		end
-		return paragraphes
-	end
-
-	-- Nombre de lignes après retour à la ligne glouton, `capacite` étant la largeur de ligne en fraction de la taille.
-	local function compterLignes(paragraphes, espace: number, capacite: number): number
-		local n = 0
-		for _, mots in paragraphes do
-			n += 1
-			local courante = 0
-			for i, w in mots do
-				if i > 1 and courante + espace + w <= capacite then
-					courante += espace + w
-				else
-					if i > 1 then
-						n += 1
-					end
-					if w > capacite then -- mot plus long qu'une ligne : coupé
-						local en_plus = math.ceil(w / capacite) - 1
-						n += en_plus
-						courante = w - en_plus * capacite
-					else
-						courante = w
-					end
-				end
-			end
-		end
-		return n
-	end
-
-	-- La plus grande taille entière (12 à `plafond`, 100 par défaut) pour laquelle `contenu` tient dans largeur ×
-	-- hauteur pixels, à la ligne ; rend la taille et le nombre de lignes. 12 si rien ne tient.
-	local function ajusterTexte(contenu: string, police: string, largeur: number, hauteur: number, plafond: number?)
-		local m = METRIQUES[police] or METRIQUES.GothamBold
-		local paragraphes = decouperTexte(contenu, m)
-		local utile = largeur * REMPLISSAGE_LARGEUR
-		local function lignesA(s: number): number
-			return compterLignes(paragraphes, m[4], utile / s)
-		end
-		local function tient(s: number): boolean
-			return lignesA(s) * m[6] * s <= hauteur
-		end
-		local bas, haut = TAILLE_MIN, math.max(TAILLE_MIN, math.floor(plafond or TAILLE_MAX))
-		while bas < haut and tient(bas) do
-			local milieu = (bas + haut + 1) // 2
-			if tient(milieu) then
-				bas = milieu
-			else
-				haut = milieu - 1
-			end
-		end
-		return bas, lignesA(bas)
-	end
-
-	-- La seule règle de taille de texte : fixe, à la ligne, texte brut, entier entre 12 et 100.
-	local function reglerTexte(label, largeur: number, hauteur: number, contenu: string, plafond: number?)
-		local taille, lignes = ajusterTexte(contenu, label.Font.Name, largeur, hauteur, plafond)
-		label.TextScaled = false
-		label.TextWrapped = true
-		label.RichText = false
-		label.TextSize = taille
-		return taille, lignes
-	end
-	-- FIN TEXTE_PUR
-
-	-- Densité des SurfaceGui. Le plancher est de 40 px/stud pour toute face dont la plus petite dimension fait moins
-	-- de 15 studs (panneaux, tableaux, enseignes courantes). Seules les très grandes enseignes (15 studs et plus)
-	-- gardent une toile d'environ 600 px sur leur plus petite dimension (jamais moins de 8 px/stud), pour ne pas
-	-- gaspiller de mémoire de texture. Une enseigne d'un seul texte dont la taille calculée dépasserait 100 px (la
-	-- limite de TextSize) voit sa densité baissée d'autant : le texte garde 100 px mais couvre plus de studs.
-	local DENSITE = 40
-	local DENSITE_MIN = 8
-	local GRANDE_FACE = 15
-	local TOILE_GRANDE = 600
-
-	-- Largeur et hauteur, en studs, de la face d'une pièce qui porte un SurfaceGui.
-	local function dimensionsFace(part, face)
-		local s = part.Size
-		if face == Enum.NormalId.Left or face == Enum.NormalId.Right then
-			return s.Z, s.Y
-		elseif face == Enum.NormalId.Top or face == Enum.NormalId.Bottom then
-			return s.X, s.Z
-		end
-		return s.X, s.Y
-	end
-
-	local function densiteDe(part, face)
-		local l, h = dimensionsFace(part, face)
-		local petite = math.min(l, h)
-		if petite < GRANDE_FACE then
-			return DENSITE
-		end
-		return math.clamp(TOILE_GRANDE / petite, DENSITE_MIN, DENSITE)
-	end
-
-	-- Le texte le plus long que le code ou le client peut écrire dans un label dont le texte est vide à la
-	-- construction : l'attribut « TexteLePlusLong » du label porte ce texte et sert à dimensionner la taille fixe.
-	local function texteDeCalcul(label): string
-		return label:GetAttribute("TexteLePlusLong") or label.Text
-	end
-
-	-- Largeur et hauteur utiles (pixels) d'un TextLabel posé sur une toile de largeur × hauteur pixels.
-	local function dimensionsLabel(label, largeur: number, hauteur: number)
-		local s = label.Size
-		local w = s.X.Scale * largeur + s.X.Offset
-		local h = s.Y.Scale * hauteur + s.Y.Offset
-		local marge = label:FindFirstChildOfClass("UIPadding")
-		if marge then
-			w -= marge.PaddingLeft.Offset + marge.PaddingRight.Offset + (marge.PaddingLeft.Scale + marge.PaddingRight.Scale) * w
-			h -= marge.PaddingTop.Offset + marge.PaddingBottom.Offset + (marge.PaddingTop.Scale + marge.PaddingBottom.Scale) * h
-		end
-		return w, h
-	end
-
-	-- À appeler en fin de construction : règle la densité de chaque SurfaceGui d'après la face qui la porte, puis la
-	-- taille fixe de chacun de ses TextLabel (attribut TexteLePlusLong, sinon son texte).
-	local function calibrerSurfaces(racine)
-		for _, gui in racine:GetDescendants() do
-			if not (gui:IsA("SurfaceGui") and gui.Parent and gui.Parent:IsA("BasePart")) then
-				continue
-			end
-			local l, h = dimensionsFace(gui.Parent, gui.Face)
-			local densite = densiteDe(gui.Parent, gui.Face)
-			local labels = {}
-			for _, d in gui:GetDescendants() do
-				if d:IsA("TextLabel") then
-					table.insert(labels, d)
-				end
-			end
-			if #labels == 1 then
-				local seul = labels[1]
-				local s = seul.Size
-				if s.X.Scale == 1 and s.Y.Scale == 1 and s.X.Offset == 0 and s.Y.Offset == 0 then
-					local brut = ajusterTexte(texteDeCalcul(seul), seul.Font.Name, l * densite, h * densite, 100000)
-					if brut > TAILLE_MAX then
-						densite = math.clamp(densite * TAILLE_MAX / brut, DENSITE_MIN, densite)
-					end
-				end
-			end
-			gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
-			gui.PixelsPerStud = densite
-			for _, label in labels do
-				local w, hauteur = dimensionsLabel(label, l * densite, h * densite)
-				reglerTexte(label, w, hauteur, texteDeCalcul(label))
-			end
-		end
-	end
-
-	local function texte(surface, contenu: string, couleurTexte, couleurFond)
-		local gui = Instance.new("SurfaceGui")
-		gui.Face = surface
-		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud -- densité réglée par calibrerSurfaces
-		local label = Instance.new("TextLabel")
-		label.Name = "Texte"
-		label.Size = UDim2.fromScale(1, 1)
-		label.BackgroundColor3 = couleurFond or Color3.fromRGB(25, 25, 30)
-		label.BackgroundTransparency = couleurFond and 0 or 0.1
-		label.TextColor3 = couleurTexte or Color3.fromRGB(255, 255, 255)
-		label.TextWrapped = true -- taille fixe réglée par calibrerSurfaces (reglerTexte)
-		label.Font = Enum.Font.GothamBold
-		label.Text = contenu
-		label.Parent = gui
-		return gui
-	end
-
-	-- Nom flottant au-dessus d'un objet, visible de loin.
-	local function etiquette(part, contenu: string, couleur, hauteur)
-		local gui = Instance.new("BillboardGui")
-		gui.Size = UDim2.fromOffset(320, 60)
-		gui.StudsOffset = Vector3.new(0, hauteur or 4, 0)
-		gui.MaxDistance = 250
-		local label = Instance.new("TextLabel")
-		label.Size = UDim2.fromScale(1, 1)
-		label.BackgroundTransparency = 1
-		label.TextColor3 = couleur or Color3.fromRGB(255, 255, 255)
-		label.TextStrokeTransparency = 0
-		label.TextScaled = true
-		label.Font = Enum.Font.GothamBlack
-		label.Text = contenu
-		label.Parent = gui
-		gui.Parent = part
-	end
-
-	local function etiqueter(p, tag: string)
-		p:AddTag(tag)
-		return p
-	end
+	-- Outils de construction et textes : la bibliothèque commune (outils/monde/biblio.luau), un seul exemplaire.
+	local bloc, boite, dalle, pilier, decor, fantome =
+		biblio.bloc, biblio.boite, biblio.dalle, biblio.pilier, biblio.decor, biblio.fantome
+	local piece, boule, cylindre, pente, contour, DEBOUT =
+		biblio.piece, biblio.boule, biblio.cylindre, biblio.pente, biblio.contour, biblio.DEBOUT
+	local texte, etiquette, etiqueter, tableau, calibrerSurfaces =
+		biblio.texte, biblio.etiquette, biblio.etiqueter, biblio.tableau, biblio.calibrerSurfaces
 
 	local function mortel(p)
 		return etiqueter(p, "Mortel")
@@ -404,8 +96,12 @@ return function(R)
 	end
 
 	-- Checkpoint : dalle lumineuse et grand numéro ; arche aux couleurs de la zone dehors, nom flottant dedans.
-	local function checkpoint(parent, numero: number, x, dessus, z, nomZone: string, taille, interieur)
-		taille = taille or 12
+	-- Position, taille et nom viennent de la source unique (biblio.parcours.checkpoints) ; le dernier est l'arrivée, en or.
+	local CHECKPOINTS = biblio.parcours.checkpoints
+	local function checkpoint(parent, numero: number)
+		local c = CHECKPOINTS[numero + 1]
+		assert(c and c.numero == numero, `checkpoint {numero} absent de outils/monde/donnees/parcours.luau`)
+		local x, dessus, z, nomZone, taille, interieur = c.x, c.dessus, c.z, c.nomArche, c.taille, c.interieur
 		local p
 		if numero == 0 then
 			p = Instance.new("SpawnLocation")
@@ -421,7 +117,7 @@ return function(R)
 			p = dalle(parent, "", taille, taille, x, dessus, z, couleurs.checkpoint)
 		end
 		p.Name = `Checkpoint{numero}`
-		p.Color = numero == 15 and couleurs.or_ or couleurs.checkpoint
+		p.Color = numero == #CHECKPOINTS - 1 and couleurs.or_ or couleurs.checkpoint
 		p:SetAttribute("Numero", numero)
 		etiqueter(p, "Checkpoint")
 		local marque =
@@ -520,54 +216,6 @@ return function(R)
 			)
 			p.CastShadow = false
 		end
-	end
-
-	-- Panneau de classement : `face` dit vers où il regarde ; `mural` = accroché à un mur (pas de pieds).
-	local function tableau(parent, x, dessus, z, face, tag, intitule, couleurTitre, mural)
-		local deCote = face == Enum.NormalId.Left or face == Enum.NormalId.Right
-		local sx, sz = if deCote then 1 else 14, if deCote then 14 else 1
-		local p = decor(bloc(parent, tag, sx, 10, sz, x, dessus + 11, z, Color3.fromRGB(20, 20, 30)))
-		etiqueter(p, tag)
-		local gui = Instance.new("SurfaceGui")
-		gui.Face = face
-		gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud -- densité réglée par calibrerSurfaces
-		gui.Parent = p
-		local titre = Instance.new("TextLabel")
-		titre.Name = "Titre"
-		titre.Size = UDim2.fromScale(1, 0.18)
-		titre.BackgroundColor3 = couleurTitre
-		titre.TextColor3 = Color3.fromRGB(255, 255, 255)
-		titre.Font = Enum.Font.GothamBlack
-		titre.Text = intitule
-		titre.Parent = gui
-		local liste = Instance.new("TextLabel")
-		liste.Name = "Liste"
-		liste.Position = UDim2.fromScale(0.04, 0.2)
-		liste.Size = UDim2.fromScale(0.92, 0.78)
-		liste.BackgroundTransparency = 1
-		liste.TextColor3 = Color3.fromRGB(240, 240, 240)
-		-- Taille fixe calculée (calibrerSurfaces) pour le pire cas écrit par src/serveur/Classement.luau : 10 lignes
-		-- « %2d. %-14s valeur » (valeur de 10 caractères au plus), en police Code. Le client règle l'alignement :
-		-- centré pour un message, en haut à gauche pour la liste.
-		local lignes = {}
-		for rang = 1, 10 do
-			table.insert(lignes, string.format("%2d. %-14s %s", rang, "WWWWWWWWWWWWWW", "12 345 678"))
-		end
-		liste:SetAttribute("TexteLePlusLong", table.concat(lignes, "\n"))
-		liste.TextXAlignment = Enum.TextXAlignment.Left
-		liste.TextYAlignment = Enum.TextYAlignment.Top
-		liste.Font = Enum.Font.Code
-		liste.Text = "Chargement…"
-		liste.Parent = gui
-		if not mural then
-			for _, d in { -5, 5 } do
-				local px, pz = if deCote then x else x + d, if deCote then z + d else z
-				decor(
-					bloc(parent, "PiedTableau", 1, dessus + 6 - SOL, 1, px, dessus + 6, pz, Color3.fromRGB(60, 60, 60))
-				)
-			end
-		end
-		return p
 	end
 
 	-- Bâtiment creux qu'on traverse : quatre murs, un toit, et des ouvertures (porte, fenêtre) par face.
@@ -703,73 +351,6 @@ return function(R)
 				f.CastShadow = false
 			end
 		end
-	end
-
-	local function contour(p, couleur, epaisseur)
-		local boiteSel = Instance.new("SelectionBox")
-		boiteSel.Name = "Contour"
-		boiteSel.Adornee = p
-		boiteSel.Color3 = couleur
-		boiteSel.LineThickness = epaisseur or 0.06
-		boiteSel.SurfaceTransparency = 1
-		boiteSel.Parent = p
-	end
-
-	local function boule(parent, nom, taille, x, y, z, couleur, materiau)
-		local b = Instance.new("Part")
-		b.Name = nom
-		b.Shape = Enum.PartType.Ball
-		b.Anchored = true
-		b.Size = Vector3.new(taille, taille, taille)
-		b.CFrame = CFrame.new(x, y, z)
-		b.Color = couleur
-		b.Material = materiau or Enum.Material.SmoothPlastic
-		b.Parent = parent
-		return fantome(b)
-	end
-
-	local DEBOUT = CFrame.Angles(0, 0, math.rad(90)) -- un cylindre Roblox est couché sur X : on le redresse
-	local function cylindre(parent, nom, longueur, diametre, cf, couleur, materiau)
-		local c = Instance.new("Part")
-		c.Name = nom
-		c.Shape = Enum.PartType.Cylinder
-		c.Anchored = true
-		c.Size = Vector3.new(longueur, diametre, diametre)
-		c.CFrame = cf
-		c.Color = couleur
-		c.Material = materiau or Enum.Material.SmoothPlastic
-		c.Parent = parent
-		return fantome(c)
-	end
-
-	-- Pièce fantôme placée par le CFrame de son centre : détails de façade, décor de fond, pièces tournées.
-	local function piece(parent, nom, sx, sy, sz, cf, couleur, materiau)
-		local p = Instance.new("Part")
-		p.Name = nom
-		p.Anchored = true
-		p.Size = Vector3.new(sx, sy, sz)
-		p.CFrame = cf
-		p.Color = couleur
-		p.Material = materiau or Enum.Material.SmoothPlastic
-		p.TopSurface = Enum.SurfaceType.Smooth
-		p.BottomSurface = Enum.SurfaceType.Smooth
-		p.Parent = parent
-		return fantome(p)
-	end
-
-	-- Pan incliné fantôme (WedgePart) : sa face verticale est du côté +Z local, la pente descend vers -Z local.
-	local function pente(parent, nom, sx, sy, sz, cf, couleur, materiau)
-		local w = Instance.new("WedgePart")
-		w.Name = nom
-		w.Anchored = true
-		w.Size = Vector3.new(sx, sy, sz)
-		w.CFrame = cf
-		w.Color = couleur
-		w.Material = materiau or Enum.Material.SmoothPlastic
-		w.TopSurface = Enum.SurfaceType.Smooth
-		w.BottomSurface = Enum.SurfaceType.Smooth
-		w.Parent = parent
-		return fantome(w)
 	end
 
 	-- Toit à deux pans posé à la hauteur `base`, centré en (x, z) : deux WedgePart dos à dos, faîtage le long de X
@@ -1449,7 +1030,7 @@ return function(R)
 			)
 		end
 	end
-	checkpoint(coloc, 0, -5, 40, 0, "La coloc à Villejean", 14)
+	checkpoint(coloc, 0)
 	local titre = decor(boite(coloc, "Titre", -13, -12, 52, 58, -14, 14, Color3.fromRGB(25, 25, 35)))
 	texte(Enum.NormalId.Right, "OBBY RENNES · PARTIEL MAINTENU", accents.coloc).Parent = titre
 	tableau(coloc, -11.5, 40, -13.5, Enum.NormalId.Right, "TableauClassement", "Meilleurs temps", couleurs.vinci, true)
@@ -1466,7 +1047,7 @@ return function(R)
 	-- 1-2 · Fac bloquée : on grimpe l'escalier de chaises jusqu'à la fenêtre, on traverse l'amphi par les
 	-- rangées (le sol est couvert de café renversé), et on ressort par la fenêtre d'en face.
 	local fac = dossier("1_FacBloquee", accents.fac)
-	checkpoint(fac, 1, 54, 10, 0, "Fac bloquée")
+	checkpoint(fac, 1)
 	dalle(fac, "Chaises", 4, 4, 64, 13, -3, couleurs.chaise)
 	dalle(fac, "Chaises", 4, 4, 69.5, 16, 3, couleurs.chaise)
 	fragile(dalle(fac, "PileDeCopies", 4, 4, 75, 19, -3, couleurs.papier))
@@ -1490,7 +1071,7 @@ return function(R)
 	dalle(fac, "Rangee", 3, 20, 101.5, 27, 0, couleurs.bois, Enum.Material.Wood)
 	dalle(fac, "Rangee", 3, 20, 107, 29, 0, couleurs.bois, Enum.Material.Wood)
 	dalle(fac, "Rangee", 3, 20, 112.5, 31, 0, couleurs.bois, Enum.Material.Wood)
-	checkpoint(fac, 2, 119, 31, 0, "L'amphi bloqué", 8, true)
+	checkpoint(fac, 2)
 	local tableauNoir = decor(boite(fac, "TableauNoir", 86, 86.3, 27, 32, -14, -7, Color3.fromRGB(30, 60, 40)))
 	texte(
 		Enum.NormalId.Right,
@@ -1513,13 +1094,13 @@ return function(R)
 		decor(bloc(metro, "PileDuViaduc", 3, 27 - SOL, 3, x, 27, 0, couleurs.beton, Enum.Material.Concrete))
 	end
 	mobile(rame("RameQuiRepartQuandMeme", 10, 185), Vector3.new(0, 0, 10), 3)
-	checkpoint(metro, 3, 202, 34, 0, "Le viaduc de la ligne b")
+	checkpoint(metro, 3)
 	decor(bloc(metro, "PileDuViaduc", 4, 33 - SOL, 4, 202, 33, 0, couleurs.beton, Enum.Material.Concrete))
 	dalle(metro, "Escalator", 4, 6, 213, 30, 0, couleurs.quai, Enum.Material.DiamondPlate)
 	dalle(metro, "Escalator", 4, 6, 219, 26, 0, couleurs.quai, Enum.Material.DiamondPlate)
 	fragile(dalle(metro, "EscalatorEnPanne", 4, 6, 225, 22, 0, couleurs.papier))
 	dalle(metro, "Escalator", 4, 6, 231, 18, 0, couleurs.quai, Enum.Material.DiamondPlate)
-	checkpoint(metro, 4, 243, 14, 0, "La station")
+	checkpoint(metro, 4)
 	-- Apprentissage 1/3 · la course. En sortant de la station, le parvis est coupé : 8 studs de vide en montant de
 	-- 1 jusqu'à la première banderole du cortège. Plus que les 6,5 d'un saut debout du modèle prudent — on a donc
 	-- envie de prendre de l'élan, et le panneau le dit — mais pas infranchissable en marchant (8,67 studs de
@@ -1585,14 +1166,14 @@ return function(R)
 	banderole("BanderoleTendue", 264, 15, "DES PRISES DANS LES AMPHIS")
 	banderole("Banderole", 276, 17, "NON AUX PARTIELS À 8H", Vector3.new(0, 0, -8), 3)
 	dalle(cortege, "Pancarte", 4, 10, 289.5, 21.5, 0, couleurs.pancarte)
-	checkpoint(cortege, 5, 298, 19, 0, "Place de la République")
+	checkpoint(cortege, 5)
 	local sono = mobile(
 		bloc(cortege, "CamionSono", 8, 2, 8, 314, 19, 0, couleurs.camion, Enum.Material.Metal),
 		Vector3.new(12, 0, 0),
 		4
 	)
 	etiquette(sono, "♪ SONO ♪", couleurs.pancarte, 3)
-	checkpoint(cortege, 6, 342, 19, 0, "Le cortège")
+	checkpoint(cortege, 6)
 	-- Le palais du Commerce, décalé vers +X pour laisser la place à l'Opéra (en face de l'hôtel de ville).
 	local palais = immeuble(cortege, 338, 48, 56, 20, 28, couleurs.pierre, true)
 	texte(Enum.NormalId.Front, "PALAIS DU COMMERCE", Color3.fromRGB(60, 50, 40), couleurs.pierre).Parent = palais
@@ -1633,7 +1214,7 @@ return function(R)
 	jalons(tour, "JalonDash", 354, 0, 21, 370, 0, 24, accents.tour)
 	mortel(pilier(tour, "BacRenverse", 4, 4, 357, 17, 3, couleurs.bac))
 	mortel(pilier(tour, "BacRenverse", 4, 4, 365, 16.5, -3, couleurs.bacJaune))
-	checkpoint(tour, 7, 374, 24, 0, "Barricades de poubelles", 8, true)
+	checkpoint(tour, 7)
 	local CX = 395 -- centre de la tour (murs de 381 à 409 en X, de -14 à 14 en Z)
 	batiment(tour, "Tour", CX - 14, CX + 14, -14, 14, 78, Color3.fromRGB(235, 225, 210), Enum.Material.Concrete, {
 		["-X"] = { centre = 0, largeur = 8, bas = 64, haut = 74 },
@@ -1740,7 +1321,7 @@ return function(R)
 		bloc(tour, "VentiloDePlafond", 1.2, 2, 8, CX + 2, 69, 0, Color3.fromRGB(240, 240, 240), Enum.Material.Neon),
 		1.4
 	)
-	checkpoint(tour, 8, CX + 9.5, 66, 0, "La tour", 6, true)
+	checkpoint(tour, 8) -- en CX + 9,5
 	local motDuVoisin = decor(boite(tour, "MotDuVoisin", CX - 13, CX - 12.8, 66, 69, 6, 11, couleurs.papier))
 	texte(
 		Enum.NormalId.Right,
@@ -1875,7 +1456,7 @@ return function(R)
 	pilier(soif, "Cheminee", 2, 2, 466, 33, 0, Color3.fromRGB(150, 70, 50), Enum.Material.Brick)
 	maisonChemin(soif, "Maison", 475, 0, 8, 30, hourdis[5], bois[4], true, "CHEZ GWENN")
 	maisonChemin(soif, "Maison", 488, 0, 12, 27, hourdis[4], bois[3], false, "LE RATTRAPAGE")
-	checkpoint(soif, 9, 488, 28, 0, "Rue de la Soif")
+	checkpoint(soif, 9)
 	-- Durcissement (spec 2026-11-18) : deux auvents à la même hauteur au lieu de trois en escalier, séparés de
 	-- 8 studs de vide (501 -> 509) sans descente, donc sans remise : il faut courir. On tombe ensuite de 14 studs
 	-- sur la terrasse, une chute libre qui ne demande rien.
@@ -1883,7 +1464,7 @@ return function(R)
 	dalle(soif, "Auvent", 4, 6, 511, 24, 0, Color3.fromRGB(240, 180, 40), Enum.Material.Fabric)
 	dalle(soif, "Terrasse", 30, 10, 532, 10, 0, couleurs.bois, Enum.Material.WoodPlanks)
 	tournant(bloc(soif, "EnseigneDeBar", 1.2, 2, 22, 532, 13, 0, Color3.fromRGB(220, 60, 140), Enum.Material.Neon), 1.6)
-	checkpoint(soif, 10, 559, 10, 0, "Le dernier bar avant le partiel")
+	checkpoint(soif, 10)
 	-- Les rangées de maisons de part et d'autre de la rue, serrées, de largeurs et de couleurs variées ; côté -Z, une
 	-- trouée (x 458 à 492) laisse voir les portes Mordelaises et la cathédrale.
 	do
@@ -1927,7 +1508,7 @@ return function(R)
 		5
 	)
 	dalle(vilaine, "Ponton", 4, 8, 599, 5, 0, couleurs.ponton, Enum.Material.WoodPlanks)
-	checkpoint(vilaine, 11, 611, 5, 0, "La Vilaine")
+	checkpoint(vilaine, 11)
 	-- Les bouées montent en biais vers la rive nord, où un long ponton barre tout le passage. De son bord sud aux
 	-- quais (checkpoint 12) il y a 16 studs de vide, à plat, au-dessus de l'eau : plus que les 9,75 d'un saut en
 	-- courant, moins que les 17,75 du même saut prolongé d'un dash. Le ponton est long de 22 studs : on arrive
@@ -1938,7 +1519,7 @@ return function(R)
 	fragile(dalle(vilaine, "BoueeCrevee", 4, 6, 626, 11, 9, couleurs.papier))
 	dalle(vilaine, "Bouee", 4, 6, 626, 14, 18, Color3.fromRGB(240, 90, 40))
 	dalle(vilaine, "PontonDeLaRive", 22, 6, 641, 17, 25, couleurs.ponton, Enum.Material.WoodPlanks)
-	checkpoint(vilaine, 12, 647, 17, 0, "Les quais")
+	checkpoint(vilaine, 12)
 	for _, dz in { -4, 4 } do
 		decor(bloc(vilaine, "PileDuPont", 3, 15, 3, 647, 16, dz, couleurs.pierre, Enum.Material.Cobblestone))
 	end
@@ -2010,7 +1591,7 @@ return function(R)
 		)
 	end
 	decor(bloc(parlement, "Campanile", 8, 2, 8, 715, 41, 0, couleurs.pierre, Enum.Material.Marble))
-	checkpoint(parlement, 13, 715, 42, 0, "Sur le toit du Parlement", 8)
+	checkpoint(parlement, 13)
 	drapeauBreton(parlement, 743, 40, -14)
 	drapeauBreton(parlement, 743, 40, 6)
 	-- Le palais du Parlement de Bretagne (Germain Gaultier et Salomon de Brosse, 1618-1655).
@@ -2309,7 +1890,7 @@ return function(R)
 	-- courant, moins que les 17,75 avec le dash. La haie de l'arroseur à bras (x 798) ne bouge pas.
 	bloc(thabor, "Haie", 4, 3, 8, 791, 18, 4, couleurs.haie, Enum.Material.Grass)
 	bloc(thabor, "Haie", 4, 3, 8, 798, 18, 0, couleurs.haie, Enum.Material.Grass)
-	checkpoint(thabor, 14, 810, 18, 0, "Le Thabor")
+	checkpoint(thabor, 14)
 	local pancarte = fantome(bloc(thabor, "PancartePelouse", 0.4, 3, 8, 760, 18, 14, Color3.fromRGB(25, 25, 30)))
 	texte(Enum.NormalId.Left, "PELOUSE INTERDITE\n(vraiment)", Color3.fromRGB(255, 255, 255)).Parent = pancarte
 	for i = 0, 5 do
@@ -2325,10 +1906,23 @@ return function(R)
 	-- La verrière du toit (12 × 12, au-dessus de la salle de partiel) : c'est par là qu'on sort du tuto pour
 	-- l'ascension (outils/monde/Ascension.luau y fait passer ses dalles d'accès, à 48 et 54). Le trou laisse 1 stud
 	-- de marge autour des dalles d'accès : rien du toit ne fait plafond bas au-dessus d'elles.
-	local VERRIERE = { x1 = 832, x2 = 844, z1 = 2, z2 = 14 }
-	batiment(vinci, "SupDeVinci", 825, 865, -16, 16, 56, Color3.fromRGB(70, 120, 200), Enum.Material.Glass, {
-		["-X"] = { centre = 0, largeur = 8, bas = 18, haut = 30 },
-	}, VERRIERE)
+	-- Emprise, toit et verrière : biblio.parcours.supDeVinci (l'ascension tourne autour de ce bâtiment).
+	local SDV = biblio.parcours.supDeVinci
+	batiment(
+		vinci,
+		"SupDeVinci",
+		SDV.x1,
+		SDV.x2,
+		SDV.z1,
+		SDV.z2,
+		SDV.toit,
+		Color3.fromRGB(70, 120, 200),
+		Enum.Material.Glass,
+		{
+			["-X"] = { centre = 0, largeur = 8, bas = 18, haut = 30 },
+		},
+		SDV.verriere
+	)
 	-- Éclats de verre restés dans le cadre : on voit que la verrière a été traversée (fantômes, sans ombre).
 	local eclats = {
 		{ x = 834, z = 2.8, rx = -32, ry = 4 },
@@ -2390,7 +1984,7 @@ return function(R)
 			fragile(p)
 		end
 	end
-	checkpoint(vinci, 15, 834, 42, 8, "Sup de Vinci · salle de partiel", 12, true)
+	checkpoint(vinci, 15)
 	for _, x in { 831, 837 } do
 		for _, z in { 5, 11 } do
 			decor(bloc(vinci, "TableDExamen", 3, 3, 2, x, 45, z, couleurs.bois, Enum.Material.Wood))

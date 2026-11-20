@@ -31,8 +31,8 @@
 --   d'une plateforme du tuto) ;
 -- - toutes les plateformes sont ancrées et horizontales (une dalle penchée fausserait tout le reste) ;
 -- - tous les TextLabel de SurfaceGui sont à taille fixe (jamais TextScaled), de 12 à 100 px, et leur texte tient
---   dans son label (pire cas des tableaux : 10 lignes de classement) ; le bloc TEXTE_PUR d'Ascension.luau est
---   identique à celui de Parcours.luau ;
+--   dans son label (pire cas des tableaux : 10 lignes de classement), selon la règle de taille commune
+--   (outils/monde/biblio/texte.luau, la même que celle des générateurs) ;
 -- - le budget de pièces (1 500) est tenu.
 -- Code de sortie 1 au moindre défaut.
 local fs = require("@lune/fs")
@@ -1475,20 +1475,10 @@ print(string.format("emprise des plateformes : x %.0f..%.0f, z %.0f..%.0f", ex1,
 
 ---------------------------------------------------------------------------------------------------------------
 -- Textes des SurfaceGui : jamais TextScaled, taille fixe de 12 à 100 px, à la ligne, et qui tient dans son label.
--- La règle de taille est le bloc TEXTE_PUR de Parcours.luau, qui doit être identique dans Ascension.luau.
-local function blocTextePur(fichier: string): string
-	local source = fs.readFile(fichier):gsub("\r\n", "\n")
-	local debut = source:find("-- DEBUT TEXTE_PUR\n", 1, true)
-	local fin = source:find("\t-- FIN TEXTE_PUR", 1, true)
-	assert(debut and fin and fin > debut, `{fichier} : bloc TEXTE_PUR absent`)
-	return source:sub(debut, fin - 1)
-end
-local blocParcours = blocTextePur("outils/monde/Parcours.luau")
-if blocParcours ~= blocTextePur("outils/monde/Ascension.luau") then
-	defaut("le bloc TEXTE_PUR de Parcours.luau et celui d'Ascension.luau ne sont plus identiques")
-end
+-- La règle de taille est celle de la bibliothèque commune (outils/monde/biblio/texte.luau), un seul exemplaire.
+local Texte = require("./biblio/texte")
 local ajusterTexte, METRIQUES, TAILLE_MIN, TAILLE_MAX =
-	luau.load(blocParcours .. "\nreturn ajusterTexte, METRIQUES, TAILLE_MIN, TAILLE_MAX", { debugName = "TEXTE_PUR" })()
+	Texte.ajusterTexte, Texte.METRIQUES, Texte.TAILLE_MIN, Texte.TAILLE_MAX
 
 -- Pire cas écrit par src/serveur/Classement.luau dans le TextLabel « Liste » des tableaux.
 local lignesClassement = {}
