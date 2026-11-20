@@ -81,13 +81,17 @@ end
 -- à 16 studs. Plus on monte, moins on avance : on perd la même part (10/16) du vide tenable quand on va au bout de
 -- la montée possible. Avec les trois capacités, cela redonne exactement la formule d'outils/monde/Ascension.luau :
 -- videTenable(montee) = 16 − 10 × montee / 9 ; une descente aide un peu (jusqu'à 4 studs de vide en plus).
-local CAPACITES = { course = 1, doubleSaut = 2, dash = 4 }
-local ORDRE = { "course", "doubleSaut", "dash" }
-local TOUTES = 7
-local MONTEE_SIMPLE, MONTEE_DOUBLE = 4.5, 9
-local VIDE_DEBOUT, COURSE_FACTEUR, DASH_VIDE = 6.5, 1.5, 8
-local MONTEE_MAX, VIDE_MAX, HAUTEUR_LIBRE = MONTEE_DOUBLE, 16, 5.5
-local PERTE = 10 / 16 -- part du vide tenable perdue quand on monte au maximum
+-- Toutes ces valeurs sont lues dans src/partage/Reglages.luau (COURSE_FACTEUR et le bloc CONTROLE_*), le masque
+-- des capacités dans outils/monde/physique.luau : rien n'est recopié ici.
+local CAPACITES = Physique.CAPACITES
+local ORDRE = Physique.ORDRE
+local TOUTES = Physique.TOUTES
+local MONTEE_SIMPLE, MONTEE_DOUBLE = Reglages.CONTROLE_MONTEE, Reglages.CONTROLE_MONTEE_DOUBLE
+local VIDE_DEBOUT, COURSE_FACTEUR, DASH_VIDE =
+	Reglages.CONTROLE_VIDE, Reglages.COURSE_FACTEUR, Reglages.CONTROLE_DASH_VIDE
+local VIDE_MAX, HAUTEUR_LIBRE = Reglages.CONTROLE_ASCENSION_VIDE_MAX, Reglages.CONTROLE_HAUTEUR_LIBRE
+local PERTE = Reglages.CONTROLE_ASCENSION_PERTE -- part du vide tenable perdue quand on monte au maximum
+local BONUS_DESCENTE, DESCENTE_PAS = Reglages.CONTROLE_ASCENSION_BONUS_DESCENTE, Reglages.CONTROLE_DESCENTE_PAS
 
 local function aCapacite(caps: number, nom: string): boolean
 	return bit32.band(caps, CAPACITES[nom]) ~= 0
@@ -108,7 +112,7 @@ end
 local function videTenableAvec(montee: number, caps: number): number
 	local v = videPlatAvec(caps) * (1 - PERTE * math.max(0, montee) / monteeMaxAvec(caps))
 	if montee < 0 then
-		v += math.min(4, -montee / 4)
+		v += math.min(BONUS_DESCENTE, -montee / DESCENTE_PAS)
 	end
 	return v
 end
@@ -389,11 +393,14 @@ for _, d in roblox.deserializeModel(fs.readFile(cheminParcours))[1]:GetDescendan
 	if d.CanCollide and d.CanQuery and d.Transparency < 1 and not d:HasTag("Mortel") then
 		table.insert(plateformesParcours, boite)
 	end
-	if d:HasTag("Checkpoint") and d:GetAttribute("Numero") == 15 then
+	if d:HasTag("Checkpoint") and d:GetAttribute("Numero") == Reglages.NB_ETAPES then
 		salle = boite
 	end
 end
-assert(salle, `aucune dalle taguée Checkpoint de Numero 15 dans {cheminParcours} (la salle de partiel)`)
+assert(
+	salle,
+	`aucune dalle taguée Checkpoint de Numero {Reglages.NB_ETAPES} (NB_ETAPES) dans {cheminParcours} (la salle de partiel)`
+)
 print(
 	string.format(
 		"%s : %d pièces solides, %d plateformes ; salle de partiel %s (x %.0f..%.0f, z %.0f..%.0f, dessus %.0f)",
@@ -745,7 +752,7 @@ end
 -- - Tournant : un tour complet en 2π / « Vitesse » autour de la verticale de son centre ;
 -- - Balancier : la sinusoïde de src/partage/Horaires.luau, d'amplitude « Amplitude » autour de « Pivot » ;
 -- - PiegeMur : le cycle de src/partage/Pieges.luau (`phasePiege`) — la pointe sort en « DureeSortie », rentre en
---   « DureeRentree » (elle frappe pendant les deux, cf. src/serveur/Obstacles.luau), puis reste rentrée « Repos »
+--   « DureeRentree » (elle frappe pendant les deux, cf. src/serveur/Obstacles/PiegeMur.luau), puis reste rentrée « Repos »
 --   secondes : c'est ça, la fenêtre de passage. On suppose le pire : un joueur qui reste dans la portée, donc un
 --   déclenchement dès la fin du repos, donc le cycle qui se répète.
 -- Pour chaque dalle qu'un obstacle peut toucher (sa boîte balayée, élargie des marges de contact du client,
@@ -765,7 +772,29 @@ local FENETRE_MIN, DUREE_SIMULEE, PAS_SIM = 1.2, 120, 0.02
 -- Plafond de poussée d'un piège de mur (src/partage/Pieges.luau le rabote à cette valeur). Recopié si la branche
 -- n'a pas encore le réglage, comme la formule des balanciers plus haut.
 local POUSSEE_MAX = Reglages.PIEGE_POUSSEE_MAX or 65
-local NB_TRANCHES = 6
+-- Le nombre de tranches se lit sur la carte, jamais recopié : outils/monde/Ascension.luau nomme chaque dalle du
+-- chemin « Pas<tranche>_<rang> » (nom déjà lu par casser-ascension.luau). Les tranches vont de 1 à N sans trou.
+local NB_TRANCHES = 0
+do
+	local vues = {}
+	for _, d in modele:GetDescendants() do
+		local s = d:IsA("BasePart") and tonumber(d.Name:match("^Pas(%d+)_%d+$"))
+		if s then
+			vues[s] = true
+			NB_TRANCHES = math.max(NB_TRANCHES, s)
+		end
+	end
+	if NB_TRANCHES == 0 then
+		defaut("aucune dalle « Pas<tranche>_<rang> » : nombre de tranches inconnu")
+		NB_TRANCHES = 1
+	end
+	for k = 1, NB_TRANCHES do
+		if not vues[k] then
+			defaut(`tranche {k} : aucune dalle « Pas{k}_<rang> » (tranches numérotées 1..{NB_TRANCHES} sans trou)`)
+		end
+	end
+	print(`tranches (lues sur la carte) : {NB_TRANCHES}`)
+end
 
 local function nombre(v): boolean
 	return typeof(v) == "number" and v == v and math.abs(v) ~= math.huge
@@ -1149,7 +1178,7 @@ end
 ---------------------------------------------------------------------------------------------------------------
 -- Plateformes mobiles : le saut qui y arrive et celui qui en part doivent rester possibles au moins 1,2 s par
 -- cycle. On suit le chemin retenu du pied au sommet pour savoir d'où l'on vient et où l'on va. Le va-et-vient est
--- celui du jeu (src/serveur/Obstacles.luau : tween Sine InOut qui repart en arrière, donc une période de 2 × Duree
+-- celui du jeu (src/serveur/Obstacles/Mobile.luau : tween Sine InOut qui repart en arrière, donc une période de 2 × Duree
 -- et une position en (1 − cos(π t / Duree)) / 2).
 print("\n-- Plateformes mobiles --")
 local rangDansChemin: { [Plateforme]: number } = {}

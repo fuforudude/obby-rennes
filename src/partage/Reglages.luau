@@ -206,6 +206,26 @@ local Reglages = {
 	-- tour des joueurs (meilleure hauteur, meilleur temps d'ascension : Regles.appliquerVersionTour). Le parcours, son
 	-- classement, l'aura et les capacités ne bougent pas ; les anciens records restent stockés. Ne fait que monter.
 	VERSION_TOUR = 1,
+
+	-- Contrôles de carte (outils/monde/verifier-sauts.luau et verifier-ascension.luau), le jeu ne les lit pas.
+	-- « Modèle prudent » du saut : il juge si un saut est jouable sans rage, volontairement sous la physique réelle
+	-- (la preuve qu'un vide est infranchissable, elle, prend la physique réelle : outils/monde/physique.luau).
+	-- Saut debout : CONTROLE_MONTEE de montée, CONTROLE_VIDE de vide à plat (× COURSE_FACTEUR en courant) ; double
+	-- saut : CONTROLE_MONTEE_DOUBLE de montée en tout ; dash : CONTROLE_DASH_VIDE de vide en plus. Une descente
+	-- donne 1 stud de vide en plus par CONTROLE_DESCENTE_PAS studs descendus, au plus CONTROLE_BONUS_DESCENTE (tuto)
+	-- ou CONTROLE_ASCENSION_BONUS_DESCENTE (tour). Dans la tour, le vide à plat est plafonné à
+	-- CONTROLE_ASCENSION_VIDE_MAX et on en perd la part CONTROLE_ASCENSION_PERTE en montant au maximum.
+	-- CONTROLE_HAUTEUR_LIBRE : hauteur libre minimale au-dessus d'une plateforme (en dessous, plafond trop bas).
+	CONTROLE_MONTEE = 4.5,
+	CONTROLE_MONTEE_DOUBLE = 9,
+	CONTROLE_VIDE = 6.5,
+	CONTROLE_DASH_VIDE = 8,
+	CONTROLE_DESCENTE_PAS = 4,
+	CONTROLE_BONUS_DESCENTE = 2.5,
+	CONTROLE_ASCENSION_BONUS_DESCENTE = 4,
+	CONTROLE_ASCENSION_VIDE_MAX = 16,
+	CONTROLE_ASCENSION_PERTE = 10 / 16,
+	CONTROLE_HAUTEUR_LIBRE = 5.5,
 }
 
 return table.freeze(Reglages)
