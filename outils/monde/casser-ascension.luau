@@ -184,7 +184,7 @@ pannes["famille-inconnue"] = function(): string
 	assert(debut and fin, `« {motif} » introuvable dans {generateur} : la panne ne sait plus où glisser la famille`)
 	code = string.sub(code, 1, fin) .. ' "Ascenseur",' .. string.sub(code, fin + 1)
 	local construire = luau.load(code, { debugName = `{generateur} (famille-inconnue)` })()
-	modele = construire(roblox)
+	modele = construire(roblox, require("./biblio")(roblox))
 	return "le générateur a accepté la famille « Ascenseur »"
 end
 

@@ -7,6 +7,11 @@
 --   zone-10            le dernier checkpoint rangé dans un dossier de zone « 10_Test » et monté de 60 studs : saut
 --                      infranchissable -> verifier-sauts : « inatteignable : 10_Test/Checkpoint<N> ». Avec l'ancien
 --                      motif de zone (« ^%d_ », un seul chiffre), ce dossier était ignoré et le contrôle restait vert.
+--   table-courte       carte intacte, mais la table du parcours (outils/monde/donnees/parcours.luau) perd son
+--                      dernier checkpoint -> verifier-contrats : « la table des checkpoints a <N> entrées »
+--   nom-de-zone        carte intacte, table dont le n°3 change de nom -> verifier-contrats : « zone n°3 »
+--   Ces deux-là écrivent la table trafiquée à côté de la carte (même nom, en .luau) : on la passe au contrôle par
+--   parcours=<fichier.luau> (outils/tout-verifier.mjs le fait dès que le fichier existe).
 --
 -- Le fichier écrit est jetable ; on le passe en premier argument au contrôle :
 --   lune run outils/monde/casser-contrats.luau zone-10 parcours-casse.rbxm
@@ -58,8 +63,24 @@ pannes["zone-10"] = function(): string
 	return `{cp.Name} rangé dans 10_Test et monté de 60 studs`
 end
 
+-- Table du parcours trafiquée : la vraie, chargée puis modifiée par `retouche` (code Luau sur `d`), écrite à côté.
+local function tableTrafiquee(retouche: string): string
+	local vraie = fs.readFile("outils/monde/donnees/parcours.luau")
+	local chemin = string.gsub(sortie, "%.rbxm$", "") .. ".luau"
+	fs.writeFile(chemin, `local d = (function()\n{vraie}\nend)()\n{retouche}\nreturn d\n`)
+	return chemin
+end
+
+pannes["table-courte"] = function(): string
+	return `table sans son dernier checkpoint : {tableTrafiquee("table.remove(d.checkpoints)")}`
+end
+
+pannes["nom-de-zone"] = function(): string
+	return `zone n°3 renommée : {tableTrafiquee('d.checkpoints[4].nomArche = "Zone trafiquée"')}`
+end
+
 local faire = pannes[panne]
-assert(faire, `panne « {panne} » inconnue (sans-checkpoint-7, tag-inconnu ou zone-10)`)
+assert(faire, `panne « {panne} » inconnue (sans-checkpoint-7, tag-inconnu, zone-10, table-courte ou nom-de-zone)`)
 local resume = faire()
 fs.writeFile(sortie, roblox.serializeModel({ modele }))
 print(`{source} -> {sortie} : {resume}`)

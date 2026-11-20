@@ -16,8 +16,8 @@
 --   ni aucun balancier (sur toute son amplitude) ne doit y entrer. C'est un défaut : le personnage réapparaît
 --   là, un danger qui y passe le pousserait ou le tuerait à la réapparition.
 -- - Textes de SurfaceGui (les deux cartes) : aucun TextScaled, TextSize de 12 à 100, texte qui tient dans son label (pire cas
---   des panneaux : les étapes de src/partage/Etapes.luau ; des tableaux : 10 lignes de classement) ; bloc TEXTE_PUR
---   identique dans Parcours.luau et Evenements.luau.
+--   des panneaux : les étapes de src/partage/Etapes.luau ; des tableaux : 10 lignes de classement), selon la règle
+--   de taille commune (outils/monde/biblio/texte.luau, la même que celle des générateurs).
 -- - PanneauAnecdote : Numero 0 à NB_ETAPES (Reglages), une fois chacun, un TextLabel « Titre » et un TextLabel « Corps », près de son checkpoint, sans toucher de
 --   pièce solide de la carte.
 -- Horaires : ceux de src/partage/Horaires.luau (chargé s'il existe, sinon même formule recopiée ci-dessous) ;
@@ -799,24 +799,14 @@ assert(nbFeux > 0, "aucun « ! » de préavis trouvé")
 
 ---------------------------------------------------------------------------------------------------------------
 -- Textes des SurfaceGui : jamais TextScaled (en jeu, il rend un texte minuscule sur ces panneaux), tous à taille
--- fixe de 12 à 100 px, à la ligne, et dont le texte tient dans son label. La règle de taille est celle du bloc
--- TEXTE_PUR de Parcours.luau et d'Evenements.luau (identique dans les deux, chargé ici). Les textes écrits à
+-- fixe de 12 à 100 px, à la ligne, et dont le texte tient dans son label. La règle de taille est celle,
+-- commune aux générateurs, de outils/monde/biblio/texte.luau (un seul exemplaire). Les textes écrits à
 -- l'exécution sont essayés dans leur pire cas : Titre et Corps des panneaux d'anecdotes avec chacune des 16 étapes de
 -- src/partage/Etapes.luau, Liste des tableaux avec 10 lignes « %2d. %-14s valeur » (src/serveur/Classement.luau).
 print("\n== Textes des SurfaceGui (taille fixe) ==")
-local function blocTextePur(chemin: string): string
-	local source = fs.readFile(chemin):gsub("\r\n", "\n")
-	local debut = source:find("-- DEBUT TEXTE_PUR\n", 1, true)
-	local fin = source:find("\t-- FIN TEXTE_PUR", 1, true)
-	assert(debut and fin and fin > debut, `{chemin} : bloc TEXTE_PUR absent`)
-	return source:sub(debut, fin - 1)
-end
-local blocParcours = blocTextePur("outils/monde/Parcours.luau")
-if blocParcours ~= blocTextePur("outils/monde/Evenements.luau") then
-	defaut("le bloc TEXTE_PUR de Parcours.luau et celui d'Evenements.luau ne sont plus identiques")
-end
+local Texte = require("./biblio/texte")
 local ajusterTexte, METRIQUES, TAILLE_MIN, TAILLE_MAX =
-	luau.load(blocParcours .. "\nreturn ajusterTexte, METRIQUES, TAILLE_MIN, TAILLE_MAX", { debugName = "TEXTE_PUR" })()
+	Texte.ajusterTexte, Texte.METRIQUES, Texte.TAILLE_MIN, Texte.TAILLE_MAX
 
 local Etapes = luau.load(fs.readFile("src/partage/Etapes.luau"), { debugName = "Etapes" })()
 local zonesEtapes, corpsEtapes = {}, {}

@@ -118,9 +118,20 @@ etape("Génération de la carte, carte commitée = carte générée", () => {
 });
 
 reussir("Contrôle des contrats (tags, checkpoints 0..NB_ETAPES)", ...lune("outils/monde/verifier-contrats.luau"));
-reussir("Contrôle des sauts du tuto", ...lune("outils/monde/verifier-sauts.luau"));
-reussir("Contrôle des événements", ...lune("outils/monde/verifier-evenements.luau"));
-reussir("Contrôle de l'ascension", ...lune("outils/monde/verifier-ascension.luau"));
+// Registre des cartes (outils/monde/monde.json, lu aussi par generer.luau et verifier-contrats.luau) : chaque carte
+// nomme son contrôle de carte (« controle »), lancé ici sans argument (il lit ses cartes par défaut). Une carte sans
+// contrôle, ou dont le contrôle n'existe pas, est refusée : ajouter une carte, c'est aussi la contrôler.
+const registre = JSON.parse(readFileSync(join(racine, "outils/monde/monde.json"), "utf8"));
+for (const [nom, entree] of Object.entries(registre)) {
+  if (typeof entree.controle !== "string" || !existsSync(join(racine, entree.controle))) {
+    echouer(
+      "registre des cartes",
+      "",
+      `outils/monde/monde.json : la carte ${nom} n'a pas de « controle » existant (${entree.controle ?? "absent"})`,
+    );
+  }
+  reussir(`Contrôle de la carte ${nom} (${entree.controle})`, ...lune(entree.controle));
+}
 
 // Cartes cassées : chacune est fabriquée à partir de la carte générée, puis passée à son contrôle, qui doit échouer
 // (code non nul) en affichant chacun des messages attendus. Un contrôle qui échoue pour une autre raison ne prouve
@@ -133,6 +144,8 @@ const cassees = [
   ["casser-contrats", "sans-checkpoint-7", "verifier-contrats", ["aucun checkpoint de Numero 7"]],
   ["casser-contrats", "tag-inconnu", "verifier-contrats", ["tag inconnu « PiegeInconnu »"]],
   ["casser-contrats", "zone-10", "verifier-sauts", ["inatteignable : 10_Test/Checkpoint"]],
+  ["casser-contrats", "table-courte", "verifier-contrats", ["la table des checkpoints a", "NB_ETAPES + 1"]],
+  ["casser-contrats", "nom-de-zone", "verifier-contrats", ["zone n°3 : « Zone trafiquée »"]],
   [
     "casser-ascension",
     "marches",
@@ -175,7 +188,12 @@ for (const [fabrique, panne, controle, attendus] of cassees) {
       echouer(`fabrication de ${fabrique} ${panne}`, f.sortie, `code ${f.code}`);
     }
     // verifier-ascension lit le tuto en second argument (la salle de partiel) ; les autres n'en prennent qu'un.
+    // Une panne peut aussi trafiquer la table du parcours : elle l'écrit à côté de la carte, en .luau.
     const args = controle === "verifier-ascension" ? [fichier, PARCOURS] : [fichier];
+    const table = fichier.replace(/\.rbxm$/, ".luau");
+    if (existsSync(join(racine, table))) {
+      args.push(`parcours=${table}`);
+    }
     const c = lancer(...lune(`outils/monde/${controle}.luau`, ...args));
     if (c.code === 0) {
       echouer(`carte cassée ${fabrique} ${panne}`, c.sortie, `${controle} l'accepte : il ne prouve plus rien`);
