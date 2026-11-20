@@ -44,8 +44,8 @@ local TOUCHE_VOL = Enum.KeyCode.F
 local DUREE_FOV = 0.2 -- secondes : le champ de vision de la course s'élargit et revient en douceur
 local DUREE_FOV_DASH = 0.06 -- secondes : le champ de vision s'élargit « d'un coup » au départ du dash
 local TAILLE_BOUTON = 64 -- pixels
-local ATTRIBUT_DOUBLE_SAUT = "CapaciteDoubleSautPrete"
-local ATTRIBUT_DASH = "CapaciteDashPrete"
+local ATTRIBUT_DOUBLE_SAUT = Mouvement.ATTRIBUT_DOUBLE_SAUT_PRET
+local ATTRIBUT_DASH = Mouvement.ATTRIBUT_DASH_PRET
 -- Silence minimal entre deux JumpRequest pour que le second compte comme un appui neuf. Tant que la touche est tenue,
 -- JumpRequest se répète à chaque image (16 à 100 ms selon la fréquence d'images) : 0,15 s sépare sûrement un appui
 -- maintenu d'un relâchement suivi d'un nouvel appui.

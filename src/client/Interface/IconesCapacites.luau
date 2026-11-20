@@ -9,6 +9,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Affichage = require(ReplicatedStorage.Partage.Affichage)
+local Capacites = require(ReplicatedStorage.Partage.Capacites)
 
 local Composants = require(script.Parent.Composants)
 local Textes = require(script.Parent.Textes)
@@ -17,8 +18,8 @@ local COULEURS = Composants.COULEURS
 local creer = Composants.creer
 local jouer = Composants.jouer
 
-local ATTRIBUT_DOUBLE_SAUT = "CapaciteDoubleSautPrete"
-local ATTRIBUT_DASH = "CapaciteDashPrete"
+local ATTRIBUT_DOUBLE_SAUT = Capacites.ATTRIBUT_DOUBLE_SAUT_PRET
+local ATTRIBUT_DASH = Capacites.ATTRIBUT_DASH_PRET
 local DUREE_RECHARGE = 0.1 -- le retour en couleur, très court
 
 local COULEUR_CAPACITE: { [string]: Color3 } = {

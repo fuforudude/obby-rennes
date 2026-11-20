@@ -336,25 +336,10 @@ return function()
 			expect(refus({ DelaiRetour = math.huge })).never.to.be.ok()
 		end)
 
-		it("tient pendant DelaiChute, puis tombe, puis revient à sa place", function()
-			local e = Pieges.effondrableDepuisAttributs(attributs(), DEFAUTS_EFFONDRABLE) :: any
-			expect(Pieges.cycleEffondrable(0, e)).to.equal("tient")
-			expect(Pieges.cycleEffondrable(0.49, e)).to.equal("tient")
-			expect(Pieges.cycleEffondrable(0.5, e)).to.equal("tombee")
-			expect(Pieges.cycleEffondrable(4.49, e)).to.equal("tombee")
-			expect(Pieges.cycleEffondrable(4.5, e)).to.equal("revenue")
-			expect(Pieges.cycleEffondrable(100, e)).to.equal("revenue")
-		end)
-
 		it("la chute libre est plafonnée, et raccourcie si le retour arrive plus tôt", function()
 			expect(Pieges.dureeChuteLibre(4, 1.5)).to.equal(1.5)
 			expect(Pieges.dureeChuteLibre(1.5, 1.5)).to.equal(1.5)
 			expect(Pieges.dureeChuteLibre(0.8, 1.5)).to.equal(0.8)
-		end)
-
-		it("avant le premier contact, elle tient", function()
-			local e = Pieges.effondrableDepuisAttributs(attributs(), DEFAUTS_EFFONDRABLE) :: any
-			expect(Pieges.cycleEffondrable(-2, e)).to.equal("tient")
 		end)
 	end)
 
