@@ -51,7 +51,7 @@ type Plateforme = {
 }
 local plateformes: { Plateforme } = {}
 for _, d in modele:GetDescendants() do
-	if not d:IsA("BasePart") or not (d.Parent and d.Parent.Name:match("^%d_")) then
+	if not d:IsA("BasePart") or not (d.Parent and d.Parent.Name:match("^%d+_")) then
 		continue
 	end
 	local marchable = d.CanCollide and d.CanQuery and not d:HasTag("Mortel") and not d:HasTag("Tournant")

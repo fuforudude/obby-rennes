@@ -346,4 +346,258 @@ return function()
 			expect(achats[3]).to.equal("5")
 		end)
 	end)
+
+	describe("sauvegardes versionnées : migrer lit `version` et applique les migrations dans l'ordre", function()
+		-- Une sauvegarde v1 telle qu'écrite par le jeu avant cette version : tous les champs de Regles.Donnees v1.
+		local function sauvegardeV1(): { [string]: any }
+			return {
+				version = 1,
+				etape = 7,
+				tutoFini = true,
+				meilleurTemps = 251.37,
+				aura = 18450,
+				achats = { "achat-1", "achat-2" },
+				capacites = { course = true, doubleSaut = true, dash = true },
+				meilleureHauteur = 214,
+				meilleurTempsAscension = 96.4,
+			}
+		end
+
+		it("une sauvegarde v1 réelle migre sans perdre un seul champ", function()
+			local d = Regles.migrer(sauvegardeV1(), 15)
+			expect(d.version).to.equal(Regles.VERSION_DONNEES)
+			expect(d.etape).to.equal(7)
+			expect(d.tutoFini).to.equal(true)
+			expect(d.meilleurTemps).to.equal(251.37)
+			expect(d.aura).to.equal(18450)
+			expect(#d.achats).to.equal(2)
+			expect(d.achats[1]).to.equal("achat-1")
+			expect(d.achats[2]).to.equal("achat-2")
+			expect(d.capacites.course).to.equal(true)
+			expect(d.capacites.doubleSaut).to.equal(true)
+			expect(d.capacites.dash).to.equal(true)
+			expect(d.meilleureHauteur).to.equal(214)
+			expect(d.meilleurTempsAscension).to.equal(96.4)
+		end)
+
+		it("la migration 1 -> 2 range les records d'une sauvegarde v1 dans la première tour", function()
+			local d = Regles.migrer(sauvegardeV1(), 15)
+			expect(d.versionTour).to.equal(1)
+			expect(next(d.anciensRecordsTour)).never.to.be.ok()
+		end)
+
+		it("une sauvegarde sans version (ou abîmée) est lue comme une v1", function()
+			local sans = sauvegardeV1()
+			sans.version = nil
+			expect(Regles.migrer(sans, 15).versionTour).to.equal(1)
+			expect(Regles.migrer(sans, 15).aura).to.equal(18450)
+			local abimee = sauvegardeV1()
+			abimee.version = "deux"
+			expect(Regles.migrer(abimee, 15).meilleureHauteur).to.equal(214)
+		end)
+
+		it("ne modifie pas la table lue (la migration travaille sur une copie)", function()
+			local brutes = sauvegardeV1()
+			Regles.migrer(brutes, 15)
+			expect(brutes.version).to.equal(1)
+			expect(brutes.versionTour).never.to.be.ok()
+		end)
+
+		it("relit une sauvegarde déjà à la version actuelle sans rien changer", function()
+			local une = Regles.migrer(sauvegardeV1(), 15)
+			local deux = Regles.migrer(une, 15)
+			expect(deux.version).to.equal(Regles.VERSION_DONNEES)
+			expect(deux.versionTour).to.equal(1)
+			expect(deux.aura).to.equal(18450)
+			expect(deux.meilleureHauteur).to.equal(214)
+		end)
+
+		it("un joueur neuf est à la version actuelle, sur la première tour", function()
+			local d = Regles.donneesNeuves()
+			expect(d.version).to.equal(Regles.VERSION_DONNEES)
+			expect(d.versionTour).to.equal(1)
+			expect(next(d.anciensRecordsTour)).never.to.be.ok()
+		end)
+
+		it("garde les records archivés et écarte ceux qui sont abîmés", function()
+			local brutes = sauvegardeV1()
+			brutes.version = 2
+			brutes.versionTour = 3
+			brutes.anciensRecordsTour = {
+				["1"] = { meilleureHauteur = 190.6, meilleurTempsAscension = 80 },
+				["2"] = { meilleureHauteur = -4, meilleurTempsAscension = 0 / 0 },
+				["x"] = "abîmé",
+				[7] = { meilleureHauteur = 50, meilleurTempsAscension = 50 },
+			}
+			local d = Regles.migrer(brutes, 15)
+			expect(d.versionTour).to.equal(3)
+			expect(d.anciensRecordsTour["1"].meilleureHauteur).to.equal(190)
+			expect(d.anciensRecordsTour["1"].meilleurTempsAscension).to.equal(80)
+			expect(d.anciensRecordsTour["2"].meilleureHauteur).to.equal(0)
+			expect(d.anciensRecordsTour["2"].meilleurTempsAscension).to.equal(0)
+			expect(d.anciensRecordsTour["x"]).never.to.be.ok()
+			expect((d.anciensRecordsTour :: any)[7]).never.to.be.ok()
+		end)
+
+		it("estPlusRecente : une sauvegarde d'une version plus haute que le code est reconnue", function()
+			local brutes = sauvegardeV1()
+			brutes.version = Regles.VERSION_DONNEES + 1
+			expect(Regles.estPlusRecente(brutes)).to.equal(true)
+			brutes.version = Regles.VERSION_DONNEES + 0.5
+			expect(Regles.estPlusRecente(brutes)).to.equal(true)
+		end)
+
+		it("estPlusRecente : version actuelle, ancienne, absente ou abîmée ne le sont pas", function()
+			local brutes = sauvegardeV1()
+			brutes.version = Regles.VERSION_DONNEES
+			expect(Regles.estPlusRecente(brutes)).to.equal(false)
+			brutes.version = 1
+			expect(Regles.estPlusRecente(brutes)).to.equal(false)
+			brutes.version = nil
+			expect(Regles.estPlusRecente(brutes)).to.equal(false)
+			brutes.version = "99"
+			expect(Regles.estPlusRecente(brutes)).to.equal(false)
+			brutes.version = 0 / 0
+			expect(Regles.estPlusRecente(brutes)).to.equal(false)
+			brutes.version = math.huge
+			expect(Regles.estPlusRecente(brutes)).to.equal(false)
+			expect(Regles.estPlusRecente(nil)).to.equal(false)
+			expect(Regles.estPlusRecente("abîmé")).to.equal(false)
+			expect(Regles.estPlusRecente(Regles.donneesNeuves())).to.equal(false)
+		end)
+
+		it("une version de tour abîmée garde les records (lue comme la première tour)", function()
+			local brutes = sauvegardeV1()
+			brutes.version = 2
+			brutes.versionTour = "1"
+			local d = Regles.migrer(brutes, 15)
+			expect(d.versionTour).to.equal(1)
+			expect(d.meilleureHauteur).to.equal(214)
+		end)
+	end)
+
+	describe("version de tour : la changer fait repartir les records de tour à vide, sans toucher au reste", function()
+		local function joueurDeLaTour1()
+			return Regles.migrer({
+				version = 1,
+				etape = 15,
+				tutoFini = true,
+				meilleurTemps = 250,
+				aura = 9000,
+				achats = { "a" },
+				capacites = { course = true, dash = true },
+				meilleureHauteur = 214,
+				meilleurTempsAscension = 96.4,
+			}, 15)
+		end
+
+		it("version 1 : les records de tour sont conservés tels quels", function()
+			local d = joueurDeLaTour1()
+			Regles.appliquerVersionTour(d, 1)
+			expect(d.versionTour).to.equal(1)
+			expect(d.meilleureHauteur).to.equal(214)
+			expect(d.meilleurTempsAscension).to.equal(96.4)
+			expect(next(d.anciensRecordsTour)).never.to.be.ok()
+		end)
+
+		it("version 2 : records de tour vides, le reste intact", function()
+			local d = joueurDeLaTour1()
+			Regles.appliquerVersionTour(d, 2)
+			expect(d.versionTour).to.equal(2)
+			expect(d.meilleureHauteur).to.equal(0)
+			expect(d.meilleurTempsAscension).to.equal(0)
+			-- parcours, aura, capacités : rien ne bouge
+			expect(d.etape).to.equal(15)
+			expect(d.tutoFini).to.equal(true)
+			expect(d.meilleurTemps).to.equal(250)
+			expect(d.aura).to.equal(9000)
+			expect(d.achats[1]).to.equal("a")
+			expect(d.capacites.course).to.equal(true)
+			expect(d.capacites.dash).to.equal(true)
+		end)
+
+		it("version 2 : les anciens records restent stockés, rangés sous leur version", function()
+			local d = joueurDeLaTour1()
+			Regles.appliquerVersionTour(d, 2)
+			expect(d.anciensRecordsTour["1"].meilleureHauteur).to.equal(214)
+			expect(d.anciensRecordsTour["1"].meilleurTempsAscension).to.equal(96.4)
+		end)
+
+		it(
+			"survit à l'aller-retour par la sauvegarde : relue, la tour 2 garde ses records et l'archive reste",
+			function()
+				local d = joueurDeLaTour1()
+				Regles.appliquerVersionTour(d, 2)
+				d.meilleureHauteur = 30 -- un premier record sur la nouvelle tour
+				local relue = Regles.migrer(d, 15)
+				Regles.appliquerVersionTour(relue, 2)
+				expect(relue.meilleureHauteur).to.equal(30)
+				expect(relue.anciensRecordsTour["1"].meilleureHauteur).to.equal(214)
+			end
+		)
+
+		it("profil d'une tour plus récente que le serveur : rien n'est archivé ni remis à zéro", function()
+			local d = joueurDeLaTour1()
+			d.versionTour = 3
+			d.meilleureHauteur = 120
+			d.meilleurTempsAscension = 70
+			d.anciensRecordsTour["2"] = { meilleureHauteur = 300, meilleurTempsAscension = 60 }
+			Regles.appliquerVersionTour(d, 2) -- ancien serveur pendant un déploiement
+			expect(d.versionTour).to.equal(3)
+			expect(d.meilleureHauteur).to.equal(120)
+			expect(d.meilleurTempsAscension).to.equal(70)
+			expect(d.anciensRecordsTour["2"].meilleureHauteur).to.equal(300)
+			expect(d.anciensRecordsTour["2"].meilleurTempsAscension).to.equal(60)
+			expect(d.anciensRecordsTour["3"]).never.to.be.ok()
+		end)
+
+		it(
+			"une archive déjà présente est fusionnée (plus grande hauteur, meilleur temps), jamais écrasée",
+			function()
+				local d = joueurDeLaTour1() -- 214 studs, 96.4 s
+				d.anciensRecordsTour["1"] = { meilleureHauteur = 250, meilleurTempsAscension = 120 }
+				Regles.appliquerVersionTour(d, 2)
+				expect(d.anciensRecordsTour["1"].meilleureHauteur).to.equal(250)
+				expect(d.anciensRecordsTour["1"].meilleurTempsAscension).to.equal(96.4)
+
+				local e = joueurDeLaTour1()
+				e.meilleurTempsAscension = 0 -- jamais arrivé au sommet sur ce profil
+				e.anciensRecordsTour["1"] = { meilleureHauteur = 100, meilleurTempsAscension = 80 }
+				Regles.appliquerVersionTour(e, 2)
+				expect(e.anciensRecordsTour["1"].meilleureHauteur).to.equal(214)
+				expect(e.anciensRecordsTour["1"].meilleurTempsAscension).to.equal(80)
+
+				local f = joueurDeLaTour1()
+				f.anciensRecordsTour["1"] = { meilleureHauteur = 50, meilleurTempsAscension = 0 }
+				Regles.appliquerVersionTour(f, 2)
+				expect(f.anciensRecordsTour["1"].meilleureHauteur).to.equal(214)
+				expect(f.anciensRecordsTour["1"].meilleurTempsAscension).to.equal(96.4)
+			end
+		)
+
+		it("version de tour abîmée dans la sauvegarde : records archivés sous la tour 1, pas perdus", function()
+			for _, abimee in { "deux", -1, 0, 1.5, 0 / 0 } do
+				local brutes = {
+					version = 2,
+					etape = 3,
+					meilleureHauteur = 214,
+					meilleurTempsAscension = 96.4,
+					versionTour = abimee,
+				}
+				local d = Regles.migrer(brutes, 15)
+				Regles.appliquerVersionTour(d, 2)
+				expect(d.versionTour).to.equal(2)
+				expect(d.meilleureHauteur).to.equal(0)
+				expect(d.anciensRecordsTour["1"].meilleureHauteur).to.equal(214)
+				expect(d.anciensRecordsTour["1"].meilleurTempsAscension).to.equal(96.4)
+			end
+		end)
+
+		it("un joueur sans record de tour n'archive rien", function()
+			local d = Regles.donneesNeuves()
+			Regles.appliquerVersionTour(d, 2)
+			expect(d.versionTour).to.equal(2)
+			expect(next(d.anciensRecordsTour)).never.to.be.ok()
+		end)
+	end)
 end

@@ -13,6 +13,8 @@
 --   portent les attributs de leur contrat, et **chacune laisse au moins 1,2 s de passage libre par cycle** sur
 --   chaque dalle qu'elle menace (simulation sur 120 s, méthode de outils/monde/verifier-evenements.luau) ; aucun
 --   obstacle ne couvre à lui seul tout le volume où se tient le personnage, et aucun ne traverse une dalle ;
+--   chaque famille a son simulateur dans le registre FAMILLES, et tout tag posé sur la tour qui n'est ni une
+--   famille ni un tag de structure (pied, sommet, étages, tableaux) est un piège sans simulateur, donc un défaut ;
 -- - **aucune pièce taguée « Palier »** : le système de paliers est supprimé (spec 2026-11-18-tour-exigeante) ;
 -- - le pied est atteignable depuis la salle de partiel : un chemin existe de la dalle du checkpoint 15 (cherchée
 --   dans Parcours.rbxm, elle n'est pas dans ce .rbxm) au pied, en 4 sauts au plus, dont le premier pose sur la dalle
@@ -29,8 +31,8 @@
 --   d'une plateforme du tuto) ;
 -- - toutes les plateformes sont ancrées et horizontales (une dalle penchée fausserait tout le reste) ;
 -- - tous les TextLabel de SurfaceGui sont à taille fixe (jamais TextScaled), de 12 à 100 px, et leur texte tient
---   dans son label (pire cas des tableaux : 10 lignes de classement) ; le bloc TEXTE_PUR d'Ascension.luau est
---   identique à celui de Parcours.luau ;
+--   dans son label (pire cas des tableaux : 10 lignes de classement), selon la règle de taille commune
+--   (outils/monde/biblio/texte.luau, la même que celle des générateurs) ;
 -- - le budget de pièces (1 500) est tenu.
 -- Code de sortie 1 au moindre défaut.
 local fs = require("@lune/fs")
@@ -81,13 +83,17 @@ end
 -- à 16 studs. Plus on monte, moins on avance : on perd la même part (10/16) du vide tenable quand on va au bout de
 -- la montée possible. Avec les trois capacités, cela redonne exactement la formule d'outils/monde/Ascension.luau :
 -- videTenable(montee) = 16 − 10 × montee / 9 ; une descente aide un peu (jusqu'à 4 studs de vide en plus).
-local CAPACITES = { course = 1, doubleSaut = 2, dash = 4 }
-local ORDRE = { "course", "doubleSaut", "dash" }
-local TOUTES = 7
-local MONTEE_SIMPLE, MONTEE_DOUBLE = 4.5, 9
-local VIDE_DEBOUT, COURSE_FACTEUR, DASH_VIDE = 6.5, 1.5, 8
-local MONTEE_MAX, VIDE_MAX, HAUTEUR_LIBRE = MONTEE_DOUBLE, 16, 5.5
-local PERTE = 10 / 16 -- part du vide tenable perdue quand on monte au maximum
+-- Toutes ces valeurs sont lues dans src/partage/Reglages.luau (COURSE_FACTEUR et le bloc CONTROLE_*), le masque
+-- des capacités dans outils/monde/physique.luau : rien n'est recopié ici.
+local CAPACITES = Physique.CAPACITES
+local ORDRE = Physique.ORDRE
+local TOUTES = Physique.TOUTES
+local MONTEE_SIMPLE, MONTEE_DOUBLE = Reglages.CONTROLE_MONTEE, Reglages.CONTROLE_MONTEE_DOUBLE
+local VIDE_DEBOUT, COURSE_FACTEUR, DASH_VIDE =
+	Reglages.CONTROLE_VIDE, Reglages.COURSE_FACTEUR, Reglages.CONTROLE_DASH_VIDE
+local VIDE_MAX, HAUTEUR_LIBRE = Reglages.CONTROLE_ASCENSION_VIDE_MAX, Reglages.CONTROLE_HAUTEUR_LIBRE
+local PERTE = Reglages.CONTROLE_ASCENSION_PERTE -- part du vide tenable perdue quand on monte au maximum
+local BONUS_DESCENTE, DESCENTE_PAS = Reglages.CONTROLE_ASCENSION_BONUS_DESCENTE, Reglages.CONTROLE_DESCENTE_PAS
 
 local function aCapacite(caps: number, nom: string): boolean
 	return bit32.band(caps, CAPACITES[nom]) ~= 0
@@ -108,7 +114,7 @@ end
 local function videTenableAvec(montee: number, caps: number): number
 	local v = videPlatAvec(caps) * (1 - PERTE * math.max(0, montee) / monteeMaxAvec(caps))
 	if montee < 0 then
-		v += math.min(4, -montee / 4)
+		v += math.min(BONUS_DESCENTE, -montee / DESCENTE_PAS)
 	end
 	return v
 end
@@ -245,11 +251,35 @@ local plateformes: { Plateforme } = {}
 local solides: { Plateforme } = {}
 local mortels: { Plateforme } = {}
 local etages = {}
-local obstacles: { [string]: { any } } =
-	{ Laser = {}, Tournant = {}, Balancier = {}, PiegeMur = {}, Mobile = {}, Effondrable = {} }
-local FAMILLES_PIECE = { "Laser", "Tournant", "Balancier", "Mobile", "Effondrable" }
--- Les obstacles solides (barre tournante, pancarte qui bascule) poussent, mais on ne s'y tient pas : ils ne sont ni
--- des plateformes (ils ne sont pas horizontaux) ni des pièces solides au sens du plafond bas (ils bougent).
+-- Registre des familles d'obstacles (une par tag posé par le registre `poseurs` d'outils/monde/Ascension.luau) :
+-- - `piece` : le tag est sur une BasePart (sinon sur un Model, comme PiegeMur) ;
+-- - `pousse` : obstacle solide qui pousse (barre tournante, pancarte qui bascule) : on ne s'y tient pas, il n'est ni
+--   une plateforme (il n'est pas horizontal) ni une pièce solide au sens du plafond bas (il bouge) ;
+-- - `simuler(instance)` : son contrôle, attaché plus bas (section « Les familles d'obstacles »).
+-- Nouvelle famille = une entrée ici et son simulateur. Tout tag posé sur la tour qui n'est ni une famille ni dans
+-- TAGS_STRUCTURE fait échouer le contrôle : un piège que personne ne simule ne passe pas en silence.
+type Famille = { piece: boolean, pousse: boolean?, simuler: ((any) -> ())? }
+local FAMILLES: { [string]: Famille } = {
+	Laser = { piece = true },
+	Tournant = { piece = true, pousse = true },
+	Balancier = { piece = true, pousse = true },
+	PiegeMur = { piece = false },
+	Mobile = { piece = true },
+	Effondrable = { piece = true },
+}
+-- Les tags de la tour qui ne sont pas des pièges, et qui sont contrôlés ailleurs dans ce fichier.
+local TAGS_STRUCTURE = {
+	PiedAscension = true,
+	SommetAscension = true,
+	EtageAscension = true,
+	TableauHauteur = true,
+	TableauAscension = true,
+}
+local obstacles: { [string]: { any } } = {}
+for famille in FAMILLES do
+	obstacles[famille] = {}
+end
+local tagsPoses: { [string]: string } = {} -- tag -> première instance qui le porte
 local pied, sommet
 local depart -- la dalle marquée DepartAcces (sortie de la salle de partiel)
 local tableaux = {}
@@ -278,10 +308,11 @@ for _, d in modele:GetDescendants() do
 	if d:HasTag("Mortel") then
 		table.insert(mortels, boite)
 	end
-	local estObstacle = d:HasTag("Tournant") or d:HasTag("Balancier")
-	for _, famille in FAMILLES_PIECE do
-		if d:HasTag(famille) then
+	local estObstacle = false
+	for famille, def in FAMILLES do
+		if def.piece and d:HasTag(famille) then
 			table.insert(obstacles[famille], d)
+			estObstacle = estObstacle or def.pousse == true
 		end
 	end
 	-- Une plateforme mobile est atteignable sur toute sa course : son emprise est l'union des deux bouts. Le
@@ -341,8 +372,12 @@ for _, d in modele:GetDescendants() do
 end
 
 for _, m in modele:GetDescendants() do
-	if m:HasTag("PiegeMur") then
-		table.insert(obstacles.PiegeMur, m)
+	for _, tag in m:GetTags() do
+		tagsPoses[tag] = tagsPoses[tag] or m:GetFullName()
+		local def = FAMILLES[tag]
+		if def and not def.piece then
+			table.insert(obstacles[tag], m)
+		end
 	end
 	if m:HasTag("Palier") then
 		defaut(`{m:GetFullName()} : tag « Palier » (le système de paliers est supprimé)`)
@@ -389,11 +424,14 @@ for _, d in roblox.deserializeModel(fs.readFile(cheminParcours))[1]:GetDescendan
 	if d.CanCollide and d.CanQuery and d.Transparency < 1 and not d:HasTag("Mortel") then
 		table.insert(plateformesParcours, boite)
 	end
-	if d:HasTag("Checkpoint") and d:GetAttribute("Numero") == 15 then
+	if d:HasTag("Checkpoint") and d:GetAttribute("Numero") == Reglages.NB_ETAPES then
 		salle = boite
 	end
 end
-assert(salle, `aucune dalle taguée Checkpoint de Numero 15 dans {cheminParcours} (la salle de partiel)`)
+assert(
+	salle,
+	`aucune dalle taguée Checkpoint de Numero {Reglages.NB_ETAPES} (NB_ETAPES) dans {cheminParcours} (la salle de partiel)`
+)
 print(
 	string.format(
 		"%s : %d pièces solides, %d plateformes ; salle de partiel %s (x %.0f..%.0f, z %.0f..%.0f, dessus %.0f)",
@@ -736,7 +774,8 @@ do
 end
 
 ---------------------------------------------------------------------------------------------------------------
--- Les six familles d'obstacles.
+-- Les familles d'obstacles : un simulateur par entrée du registre FAMILLES (FAMILLES.<tag>.simuler), lancé sur
+-- chaque instance de la famille.
 --
 -- Chaque obstacle qui bouge est ramené à un cycle et à la pose (CFrame + taille) qu'il occupe à l'instant t :
 -- - Laser : va-et-vient régulier de « Depart » à « Arrivee » sur « Periode », calé sur « Decalage » (même principe
@@ -745,7 +784,7 @@ end
 -- - Tournant : un tour complet en 2π / « Vitesse » autour de la verticale de son centre ;
 -- - Balancier : la sinusoïde de src/partage/Horaires.luau, d'amplitude « Amplitude » autour de « Pivot » ;
 -- - PiegeMur : le cycle de src/partage/Pieges.luau (`phasePiege`) — la pointe sort en « DureeSortie », rentre en
---   « DureeRentree » (elle frappe pendant les deux, cf. src/serveur/Obstacles.luau), puis reste rentrée « Repos »
+--   « DureeRentree » (elle frappe pendant les deux, cf. src/serveur/Obstacles/PiegeMur.luau), puis reste rentrée « Repos »
 --   secondes : c'est ça, la fenêtre de passage. On suppose le pire : un joueur qui reste dans la portée, donc un
 --   déclenchement dès la fin du repos, donc le cycle qui se répète.
 -- Pour chaque dalle qu'un obstacle peut toucher (sa boîte balayée, élargie des marges de contact du client,
@@ -762,10 +801,31 @@ local MARGE = Vector3.new(
 	Reglages.EVENEMENT_MARGE_HORIZONTALE
 )
 local FENETRE_MIN, DUREE_SIMULEE, PAS_SIM = 1.2, 120, 0.02
--- Plafond de poussée d'un piège de mur (src/partage/Pieges.luau le rabote à cette valeur). Recopié si la branche
--- n'a pas encore le réglage, comme la formule des balanciers plus haut.
-local POUSSEE_MAX = Reglages.PIEGE_POUSSEE_MAX or 65
-local NB_TRANCHES = 6
+-- Plafond de poussée d'un piège de mur (src/partage/Pieges.luau le rabote à cette valeur).
+local POUSSEE_MAX = Reglages.PIEGE_POUSSEE_MAX
+-- Le nombre de tranches se lit sur la carte, jamais recopié : outils/monde/Ascension.luau nomme chaque dalle du
+-- chemin « Pas<tranche>_<rang> » (nom déjà lu par casser-ascension.luau). Les tranches vont de 1 à N sans trou.
+local NB_TRANCHES = 0
+do
+	local vues = {}
+	for _, d in modele:GetDescendants() do
+		local s = d:IsA("BasePart") and tonumber(d.Name:match("^Pas(%d+)_%d+$"))
+		if s then
+			vues[s] = true
+			NB_TRANCHES = math.max(NB_TRANCHES, s)
+		end
+	end
+	if NB_TRANCHES == 0 then
+		defaut("aucune dalle « Pas<tranche>_<rang> » : nombre de tranches inconnu")
+		NB_TRANCHES = 1
+	end
+	for k = 1, NB_TRANCHES do
+		if not vues[k] then
+			defaut(`tranche {k} : aucune dalle « Pas{k}_<rang> » (tranches numérotées 1..{NB_TRANCHES} sans trou)`)
+		end
+	end
+	print(`tranches (lues sur la carte) : {NB_TRANCHES}`)
+end
 
 local function nombre(v): boolean
 	return typeof(v) == "number" and v == v and math.abs(v) ~= math.huge
@@ -786,8 +846,10 @@ end
 
 type Mouvant = { nom: string, famille: string, periode: number, hauteur: number, poseA: (number) -> (any, any) }
 local mouvants: { Mouvant } = {}
-local parFamille: { [string]: number } =
-	{ Laser = 0, Tournant = 0, Balancier = 0, PiegeMur = 0, Mobile = 0, Effondrable = 0 }
+local parFamille: { [string]: number } = {}
+for famille in FAMILLES do
+	parFamille[famille] = 0
+end
 local parTranche = table.create(NB_TRANCHES, 0)
 local function compter(famille: string, hauteur: number)
 	parFamille[famille] += 1
@@ -798,7 +860,7 @@ end
 
 ---------------------------------------------------------------------------------------------------------------
 -- Lasers : barres qui balaient et tuent au contact.
-for _, l in obstacles.Laser do
+FAMILLES.Laser.simuler = function(l)
 	local nom = l:GetFullName()
 	local depart, arrivee = l:GetAttribute("Depart"), l:GetAttribute("Arrivee")
 	local periode, decalage = l:GetAttribute("Periode"), l:GetAttribute("Decalage")
@@ -811,7 +873,7 @@ for _, l in obstacles.Laser do
 		or periode <= 0
 	then
 		defaut(`{nom} : attributs Depart / Arrivee / Periode / Decalage absents ou invalides`)
-		continue
+		return
 	end
 	if l.CanCollide then
 		defaut(`{nom} : un laser ne porte pas, il tue : il ne doit pas avoir de collision`)
@@ -841,13 +903,13 @@ end
 
 ---------------------------------------------------------------------------------------------------------------
 -- Barres tournantes : plus rapides que celles du tuto (1,6 rad/s).
-for _, b in obstacles.Tournant do
+FAMILLES.Tournant.simuler = function(b)
 	local nom = b:GetFullName()
 	local vitesse = b:GetAttribute("Vitesse")
 	compter("Tournant", b.CFrame.Position.Y)
 	if not nombre(vitesse) or math.abs(vitesse) < 0.1 then
 		defaut(`{nom} : attribut Vitesse absent ou invalide`)
-		continue
+		return
 	end
 	if math.abs(vitesse) <= 1.6 then
 		defaut(
@@ -875,7 +937,7 @@ end
 
 ---------------------------------------------------------------------------------------------------------------
 -- Pancartes qui basculent (balanciers) : elles poussent fort, elles ne tuent pas.
-for _, b in obstacles.Balancier do
+FAMILLES.Balancier.simuler = function(b)
 	local nom = b:GetFullName()
 	local pivot, axe = b:GetAttribute("Pivot"), b:GetAttribute("Axe")
 	local amplitude, periode, decalage =
@@ -893,7 +955,7 @@ for _, b in obstacles.Balancier do
 		or periode <= 0
 	then
 		defaut(`{nom} : attributs Pivot / Axe / Amplitude / Periode / Decalage absents ou invalides`)
-		continue
+		return
 	end
 	if math.abs(axe.Magnitude - 1) > 0.01 then
 		defaut(`{nom} : Axe non unitaire`)
@@ -921,7 +983,7 @@ end
 ---------------------------------------------------------------------------------------------------------------
 -- Pièges de mur : la pointe sort d'un coup et pousse. Seul indice avant déclenchement : la fente et l'usure
 -- (décision de l'utilisateur) — donc ni néon ni lumière dans le piège.
-for _, m in obstacles.PiegeMur do
+FAMILLES.PiegeMur.simuler = function(m)
 	local nom = m:GetFullName()
 	local direction, distance = m:GetAttribute("Direction"), m:GetAttribute("Distance")
 	local sortie, rentree = m:GetAttribute("DureeSortie"), m:GetAttribute("DureeRentree")
@@ -931,7 +993,7 @@ for _, m in obstacles.PiegeMur do
 	compter("PiegeMur", if pointe and pointe:IsA("BasePart") then pointe.CFrame.Position.Y else 0)
 	if typeof(direction) ~= "Vector3" or math.abs(direction.Magnitude - 1) > 0.01 then
 		defaut(`{nom} : attribut Direction absent ou non unitaire`)
-		continue
+		return
 	end
 	for intitule, valeur in { Distance = distance, DureeSortie = sortie, DureeRentree = rentree, Portee = portee } do
 		if not nombre(valeur) or valeur <= 0 then
@@ -968,7 +1030,7 @@ for _, m in obstacles.PiegeMur do
 	end
 	if not pointe or not pointe:IsA("BasePart") then
 		defaut(`{nom} : pas d'enfant « Pointe » (BasePart)`)
-		continue
+		return
 	end
 	if pointe.CanCollide then
 		defaut(`{pointe:GetFullName()} : la pointe pousse par le code, elle ne doit pas avoir de collision`)
@@ -988,7 +1050,7 @@ for _, m in obstacles.PiegeMur do
 		end
 	end
 	if not nombre(distance) or not nombre(sortie) or not nombre(rentree) or not nombre(repos) then
-		continue
+		return
 	end
 	local cf0, taille = pointe.CFrame, pointe.Size
 	local periode = sortie + rentree + repos
@@ -1012,6 +1074,150 @@ for _, m in obstacles.PiegeMur do
 			return CFrame.new(direction * distance * avancement) * cf0, taille
 		end,
 	})
+end
+
+---------------------------------------------------------------------------------------------------------------
+-- Plateformes mobiles : le saut qui y arrive et celui qui en part doivent rester possibles au moins 1,2 s par
+-- cycle. On suit le chemin retenu du pied au sommet pour savoir d'où l'on vient et où l'on va. Le va-et-vient est
+-- celui du jeu (src/serveur/Obstacles/Mobile.luau : tween Sine InOut qui repart en arrière, donc une période de 2 × Duree
+-- et une position en (1 − cos(π t / Duree)) / 2).
+local rangDansChemin: { [Plateforme]: number } = {}
+for i, p in suiteSommet do
+	rangDansChemin[p] = i
+end
+
+local function plusLongueFenetre(possible: { boolean }, pas: number): number
+	local n = #possible
+	local plusLongue, courant = 0, 0
+	for i = 1, 2 * n do -- deux tours : la fenêtre peut être à cheval sur la fin du cycle
+		if possible[(i - 1) % n + 1] then
+			courant += 1
+			plusLongue = math.max(plusLongue, math.min(courant, n))
+		else
+			courant = 0
+		end
+	end
+	return plusLongue * pas
+end
+
+FAMILLES.Mobile.simuler = function(part)
+	local nom = part:GetFullName()
+	local deplacement, duree = part:GetAttribute("Deplacement"), part:GetAttribute("Duree")
+	compter("Mobile", part.CFrame.Position.Y)
+	if typeof(deplacement) ~= "Vector3" or not nombre(duree) or duree <= 0 then
+		defaut(`{nom} : attributs Deplacement / Duree absents ou invalides`)
+		return
+	end
+	local boite = boiteDe[part]
+	local rang = boite and rangDansChemin[boite]
+	if not rang then
+		defaut(`{nom} : plateforme mobile hors du chemin retenu du pied au sommet`)
+		return
+	end
+	local mn, mx = emprise(part)
+	local function aLInstant(t): Plateforme
+		local k = (1 - math.cos(math.pi * t / duree)) / 2
+		local d = deplacement * k
+		return {
+			nom = nom,
+			x1 = mn.X + d.X,
+			x2 = mx.X + d.X,
+			z1 = mn.Z + d.Z,
+			z2 = mx.Z + d.Z,
+			haut = mx.Y + d.Y,
+			bas = mn.Y + d.Y,
+		}
+	end
+	local pas = 0.02
+	local n = math.floor(2 * duree / pas)
+	local mesures = {}
+	for _, cote in
+		{
+			{ suiteSommet[rang - 1], "le saut d'arrivée", true },
+			{ suiteSommet[rang + 1], "le saut de départ", false },
+		}
+	do
+		local voisine, intitule, versElle = cote[1], cote[2], cote[3]
+		if not voisine then
+			continue
+		end
+		local possible = table.create(n, false)
+		for i = 1, n do
+			local ici = aLInstant((i - 1) * pas)
+			possible[i] = if versElle then sautPossible(voisine, ici, TOUTES) else sautPossible(ici, voisine, TOUTES)
+		end
+		local fenetre = plusLongueFenetre(possible, pas)
+		table.insert(mesures, string.format("%s %.2f s", intitule, fenetre))
+		if fenetre < FENETRE_MIN then
+			defaut(
+				string.format(
+					"%s : %s (%s) n'est possible que %.2f s par cycle (%.1f s au moins attendues)",
+					nom,
+					intitule,
+					voisine.nom:match("[^.]+$") or voisine.nom,
+					fenetre,
+					FENETRE_MIN
+				)
+			)
+		end
+	end
+	-- Sur sa course, elle ne doit heurter aucune autre dalle.
+	for i = 0, n do
+		local ici = aLInstant(i * pas)
+		for _, autre in plateformes do
+			if autre.part ~= part and aabbSeCroisent(boiteDePlateforme(ici), boiteDePlateforme(autre), 0.1) then
+				defaut(`{nom} : sa course la fait heurter {autre.nom}`)
+				break
+			end
+		end
+	end
+	print(
+		string.format(
+			"%s : course %.1f stud, période %.1f s, fenêtres %s",
+			nom:match("[^.]+$") or nom,
+			deplacement.Magnitude,
+			2 * duree,
+			table.concat(mesures, " / ")
+		)
+	)
+end
+
+---------------------------------------------------------------------------------------------------------------
+-- Plateformes qui s'effondrent : elles tombent 0,5 s après le premier contact et reviennent. Jamais deux de suite
+-- sur le chemin (on resterait en l'air sans rien où se poser).
+FAMILLES.Effondrable.simuler = function(part)
+	local nom = part:GetFullName()
+	local chute, retour = part:GetAttribute("DelaiChute"), part:GetAttribute("DelaiRetour")
+	compter("Effondrable", part.CFrame.Position.Y)
+	if not nombre(chute) or chute < 0.5 or chute > 1 then
+		defaut(`{nom} : DelaiChute {tostring(chute)} (0,5 s attendues, 1 s au plus)`)
+	end
+	if not nombre(retour) or retour < FENETRE_MIN or retour > 8 then
+		defaut(`{nom} : DelaiRetour {tostring(retour)} s (de {FENETRE_MIN} à 8 s attendues : elle doit revenir)`)
+	end
+	if not boiteDe[part] then
+		defaut(`{nom} : une plateforme qui s'effondre doit rester une plateforme du chemin`)
+	end
+	print(string.format("%s : chute %.2f s, retour %.1f s", nom:match("[^.]+$") or nom, chute or -1, retour or -1))
+end
+
+---------------------------------------------------------------------------------------------------------------
+-- Chaque famille passe par son simulateur, dans l'ordre alphabétique (sortie stable).
+local nomsFamilles = {}
+for famille in FAMILLES do
+	table.insert(nomsFamilles, famille)
+end
+table.sort(nomsFamilles)
+for _, famille in nomsFamilles do
+	local simuler = FAMILLES[famille].simuler
+	if not simuler then
+		defaut(`famille « {famille} » : aucun simulateur (FAMILLES.{famille}.simuler)`)
+		continue
+	end
+	print(`\n-- {famille} --`)
+	for _, inst in obstacles[famille] do
+		simuler(inst)
+	end
 end
 
 ---------------------------------------------------------------------------------------------------------------
@@ -1146,132 +1352,6 @@ for _, p in menacees do
 	end
 end
 
----------------------------------------------------------------------------------------------------------------
--- Plateformes mobiles : le saut qui y arrive et celui qui en part doivent rester possibles au moins 1,2 s par
--- cycle. On suit le chemin retenu du pied au sommet pour savoir d'où l'on vient et où l'on va. Le va-et-vient est
--- celui du jeu (src/serveur/Obstacles.luau : tween Sine InOut qui repart en arrière, donc une période de 2 × Duree
--- et une position en (1 − cos(π t / Duree)) / 2).
-print("\n-- Plateformes mobiles --")
-local rangDansChemin: { [Plateforme]: number } = {}
-for i, p in suiteSommet do
-	rangDansChemin[p] = i
-end
-
-local function plusLongueFenetre(possible: { boolean }, pas: number): number
-	local n = #possible
-	local plusLongue, courant = 0, 0
-	for i = 1, 2 * n do -- deux tours : la fenêtre peut être à cheval sur la fin du cycle
-		if possible[(i - 1) % n + 1] then
-			courant += 1
-			plusLongue = math.max(plusLongue, math.min(courant, n))
-		else
-			courant = 0
-		end
-	end
-	return plusLongue * pas
-end
-
-for _, part in obstacles.Mobile do
-	local nom = part:GetFullName()
-	local deplacement, duree = part:GetAttribute("Deplacement"), part:GetAttribute("Duree")
-	compter("Mobile", part.CFrame.Position.Y)
-	if typeof(deplacement) ~= "Vector3" or not nombre(duree) or duree <= 0 then
-		defaut(`{nom} : attributs Deplacement / Duree absents ou invalides`)
-		continue
-	end
-	local boite = boiteDe[part]
-	local rang = boite and rangDansChemin[boite]
-	if not rang then
-		defaut(`{nom} : plateforme mobile hors du chemin retenu du pied au sommet`)
-		continue
-	end
-	local mn, mx = emprise(part)
-	local function aLInstant(t): Plateforme
-		local k = (1 - math.cos(math.pi * t / duree)) / 2
-		local d = deplacement * k
-		return {
-			nom = nom,
-			x1 = mn.X + d.X,
-			x2 = mx.X + d.X,
-			z1 = mn.Z + d.Z,
-			z2 = mx.Z + d.Z,
-			haut = mx.Y + d.Y,
-			bas = mn.Y + d.Y,
-		}
-	end
-	local pas = 0.02
-	local n = math.floor(2 * duree / pas)
-	local mesures = {}
-	for _, cote in
-		{
-			{ suiteSommet[rang - 1], "le saut d'arrivée", true },
-			{ suiteSommet[rang + 1], "le saut de départ", false },
-		}
-	do
-		local voisine, intitule, versElle = cote[1], cote[2], cote[3]
-		if not voisine then
-			continue
-		end
-		local possible = table.create(n, false)
-		for i = 1, n do
-			local ici = aLInstant((i - 1) * pas)
-			possible[i] = if versElle then sautPossible(voisine, ici, TOUTES) else sautPossible(ici, voisine, TOUTES)
-		end
-		local fenetre = plusLongueFenetre(possible, pas)
-		table.insert(mesures, string.format("%s %.2f s", intitule, fenetre))
-		if fenetre < FENETRE_MIN then
-			defaut(
-				string.format(
-					"%s : %s (%s) n'est possible que %.2f s par cycle (%.1f s au moins attendues)",
-					nom,
-					intitule,
-					voisine.nom:match("[^.]+$") or voisine.nom,
-					fenetre,
-					FENETRE_MIN
-				)
-			)
-		end
-	end
-	-- Sur sa course, elle ne doit heurter aucune autre dalle.
-	for i = 0, n do
-		local ici = aLInstant(i * pas)
-		for _, autre in plateformes do
-			if autre.part ~= part and aabbSeCroisent(boiteDePlateforme(ici), boiteDePlateforme(autre), 0.1) then
-				defaut(`{nom} : sa course la fait heurter {autre.nom}`)
-				break
-			end
-		end
-	end
-	print(
-		string.format(
-			"%s : course %.1f stud, période %.1f s, fenêtres %s",
-			nom:match("[^.]+$") or nom,
-			deplacement.Magnitude,
-			2 * duree,
-			table.concat(mesures, " / ")
-		)
-	)
-end
-
----------------------------------------------------------------------------------------------------------------
--- Plateformes qui s'effondrent : elles tombent 0,5 s après le premier contact et reviennent. Jamais deux de suite
--- sur le chemin (on resterait en l'air sans rien où se poser).
-print("\n-- Plateformes qui s'effondrent --")
-for _, part in obstacles.Effondrable do
-	local nom = part:GetFullName()
-	local chute, retour = part:GetAttribute("DelaiChute"), part:GetAttribute("DelaiRetour")
-	compter("Effondrable", part.CFrame.Position.Y)
-	if not nombre(chute) or chute < 0.5 or chute > 1 then
-		defaut(`{nom} : DelaiChute {tostring(chute)} (0,5 s attendues, 1 s au plus)`)
-	end
-	if not nombre(retour) or retour < FENETRE_MIN or retour > 8 then
-		defaut(`{nom} : DelaiRetour {tostring(retour)} s (de {FENETRE_MIN} à 8 s attendues : elle doit revenir)`)
-	end
-	if not boiteDe[part] then
-		defaut(`{nom} : une plateforme qui s'effondre doit rester une plateforme du chemin`)
-	end
-	print(string.format("%s : chute %.2f s, retour %.1f s", nom:match("[^.]+$") or nom, chute or -1, retour or -1))
-end
 for i = 1, #suiteSommet - 1 do
 	local a, b = suiteSommet[i].part, suiteSommet[i + 1].part
 	if a and b and a:HasTag("Effondrable") and b:HasTag("Effondrable") then
@@ -1280,12 +1360,20 @@ for i = 1, #suiteSommet - 1 do
 end
 
 ---------------------------------------------------------------------------------------------------------------
--- Les six familles sont présentes, et la densité monte avec l'altitude.
+-- Toutes les familles du registre sont présentes, tout tag de la tour a son contrôle, et la densité monte avec
+-- l'altitude.
 local resume = {}
-for _, famille in { "PiegeMur", "Laser", "Effondrable", "Balancier", "Mobile", "Tournant" } do
+for _, famille in nomsFamilles do
 	table.insert(resume, `{famille} {parFamille[famille]}`)
 	if parFamille[famille] == 0 then
 		defaut(`aucun obstacle de la famille « {famille} » dans la tour`)
+	end
+end
+for tag, ou in tagsPoses do
+	if not FAMILLES[tag] and not TAGS_STRUCTURE[tag] then
+		defaut(
+			`{ou} : tag « {tag} » sans simulateur (aucune famille du registre FAMILLES de verifier-ascension : un piège que personne ne contrôle)`
+		)
 	end
 end
 print(`\nobstacles : ` .. table.concat(resume, ", ") .. ` ; par tranche : ` .. table.concat(parTranche, ", "))
@@ -1386,20 +1474,10 @@ print(string.format("emprise des plateformes : x %.0f..%.0f, z %.0f..%.0f", ex1,
 
 ---------------------------------------------------------------------------------------------------------------
 -- Textes des SurfaceGui : jamais TextScaled, taille fixe de 12 à 100 px, à la ligne, et qui tient dans son label.
--- La règle de taille est le bloc TEXTE_PUR de Parcours.luau, qui doit être identique dans Ascension.luau.
-local function blocTextePur(fichier: string): string
-	local source = fs.readFile(fichier):gsub("\r\n", "\n")
-	local debut = source:find("-- DEBUT TEXTE_PUR\n", 1, true)
-	local fin = source:find("\t-- FIN TEXTE_PUR", 1, true)
-	assert(debut and fin and fin > debut, `{fichier} : bloc TEXTE_PUR absent`)
-	return source:sub(debut, fin - 1)
-end
-local blocParcours = blocTextePur("outils/monde/Parcours.luau")
-if blocParcours ~= blocTextePur("outils/monde/Ascension.luau") then
-	defaut("le bloc TEXTE_PUR de Parcours.luau et celui d'Ascension.luau ne sont plus identiques")
-end
+-- La règle de taille est celle de la bibliothèque commune (outils/monde/biblio/texte.luau), un seul exemplaire.
+local Texte = require("./biblio/texte")
 local ajusterTexte, METRIQUES, TAILLE_MIN, TAILLE_MAX =
-	luau.load(blocParcours .. "\nreturn ajusterTexte, METRIQUES, TAILLE_MIN, TAILLE_MAX", { debugName = "TEXTE_PUR" })()
+	Texte.ajusterTexte, Texte.METRIQUES, Texte.TAILLE_MIN, Texte.TAILLE_MAX
 
 -- Pire cas écrit par src/serveur/Classement.luau dans le TextLabel « Liste » des tableaux.
 local lignesClassement = {}

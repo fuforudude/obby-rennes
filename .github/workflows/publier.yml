@@ -25,9 +25,13 @@ jobs:
       - name: Installer les outils (Rokit)
         uses: ./.github/actions/outils
       - run: wally install
-      # La carte publiée est la carte vérifiée : on la régénère avant de construire.
-      - name: Génération de la carte
-        run: lune run outils/monde/generer.luau
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # La carte publiée est la carte vérifiée : on la régénère, et tous les contrôles de carte (cartes cassées
+      # comprises) passent avant de construire. Un contrôle rouge arrête ici : ni test, ni production.
+      - name: Génération et contrôles de la carte
+        run: node outils/tout-verifier.mjs --cartes
       - name: Construction Rojo
         run: |
           mkdir -p build

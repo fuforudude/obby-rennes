@@ -16,9 +16,9 @@
 --   ni aucun balancier (sur toute son amplitude) ne doit y entrer. C'est un défaut : le personnage réapparaît
 --   là, un danger qui y passe le pousserait ou le tuerait à la réapparition.
 -- - Textes de SurfaceGui (les deux cartes) : aucun TextScaled, TextSize de 12 à 100, texte qui tient dans son label (pire cas
---   des panneaux : les 16 étapes de src/partage/Etapes.luau ; des tableaux : 10 lignes de classement) ; bloc TEXTE_PUR
---   identique dans Parcours.luau et Evenements.luau.
--- - PanneauAnecdote : Numero 0 à 15, une fois chacun, un TextLabel « Titre » et un TextLabel « Corps », près de son checkpoint, sans toucher de
+--   des panneaux : les étapes de src/partage/Etapes.luau ; des tableaux : 10 lignes de classement), selon la règle
+--   de taille commune (outils/monde/biblio/texte.luau, la même que celle des générateurs).
+-- - PanneauAnecdote : Numero 0 à NB_ETAPES (Reglages), une fois chacun, un TextLabel « Titre » et un TextLabel « Corps », près de son checkpoint, sans toucher de
 --   pièce solide de la carte.
 -- Horaires : ceux de src/partage/Horaires.luau (chargé s'il existe, sinon même formule recopiée ci-dessous) ;
 -- marges de contact : celles de src/partage/Reglages.luau (EVENEMENT_MARGE_HORIZONTALE / _VERTICALE).
@@ -196,7 +196,7 @@ for _, d in parcoursModele:GetDescendants() do
 			{ nom = d:GetFullName(), boite = aabbDePiece(d.CFrame, d.Size), obb = obb(d.CFrame, d.Size) }
 		)
 	end
-	local estZone = d.Parent and d.Parent.Name:match("^%d_") ~= nil
+	local estZone = d.Parent and d.Parent.Name:match("^%d+_") ~= nil
 	if not estZone then
 		continue
 	end
@@ -624,7 +624,7 @@ for _, p in evenementsModele:GetDescendants() do
 		continue
 	end
 	local n = p:GetAttribute("Numero")
-	if typeof(n) ~= "number" or n < 0 or n > 15 or n % 1 ~= 0 then
+	if typeof(n) ~= "number" or n < 0 or n > Reglages.NB_ETAPES or n % 1 ~= 0 then
 		defaut(`{p:GetFullName()} : Numero invalide`)
 		continue
 	end
@@ -663,7 +663,7 @@ for _, p in evenementsModele:GetDescendants() do
 		end
 	end
 end
-for n = 0, 15 do
+for n = 0, Reglages.NB_ETAPES do
 	if not vus[n] then
 		defaut(`PanneauAnecdote {n} absent`)
 	end
@@ -674,7 +674,7 @@ print(`panneaux : {#(function()
 		table.insert(l, n)
 	end
 	return l
-end)()} / 16`)
+end)()} / {Reglages.NB_ETAPES + 1}`)
 
 ---------------------------------------------------------------------------------------------------------------
 -- « ! » de préavis (BillboardGui « FeuRouge », AlwaysOnTop faux : le décor opaque le cache). Pour chacun, aucune
@@ -799,24 +799,14 @@ assert(nbFeux > 0, "aucun « ! » de préavis trouvé")
 
 ---------------------------------------------------------------------------------------------------------------
 -- Textes des SurfaceGui : jamais TextScaled (en jeu, il rend un texte minuscule sur ces panneaux), tous à taille
--- fixe de 12 à 100 px, à la ligne, et dont le texte tient dans son label. La règle de taille est celle du bloc
--- TEXTE_PUR de Parcours.luau et d'Evenements.luau (identique dans les deux, chargé ici). Les textes écrits à
+-- fixe de 12 à 100 px, à la ligne, et dont le texte tient dans son label. La règle de taille est celle,
+-- commune aux générateurs, de outils/monde/biblio/texte.luau (un seul exemplaire). Les textes écrits à
 -- l'exécution sont essayés dans leur pire cas : Titre et Corps des panneaux d'anecdotes avec chacune des 16 étapes de
 -- src/partage/Etapes.luau, Liste des tableaux avec 10 lignes « %2d. %-14s valeur » (src/serveur/Classement.luau).
 print("\n== Textes des SurfaceGui (taille fixe) ==")
-local function blocTextePur(chemin: string): string
-	local source = fs.readFile(chemin):gsub("\r\n", "\n")
-	local debut = source:find("-- DEBUT TEXTE_PUR\n", 1, true)
-	local fin = source:find("\t-- FIN TEXTE_PUR", 1, true)
-	assert(debut and fin and fin > debut, `{chemin} : bloc TEXTE_PUR absent`)
-	return source:sub(debut, fin - 1)
-end
-local blocParcours = blocTextePur("outils/monde/Parcours.luau")
-if blocParcours ~= blocTextePur("outils/monde/Evenements.luau") then
-	defaut("le bloc TEXTE_PUR de Parcours.luau et celui d'Evenements.luau ne sont plus identiques")
-end
+local Texte = require("./biblio/texte")
 local ajusterTexte, METRIQUES, TAILLE_MIN, TAILLE_MAX =
-	luau.load(blocParcours .. "\nreturn ajusterTexte, METRIQUES, TAILLE_MIN, TAILLE_MAX", { debugName = "TEXTE_PUR" })()
+	Texte.ajusterTexte, Texte.METRIQUES, Texte.TAILLE_MIN, Texte.TAILLE_MAX
 
 local Etapes = luau.load(fs.readFile("src/partage/Etapes.luau"), { debugName = "Etapes" })()
 local zonesEtapes, corpsEtapes = {}, {}
@@ -826,7 +816,7 @@ for n = 0, Etapes.nombre() - 1 do
 	table.insert(corpsEtapes, `{e.anecdote}\n\n{e.blague}`)
 end
 local lignesClassement = {}
-for rang = 1, Reglages.TAILLE_CLASSEMENT or 10 do
+for rang = 1, Reglages.TAILLE_CLASSEMENT do
 	-- pire cas : nom de 14 caractères, valeur de 10 caractères (temps « 123:45.67 », aura « 12 345 678 »)
 	table.insert(lignesClassement, string.format("%2d. %-14s %s", rang, string.rep("W", 14), "12 345 678"))
 end

@@ -1,30 +1,30 @@
 --!strict
--- Point d'entrée du serveur : démarre les services dans l'ordre où ils dépendent les uns des autres.
-local Ascension = require(script.Ascension)
-local Boutique = require(script.Boutique)
-local Capacites = require(script.Capacites)
-local Classement = require(script.Classement)
-local Donnees = require(script.Donnees)
-local Evenements = require(script.Evenements)
-local Obstacles = require(script.Obstacles)
-local Parcours = require(script.Parcours)
-local Vol = require(script.Vol)
+-- Point d'entrée du serveur : démarre les services de la liste, dans cet ordre. Aucun abonnement ne dépend de
+-- l'ordre : `Donnees.surChargement` rejoue les joueurs déjà chargés à un abonné qui arrive après.
+-- Un service qui plante au chargement ou au démarrage est signalé (nom et erreur dans la console) sans empêcher les
+-- suivants de démarrer : une seule pièce ou un seul module cassé ne doit pas éteindre tout le jeu.
+type Service = { demarrer: () -> () }
 
--- Un service qui plante au démarrage est signalé (nom et erreur dans la console) sans empêcher les suivants de
--- démarrer : une seule pièce ou un seul module cassé ne doit pas éteindre tout le jeu.
-local function demarrer(nom: string, service: { demarrer: () -> () })
-	local ok, erreur = xpcall(service.demarrer :: () -> any, debug.traceback)
+-- Les ModuleScript, pas encore chargés : un module qui plante dès son `require` est rattrapé comme un `demarrer` raté.
+local SERVICES: { { nom: string, module: ModuleScript } } = {
+	{ nom = "Obstacles", module = script.Obstacles },
+	{ nom = "Evenements", module = script.Evenements },
+	{ nom = "Classement", module = script.Classement },
+	{ nom = "Parcours", module = script.Parcours },
+	{ nom = "Ascension", module = script.Ascension },
+	{ nom = "Donnees", module = script.Donnees },
+	{ nom = "Boutique", module = script.Boutique },
+	{ nom = "Capacites", module = script.Capacites }, -- déblocages et surveillance des déplacements
+	{ nom = "Vol", module = script.Vol }, -- mode vol des testeurs : après la surveillance et le parcours qu'il pilote
+}
+
+for _, service in SERVICES do
+	local ok, erreur = xpcall(function()
+		-- `require` d'un module choisi à l'exécution : le vérificateur de types ne peut pas le suivre, d'où le cast.
+		local module = (require :: any)(service.module) :: Service
+		module.demarrer()
+	end, debug.traceback)
 	if not ok then
-		warn(`[Serveur] {nom}.demarrer() a échoué : {erreur}`)
+		warn(`[Serveur] {service.nom} : chargement ou demarrer() a échoué : {erreur}`)
 	end
 end
-
-demarrer("Obstacles", Obstacles)
-demarrer("Evenements", Evenements)
-demarrer("Classement", Classement)
-demarrer("Parcours", Parcours) -- s'abonne au chargement des données : avant Donnees.demarrer()
-demarrer("Ascension", Ascension) -- s'abonne aussi au chargement des données : avant Donnees.demarrer()
-demarrer("Donnees", Donnees)
-demarrer("Boutique", Boutique)
-demarrer("Capacites", Capacites) -- déblocages et surveillance des déplacements
-demarrer("Vol", Vol) -- mode vol des testeurs : après la surveillance et le parcours qu'il pilote

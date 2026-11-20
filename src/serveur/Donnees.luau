@@ -26,9 +26,13 @@ function Donnees.obtenir(joueur: Player): Donnees?
 	return if profil then profil.Data else nil
 end
 
---- Appelle `fonction` chaque fois que les données d'un joueur sont prêtes.
+--- Appelle `fonction` chaque fois que les données d'un joueur sont prêtes, et tout de suite pour les joueurs déjà
+--- chargés : un service reçoit tout le monde, qu'il démarre avant ou après ce module.
 function Donnees.surChargement(fonction: (Player, Donnees) -> ())
 	table.insert(abonnes, fonction)
+	for joueur, profil in profils do
+		task.spawn(fonction, joueur, profil.Data)
+	end
 end
 
 --- Sauvegarde tout de suite et attend la fin de l'écriture. Sert aux achats Robux : la récompense doit être
@@ -64,8 +68,18 @@ local function charger(joueur: Player)
 		end
 		return
 	end
+	if Regles.estPlusRecente(profil.Data) then
+		-- Sauvegarde écrite par un serveur plus récent (déploiement en cours) : migrer la rétrograderait. On n'y
+		-- touche pas, on libère la session sans rien modifier, et le joueur reviendra sur un serveur à jour.
+		profil:EndSession()
+		if joueur.Parent == Players then
+			joueur:Kick("Le jeu vient d'être mis à jour : reviens dans un instant.")
+		end
+		return
+	end
 	profil:AddUserId(joueur.UserId) -- RGPD : permet de retrouver et d'effacer les données d'un joueur
 	profil.Data = Regles.migrer(profil.Data, Reglages.NB_ETAPES)
+	Regles.appliquerVersionTour(profil.Data, Reglages.VERSION_TOUR)
 	profil.OnSessionEnd:Connect(function()
 		profils[joueur] = nil
 		joueur:Kick("Ta progression a été ouverte sur un autre serveur.")
