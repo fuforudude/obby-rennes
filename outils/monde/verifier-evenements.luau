@@ -16,9 +16,9 @@
 --   ni aucun balancier (sur toute son amplitude) ne doit y entrer. C'est un défaut : le personnage réapparaît
 --   là, un danger qui y passe le pousserait ou le tuerait à la réapparition.
 -- - Textes de SurfaceGui (les deux cartes) : aucun TextScaled, TextSize de 12 à 100, texte qui tient dans son label (pire cas
---   des panneaux : les 16 étapes de src/partage/Etapes.luau ; des tableaux : 10 lignes de classement) ; bloc TEXTE_PUR
+--   des panneaux : les étapes de src/partage/Etapes.luau ; des tableaux : 10 lignes de classement) ; bloc TEXTE_PUR
 --   identique dans Parcours.luau et Evenements.luau.
--- - PanneauAnecdote : Numero 0 à 15, une fois chacun, un TextLabel « Titre » et un TextLabel « Corps », près de son checkpoint, sans toucher de
+-- - PanneauAnecdote : Numero 0 à NB_ETAPES (Reglages), une fois chacun, un TextLabel « Titre » et un TextLabel « Corps », près de son checkpoint, sans toucher de
 --   pièce solide de la carte.
 -- Horaires : ceux de src/partage/Horaires.luau (chargé s'il existe, sinon même formule recopiée ci-dessous) ;
 -- marges de contact : celles de src/partage/Reglages.luau (EVENEMENT_MARGE_HORIZONTALE / _VERTICALE).
@@ -196,7 +196,7 @@ for _, d in parcoursModele:GetDescendants() do
 			{ nom = d:GetFullName(), boite = aabbDePiece(d.CFrame, d.Size), obb = obb(d.CFrame, d.Size) }
 		)
 	end
-	local estZone = d.Parent and d.Parent.Name:match("^%d_") ~= nil
+	local estZone = d.Parent and d.Parent.Name:match("^%d+_") ~= nil
 	if not estZone then
 		continue
 	end
@@ -624,7 +624,7 @@ for _, p in evenementsModele:GetDescendants() do
 		continue
 	end
 	local n = p:GetAttribute("Numero")
-	if typeof(n) ~= "number" or n < 0 or n > 15 or n % 1 ~= 0 then
+	if typeof(n) ~= "number" or n < 0 or n > Reglages.NB_ETAPES or n % 1 ~= 0 then
 		defaut(`{p:GetFullName()} : Numero invalide`)
 		continue
 	end
@@ -663,7 +663,7 @@ for _, p in evenementsModele:GetDescendants() do
 		end
 	end
 end
-for n = 0, 15 do
+for n = 0, Reglages.NB_ETAPES do
 	if not vus[n] then
 		defaut(`PanneauAnecdote {n} absent`)
 	end
@@ -674,7 +674,7 @@ print(`panneaux : {#(function()
 		table.insert(l, n)
 	end
 	return l
-end)()} / 16`)
+end)()} / {Reglages.NB_ETAPES + 1}`)
 
 ---------------------------------------------------------------------------------------------------------------
 -- « ! » de préavis (BillboardGui « FeuRouge », AlwaysOnTop faux : le décor opaque le cache). Pour chacun, aucune

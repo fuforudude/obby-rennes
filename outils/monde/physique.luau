@@ -67,8 +67,15 @@ local HAUTEUR_DOUBLE = Jeu.hauteurEnvol({ doubleSaut = true }, P) -- et des deux
 
 local Physique = {}
 
+-- Les capacités en masque de bits : le seul endroit où ce masque est défini (les contrôles le lisent ici).
 Physique.CAPACITES = { course = 1, doubleSaut = 2, dash = 4 }
-Physique.TOUTES = 7
+Physique.ORDRE = { "course", "doubleSaut", "dash" } -- ordre d'affichage et de déblocage
+Physique.TOUTES = 0
+for _, bit in Physique.CAPACITES do
+	Physique.TOUTES = bit32.bor(Physique.TOUTES, bit)
+end
+-- Les réglages du jeu, déjà chargés ici : les contrôles y lisent NB_ETAPES et les CONTROLE_* du modèle prudent.
+Physique.Reglages = Reglages
 
 -- Le joueur ne part pas du bord exact et ne se pose pas sur le bord exact : son corps déborde un peu des deux
 -- côtés. On lui offre ces studs en plus avant de déclarer un vide infranchissable, pour que la preuve tienne même
@@ -129,7 +136,7 @@ end
 --- Le nom lisible d'un jeu de capacités (« aucune », « course + dash »…).
 function Physique.nommer(caps: number): string
 	local noms = {}
-	for _, nom in { "course", "doubleSaut", "dash" } do
+	for _, nom in Physique.ORDRE do
 		if a(caps, nom) then
 			table.insert(noms, nom)
 		end

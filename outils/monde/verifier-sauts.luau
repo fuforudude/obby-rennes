@@ -1,6 +1,7 @@
 -- Usage : lune run outils/monde/verifier-sauts.luau [fichier.rbxm] (défaut monde/Parcours.rbxm ; après lune run outils/monde/generer.luau).
 -- Vérifie le tracé : depuis le départ, peut-on atteindre chaque checkpoint en sautant de plateforme en plateforme ?
--- Saut possible si : montée <= 4,5 ; vide horizontal (entre bords) <= 6,5 (+ 1 par tranche de 4 de descente, max 9).
+-- Saut possible si : montée <= 4,5 ; vide horizontal (entre bords) <= 6,5 (+ 1 par tranche de 4 de descente, au plus 2,5) ;
+-- ces valeurs sont les CONTROLE_* de src/partage/Reglages.luau, lues au lancement.
 --
 -- Les capacités de déplacement (spec 2026-11-18) changent ces limites, mais seulement là où elles sont déjà
 -- débloquées : une pièce taguée « DeblocageCapacite » porte l'attribut « Capacite » (« course », « doubleSaut » ou
@@ -29,15 +30,22 @@ local modele = roblox.deserializeModel(fs.readFile(process.args[1] or "monde/Par
 -- Limites de saut du personnage par défaut (WalkSpeed 16, JumpPower 50) et ce que chaque capacité y ajoute.
 -- Le temps en l'air ne dépend pas de la vitesse : courir allonge la portée horizontale du même facteur que la
 -- vitesse. Le double saut, lui, sert à monter (la spec ne lui promet pas de portée en plus).
-local MONTEE = 4.5 -- montée franchissable d'un saut debout
-local VIDE = 6.5 -- vide franchissable à plat, à l'arrêt
-local BONUS_DESCENTE = 2.5 -- au plus ; 1 stud de vide en plus par tranche de 4 studs de descente
-local COURSE_FACTEUR = 1.5 -- course : vitesse ×1,5, donc vide ×1,5 (9,75)
-local DOUBLE_SAUT_MONTEE = 9 -- double saut : montée totale des deux sauts
-local DASH_VIDE = 8 -- dash : studs de vide en plus (borne basse de la fourchette 8 à 12 de la spec)
+-- Valeurs lues dans src/partage/Reglages.luau (bloc CONTROLE_*), jamais recopiées ici.
+local Reglages = Physique.Reglages
+local MONTEE = Reglages.CONTROLE_MONTEE -- montée franchissable d'un saut debout
+local VIDE = Reglages.CONTROLE_VIDE -- vide franchissable à plat, à l'arrêt
+local BONUS_DESCENTE = Reglages.CONTROLE_BONUS_DESCENTE -- au plus ; 1 stud par CONTROLE_DESCENTE_PAS descendus
+local DESCENTE_PAS = Reglages.CONTROLE_DESCENTE_PAS
+local COURSE_FACTEUR = Reglages.COURSE_FACTEUR -- course : vitesse × COURSE_FACTEUR, donc vide × COURSE_FACTEUR
+local DOUBLE_SAUT_MONTEE = Reglages.CONTROLE_MONTEE_DOUBLE -- double saut : montée totale des deux sauts
+local DASH_VIDE = Reglages.CONTROLE_DASH_VIDE -- dash : studs de vide en plus
+local HAUTEUR_LIBRE = Reglages.CONTROLE_HAUTEUR_LIBRE -- en dessous : plafond trop bas
 
-local CAPACITES = Physique.CAPACITES -- course = 1, doubleSaut = 2, dash = 4
-local ORDRE = { "course", "doubleSaut", "dash" }
+local CAPACITES = Physique.CAPACITES
+local ORDRE = Physique.ORDRE
+local TOUTES = Physique.TOUTES
+-- Un état (plateforme, capacités en main) se code en un seul nombre : plateforme × ETATS + capacités.
+local ETATS = TOUTES + 1
 
 type Plateforme = {
 	nom: string,
@@ -67,7 +75,7 @@ for _, d in modele:GetDescendants() do
 	if not d:IsA("BasePart") then
 		continue
 	end
-	local estZone = d.Parent and d.Parent.Name:match("^%d_") ~= nil
+	local estZone = d.Parent and d.Parent.Name:match("^%d+_") ~= nil
 	if not estZone then
 		continue
 	end
@@ -148,7 +156,7 @@ local function sautPossible(a: Plateforme, b: Plateforme, capacites: number, ree
 	if montee > monteeMax then
 		return false
 	end
-	local bonus = if montee < 0 then math.min(BONUS_DESCENTE, -montee / 4) else 0
+	local bonus = if montee < 0 then math.min(BONUS_DESCENTE, -montee / DESCENTE_PAS) else 0
 	return vide(a, b) <= videMax + bonus
 end
 
@@ -298,19 +306,19 @@ local function exigences(c: number): (number, { string })
 		venant[k] = etape
 		table.insert(if gratuit then tete else queue, k)
 	end
-	local depuisDepart = depart * 8 + bit32.bor(acquises, plateformes[depart].donne or 0)
+	local depuisDepart = depart * ETATS + bit32.bor(acquises, plateformes[depart].donne or 0)
 	poser(depuisDepart, 0, nil, true)
 	while #tete > 0 or #queue > 0 do
 		local k = if #tete > 0 then table.remove(tete) else table.remove(queue, 1)
-		local caps = k % 8
-		local i = (k - caps) // 8
+		local caps = k % ETATS
+		local i = (k - caps) // ETATS
 		local c0 = cout[k]
 		for j, q in plateformes do
 			if j == i or not sautPossible(plateformes[i], q, caps) then
 				continue
 			end
 			local exigeant = not sautPossible(plateformes[i], q, bit32.band(caps, bit32.bnot(c)))
-			local suivant = j * 8 + bit32.bor(caps, q.donne or 0)
+			local suivant = j * ETATS + bit32.bor(caps, q.donne or 0)
 			poser(
 				suivant,
 				c0 + (if exigeant then 1 else 0),
@@ -321,7 +329,7 @@ local function exigences(c: number): (number, { string })
 	end
 	local arrivee, coutArrivee = nil, math.huge
 	for k, c0 in cout do
-		if plateformes[(k - k % 8) // 8].cp == dernierCp and c0 < coutArrivee then
+		if plateformes[(k - k % ETATS) // ETATS].cp == dernierCp and c0 < coutArrivee then
 			arrivee, coutArrivee = k, c0
 		end
 	end
@@ -420,7 +428,7 @@ print(
 		Physique.MARGE_BORD
 	)
 )
-for caps = 0, 7 do
+for caps = 0, TOUTES do
 	print(
 		string.format(
 			"  plafond réel avec %-28s : vide %5.2f à plat, %5.2f en montant de 4, montée %.1f",
@@ -485,7 +493,7 @@ for _, p in plateformes do
 		local dessous = s.CFrame.Position.Y - s.Size.Y / 2
 		local chevauche = math.min(p.x2, sx2) - math.max(p.x1, sx1) > 0.5
 			and math.min(p.z2, sz2) - math.max(p.z1, sz1) > 0.5
-		if chevauche and dessous > p.haut + 0.01 and dessous < p.haut + 5.5 then
+		if chevauche and dessous > p.haut + 0.01 and dessous < p.haut + HAUTEUR_LIBRE then
 			bas += 1
 			print(
 				string.format(
