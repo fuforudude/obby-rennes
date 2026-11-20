@@ -58,6 +58,8 @@ Le jeu va grandir longtemps : nouvelles tranches de la tour, nouveaux pièges, n
 | Coller un générateur dans Studio | Garder les copies / Assembleur / Bibliothèque commune | Bibliothèque commune | On génère par la commande, l'aperçu passe par Rojo ; le code commun n'existe qu'une fois. |
 | Records quand la tour change | Remise à zéro / Garder / Saisons | Remise à zéro | Un classement juste pour les nouveaux joueurs ; les anciens records restent stockés, plus affichés. |
 | Où se débloque une nouvelle capacité | Hors du parcours / Dans le parcours avec rattrapage | Hors du parcours | Pas de migration, aucun joueur bloqué. |
+| Nom de la zone n°10 (carte et HUD divergents) | « Le dernier bar avant le partiel » / « Rue de la Soif » | « Le dernier bar avant le partiel » | Distingue le n°10 du n°9, déjà nommé « Rue de la Soif ». On corrige `Etapes.luau`. |
+| Nom de la zone n°15 | « Sup de Vinci · salle de partiel » / « Sup de Vinci » | « Sup de Vinci · salle de partiel » | Dit où l'on arrive. On corrige `Etapes.luau`. |
 
 Conventions appliquées (pas des décisions) : règles pures dans `src/partage/` testées sous Lune, carte en code, chaque contrôle prouvé capable d'échouer, serveur qui fait autorité, aucune donnée sauvegardée renommée sans migration.
 
