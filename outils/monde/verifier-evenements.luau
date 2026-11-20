@@ -816,7 +816,7 @@ for n = 0, Etapes.nombre() - 1 do
 	table.insert(corpsEtapes, `{e.anecdote}\n\n{e.blague}`)
 end
 local lignesClassement = {}
-for rang = 1, Reglages.TAILLE_CLASSEMENT or 10 do
+for rang = 1, Reglages.TAILLE_CLASSEMENT do
 	-- pire cas : nom de 14 caractères, valeur de 10 caractères (temps « 123:45.67 », aura « 12 345 678 »)
 	table.insert(lignesClassement, string.format("%2d. %-14s %s", rang, string.rep("W", 14), "12 345 678"))
 end

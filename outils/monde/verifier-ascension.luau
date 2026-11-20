@@ -801,9 +801,8 @@ local MARGE = Vector3.new(
 	Reglages.EVENEMENT_MARGE_HORIZONTALE
 )
 local FENETRE_MIN, DUREE_SIMULEE, PAS_SIM = 1.2, 120, 0.02
--- Plafond de poussée d'un piège de mur (src/partage/Pieges.luau le rabote à cette valeur). Recopié si la branche
--- n'a pas encore le réglage, comme la formule des balanciers plus haut.
-local POUSSEE_MAX = Reglages.PIEGE_POUSSEE_MAX or 65
+-- Plafond de poussée d'un piège de mur (src/partage/Pieges.luau le rabote à cette valeur).
+local POUSSEE_MAX = Reglages.PIEGE_POUSSEE_MAX
 -- Le nombre de tranches se lit sur la carte, jamais recopié : outils/monde/Ascension.luau nomme chaque dalle du
 -- chemin « Pas<tranche>_<rang> » (nom déjà lu par casser-ascension.luau). Les tranches vont de 1 à N sans trou.
 local NB_TRANCHES = 0

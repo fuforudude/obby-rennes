@@ -14,9 +14,23 @@ const racine = join(dirname(fileURLToPath(import.meta.url)), "..");
 const seulementCartes = process.argv.includes("--cartes");
 const dossierCasse = join(racine, "build", "cartes-cassees");
 const durees = [];
+const DELAI_MAX_COMMANDE = 5 * 60; // secondes : au-delà, la commande est arrêtée (la plus longue prend ~40 s)
 
 function lancer(commande, args) {
-  const r = spawnSync(commande, args, { cwd: racine, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const r = spawnSync(commande, args, {
+    cwd: racine,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+    timeout: DELAI_MAX_COMMANDE * 1000,
+  });
+  if (r.error?.code === "ETIMEDOUT") {
+    return {
+      code: 124,
+      sortie:
+        `${r.stdout ?? ""}${r.stderr ?? ""}\n${commande} ${args.join(" ")} arrêté après ${DELAI_MAX_COMMANDE / 60} min ` +
+        "sans finir : sans doute bloqué (boucle infinie ?), voir la sortie ci-dessus.",
+    };
+  }
   if (r.error) {
     return { code: 127, sortie: `${commande} introuvable (${r.error.message}) : « rokit install » à la racine ?` };
   }
@@ -146,6 +160,7 @@ const cassees = [
   ["casser-contrats", "zone-10", "verifier-sauts", ["inatteignable : 10_Test/Checkpoint"]],
   ["casser-contrats", "table-courte", "verifier-contrats", ["la table des checkpoints a", "NB_ETAPES + 1"]],
   ["casser-contrats", "nom-de-zone", "verifier-contrats", ["zone n°3 : « Zone trafiquée »"]],
+  ["casser-contrats", "lecteur-absent", "verifier-contrats", ["le lecteur du tag « Laser »", "LaserDisparu.luau"]],
   [
     "casser-ascension",
     "marches",
@@ -188,11 +203,16 @@ for (const [fabrique, panne, controle, attendus] of cassees) {
       echouer(`fabrication de ${fabrique} ${panne}`, f.sortie, `code ${f.code}`);
     }
     // verifier-ascension lit le tuto en second argument (la salle de partiel) ; les autres n'en prennent qu'un.
-    // Une panne peut aussi trafiquer la table du parcours : elle l'écrit à côté de la carte, en .luau.
+    // Une panne peut aussi trafiquer la table du parcours (à côté de la carte, en .luau) ou les lecteurs de tags
+    // (en .tags.luau).
     const args = controle === "verifier-ascension" ? [fichier, PARCOURS] : [fichier];
     const table = fichier.replace(/\.rbxm$/, ".luau");
     if (existsSync(join(racine, table))) {
       args.push(`parcours=${table}`);
+    }
+    const tags = fichier.replace(/\.rbxm$/, ".tags.luau");
+    if (existsSync(join(racine, tags))) {
+      args.push(`tags=${tags}`);
     }
     const c = lancer(...lune(`outils/monde/${controle}.luau`, ...args));
     if (c.code === 0) {

@@ -1,15 +1,17 @@
--- Usage : lune run outils/monde/verifier-contrats.luau [carte.rbxm ...] [parcours=table.luau]
+-- Usage : lune run outils/monde/verifier-contrats.luau [carte.rbxm ...] [parcours=table.luau] [tags=tags.luau]
 -- (défaut : toutes les sorties de outils/monde/monde.json, le registre des cartes, après lune run
--- outils/monde/generer.luau ; table du parcours : outils/monde/donnees/parcours.luau).
+-- outils/monde/generer.luau ; table du parcours : outils/monde/donnees/parcours.luau). `tags=` remplace des entrées
+-- de TAGS_CONNUS par celles d'un fichier Luau qui rend { [tag] = lecteurs } : ne sert qu'aux cartes cassées.
 --
 -- Contrats carte ↔ jeu, sur l'ensemble des cartes données :
 -- - aucun tag inconnu : chaque tag posé est dans TAGS_CONNUS ci-dessous (ce que le jeu lit vraiment). Un tag mal
 --   orthographié ou un nouveau piège que personne ne lit serait sinon ignoré en silence ;
+-- - chaque fichier lecteur cité dans TAGS_CONNUS existe (plusieurs lecteurs séparés par « et ») ;
 -- - les checkpoints (tag « Checkpoint ») portent un Numero entier, et l'ensemble des Numero est exactement
 --   0..NB_ETAPES (src/partage/Reglages.luau), chacun une seule fois : ni trou, ni doublon, ni numéro en trop ;
 -- - la source unique des checkpoints (outils/monde/donnees/parcours.luau) a exactement NB_ETAPES + 1 entrées,
 --   numérotées 0..NB_ETAPES dans l'ordre, et le nom de zone écrit sur la carte (`nomArche`) est celui de
---   src/partage/Etapes.luau (HUD, titre du panneau d'anecdote), sauf les numéros de NOMS_EN_ATTENTE.
+--   src/partage/Etapes.luau (HUD, titre du panneau d'anecdote).
 -- Code de sortie 1 au moindre défaut.
 local fs = require("@lune/fs")
 local luau = require("@lune/luau")
@@ -44,10 +46,14 @@ local TAGS_CONNUS = {
 
 local fichiers = {}
 local cheminParcours = "outils/monde/donnees/parcours.luau"
+local cheminTags: string? = nil
 for _, arg in process.args do
 	local autre = string.match(arg, "^parcours=(.+)$")
+	local tags = string.match(arg, "^tags=(.+)$")
 	if autre then
 		cheminParcours = autre
+	elseif tags then
+		cheminTags = tags
 	else
 		table.insert(fichiers, arg)
 	end
@@ -64,6 +70,21 @@ local defauts = 0
 local function defaut(message: string)
 	defauts += 1
 	print("  DÉFAUT : " .. message)
+end
+
+if cheminTags then
+	for tag, lecteurs in luau.load(fs.readFile(cheminTags), { debugName = cheminTags })() do
+		TAGS_CONNUS[tag] = lecteurs
+	end
+end
+
+-- Un lecteur renommé ou supprimé laisserait un tag « connu » que plus personne ne lit.
+for tag, lecteurs in TAGS_CONNUS do
+	for chemin in string.gmatch(lecteurs .. " et ", "(.-) et ") do
+		if not fs.isFile(chemin) then
+			defaut(`TAGS_CONNUS : le lecteur du tag « {tag} », {chemin}, n'existe pas`)
+		end
+	end
 end
 
 local NB_ETAPES = Reglages.NB_ETAPES
@@ -126,23 +147,11 @@ end
 
 -- Noms de zone : le texte écrit sur la carte (arche ou nom flottant) et celui de src/partage/Etapes.luau (HUD, titre du
 -- panneau d'anecdote) nomment la même chose, la zone du checkpoint : ils doivent être identiques.
--- EN ATTENTE DE DÉCISION (refonte modulaire, tâche 4) : n°10 et n°15 divergent, l'utilisateur choisit le texte à
--- garder. Ces numéros sont signalés sans faire échouer le contrôle ; toute autre divergence est un défaut, et un
--- numéro de cette liste redevenu identique aussi (le retirer de la liste une fois les textes alignés).
-local NOMS_EN_ATTENTE = { [10] = true, [15] = true }
 local Etapes = luau.load(fs.readFile("src/partage/Etapes.luau"), { debugName = "Etapes" })()
 for _, c in table_ do
 	local etape = Etapes.obtenir(c.numero)
 	local zone = etape and etape.zone
-	if zone == c.nomArche then
-		if NOMS_EN_ATTENTE[c.numero] then
-			defaut(`zone n°{c.numero} : noms alignés (« {zone} ») : retirer {c.numero} de NOMS_EN_ATTENTE`)
-		end
-	elseif NOMS_EN_ATTENTE[c.numero] then
-		print(
-			`  en attente de décision : zone n°{c.numero}, « {c.nomArche} » sur la carte, « {tostring(zone)} » dans Etapes`
-		)
-	else
+	if zone ~= c.nomArche then
 		defaut(
 			`zone n°{c.numero} : « {tostring(c.nomArche)} » sur la carte ({cheminParcours}), « {tostring(zone)} » dans src/partage/Etapes.luau`
 		)
