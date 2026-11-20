@@ -68,6 +68,15 @@ local function charger(joueur: Player)
 		end
 		return
 	end
+	if Regles.estPlusRecente(profil.Data) then
+		-- Sauvegarde écrite par un serveur plus récent (déploiement en cours) : migrer la rétrograderait. On n'y
+		-- touche pas, on libère la session sans rien modifier, et le joueur reviendra sur un serveur à jour.
+		profil:EndSession()
+		if joueur.Parent == Players then
+			joueur:Kick("Le jeu vient d'être mis à jour : reviens dans un instant.")
+		end
+		return
+	end
 	profil:AddUserId(joueur.UserId) -- RGPD : permet de retrouver et d'effacer les données d'un joueur
 	profil.Data = Regles.migrer(profil.Data, Reglages.NB_ETAPES)
 	Regles.appliquerVersionTour(profil.Data, Reglages.VERSION_TOUR)

@@ -204,7 +204,10 @@ local Reglages = {
 	-- Version de la tour. La passer à 2 (quand la tour change vraiment) fait repartir à vide les classements de la
 	-- tour (« HauteurAscension_v2 », « TempsAscension_v2 » : partage/Ascension.nomsClassementsTour) et les records de
 	-- tour des joueurs (meilleure hauteur, meilleur temps d'ascension : Regles.appliquerVersionTour). Le parcours, son
-	-- classement, l'aura et les capacités ne bougent pas ; les anciens records restent stockés. Ne fait que monter.
+	-- classement, l'aura et les capacités ne bougent pas ; les anciens records restent stockés.
+	-- Ne fait que monter (jamais redescendre). Au moment de la publier, arrêter tous les serveurs (Creator Hub,
+	-- « Shut down all servers ») : un ancien serveur laisse intacts les records d'une tour plus récente, mais les
+	-- deux tours ne doivent pas tourner en même temps.
 	VERSION_TOUR = 1,
 
 	-- Contrôles de carte (outils/monde/verifier-sauts.luau et verifier-ascension.luau), le jeu ne les lit pas.

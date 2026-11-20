@@ -27,6 +27,7 @@ local Commun = require(script.Commun)
 -- seul Heartbeat, connecté au premier objet suivi et déconnecté quand il n'en reste aucun.
 local suivis: { [Instance]: Commun.Maj } = {}
 local liaisonHorloge: RBXScriptConnection? = nil
+local signales: { [Instance]: true } = {} -- objets dont la mise à jour a déjà planté : signalés une seule fois
 local prochainScan = 0
 
 --- Les positions des joueurs vivants : relevées une seule fois par scan, partagées par tous les obstacles.
@@ -50,8 +51,14 @@ local function majHorloge()
 		prochainScan = instant.horloge + Reglages.PIEGE_PERIODE_SCAN
 		instant.positions = positionsVivantes()
 	end
-	for _, maj in suivis do
-		maj(instant)
+	-- Une famille qui plante n'arrête pas les autres sur cette image ; l'erreur est signalée une fois par objet.
+	for objet, maj in suivis do
+		-- Le cast : le vérificateur de types refuse `pcall` sur une fonction qui ne rend rien.
+		local ok, erreur = pcall(maj :: (Commun.Instant) -> any, instant)
+		if not ok and not signales[objet] then
+			signales[objet] = true
+			warn(`[Obstacles] {objet:GetFullName()} : erreur à la mise à jour (signalée une seule fois) : {erreur}`)
+		end
 	end
 end
 
@@ -62,6 +69,7 @@ local function suivre(objet: Instance, maj: Commun.Maj)
 	end
 	objet.Destroying:Connect(function()
 		suivis[objet] = nil
+		signales[objet] = nil
 		local liaison = liaisonHorloge
 		if liaison and next(suivis) == nil then
 			liaison:Disconnect()
