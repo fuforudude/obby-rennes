@@ -1,8 +1,8 @@
 --!strict
 -- Les obstacles et pièges de la tour, en fonctions pures (sans jeu, sans horloge, sans instance) : la lecture des
--- attributs posés par la carte, le cycle du piège de mur, le balayage du laser et le cycle de la plateforme qui
--- s'effondre. Le service serveur (src/serveur/Obstacles.luau) ne fait que lire l'horloge, bouger les pièces et
--- pousser les joueurs ; ce module décide.
+-- attributs posés par la carte, le cycle du piège de mur, le balayage du laser et la durée de chute de la plateforme
+-- qui s'effondre. Le service serveur (src/serveur/Obstacles/, un module par famille) ne fait que lire l'horloge,
+-- bouger les pièces et pousser les joueurs ; ce module décide.
 -- Même esprit que src/partage/Horaires.luau, dont le laser réutilise le cycle : tous les joueurs voient le même
 -- balayage parce qu'il se calcule à partir de `workspace:GetServerTimeNow()`.
 --
@@ -48,8 +48,6 @@ export type ParametresEffondrable = {
 	delaiChute: number, -- entre le premier contact et la chute
 	delaiRetour: number, -- entre la chute et le retour à sa place
 }
-
-export type CycleEffondrable = "tient" | "tombee" | "revenue"
 
 export type DefautsPiege = { portee: number, poussee: number, pousseeMax: number, repos: number }
 export type DefautsEffondrable = { delaiChute: number, delaiRetour: number }
@@ -225,18 +223,6 @@ end
 --- serait réancrée après son propre retour). Pourquoi un plafond : voir Reglages.EFFONDRABLE_DUREE_CHUTE.
 function Pieges.dureeChuteLibre(delaiRetour: number, maximum: number): number
 	return math.min(delaiRetour, maximum)
-end
-
---- Où en est la plateforme, `ecoule` secondes après le premier contact : elle tient encore, elle est tombée, ou
---- elle est revenue à sa place (et peut retomber au contact suivant).
-function Pieges.cycleEffondrable(ecoule: number, p: ParametresEffondrable): CycleEffondrable
-	if not fini(ecoule) or ecoule < p.delaiChute then
-		return "tient"
-	end
-	if ecoule < p.delaiChute + p.delaiRetour then
-		return "tombee"
-	end
-	return "revenue"
 end
 
 --- Le multiplicateur de force d'un balancier (attribut facultatif `Poussee` des pancartes qui basculent).

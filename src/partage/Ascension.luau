@@ -24,6 +24,16 @@ local Ascension = {}
 
 Ascension.METRES_PAR_STUD = METRES_PAR_STUD
 
+--- Les noms des classements de la tour (OrderedDataStore) pour une version de tour (Reglages.VERSION_TOUR) :
+--- une nouvelle version ouvre des classements neufs, les anciens restent stockés sous leur nom. La version 1 donne
+--- les noms d'origine, « HauteurAscension_v1 » et « TempsAscension_v1 ».
+function Ascension.nomsClassementsTour(versionTour: number): { hauteur: string, temps: string }
+	return {
+		hauteur = `HauteurAscension_v{versionTour}`,
+		temps = `TempsAscension_v{versionTour}`,
+	}
+end
+
 --- Aura d'un étage franchi : la base pour le premier étage, puis de plus en plus haut on monte.
 --- Croissante avec la hauteur : l'étage n rapporte BASE + PAR_ETAGE × (n − 1).
 --- Un numéro abîmé (NaN, infini, négatif) compte pour l'étage 1 : une pièce mal taguée dans la carte ne rapporte

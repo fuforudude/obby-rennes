@@ -9,7 +9,7 @@
 -- comparée à celle d'il y a SURVEILLANCE_FENETRE secondes — une fenêtre glissante, et non le relevé précédent :
 -- sur une demi-seconde, le terme fixe du maximum (la hauteur d'un envol) laissait passer un script de vol.
 -- La règle est pure et testée (partage/Capacites : empiler, evaluerFenetre). Les déplacements que
--- le serveur décide lui-même (réapparition, étape passée, téléportation vers un palier, renvoi au pied) ne sont pas
+-- le serveur décide lui-même (réapparition, étape passée, renvoi au pied de l'ascension) ne sont pas
 -- de la triche : le code qui téléporte un joueur appelle `Capacites.autoriserTeleportation(joueur)` au même moment
 -- (la réapparition est déjà couverte ici). Sans cet appel, la téléportation serait prise pour un déplacement
 -- impossible et le joueur serait ramené en arrière.
@@ -251,8 +251,8 @@ local function amorcerSurRacine(joueur: Player, suivi: Suivi, maintenant: number
 	end
 end
 
---- À appeler quand le serveur déplace lui-même un joueur (étape passée, téléportation vers un palier, renvoi au
---- pied...), dans la même image que le `PivotTo` : le déplacement n'est pas comparé aux capacités.
+--- À appeler quand le serveur déplace lui-même un joueur (étape passée, renvoi au pied de l'ascension...), dans la
+--- même image que le `PivotTo` : le déplacement n'est pas comparé aux capacités.
 function Capacites.autoriserTeleportation(joueur: Player)
 	local suivi = suivis[joueur]
 	if not suivi then
@@ -261,8 +261,8 @@ function Capacites.autoriserTeleportation(joueur: Player)
 	local maintenant = os.clock()
 	-- Le délai ne sert qu'à ignorer la position répliquée, pas fiable un instant : il ne suspend pas la surveillance.
 	-- Le tampon repart de la destination (la racine vient d'être placée, dans cette même image), et la première
-	-- mesure d'après le délai est comparée à elle : sans quoi un client qui redemande une téléportation toutes les
-	-- 2 s (PALIER_DELAI_TELEPORT) volerait en toute impunité 1,5 s sur 2. La destination est aussi la dernière
+	-- mesure d'après le délai est comparée à elle : sans quoi des téléportations rapprochées laisseraient la
+	-- surveillance aveugle entre deux, le temps de voler en toute impunité. La destination est aussi la dernière
 	-- position valide : si une alerte tombe, on ramène le joueur là, pas là où il était avant d'être téléporté.
 	suivi.ignorerJusqua = math.max(suivi.ignorerJusqua, maintenant + DELAI_TELEPORTATION)
 	amorcerSurRacine(joueur, suivi, maintenant)

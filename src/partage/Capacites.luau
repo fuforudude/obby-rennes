@@ -42,6 +42,10 @@ local Capacites = {}
 
 Capacites.PHYSIQUE_DEFAUT = PHYSIQUE_DEFAUT
 Capacites.TOUTES = TOUTES
+-- Attributs booléens du joueur, posés par le contrôleur client (client/Capacites) et lus par l'interface
+-- (client/Interface/IconesCapacites) : le double saut ou le dash est-il disponible en ce moment ?
+Capacites.ATTRIBUT_DOUBLE_SAUT_PRET = "CapaciteDoubleSautPrete"
+Capacites.ATTRIBUT_DASH_PRET = "CapaciteDashPrete"
 
 --- Nombre fini et positif ou nul (0 sinon : NaN, négatif, infini).
 local function positifOuNul(valeur: number): number
@@ -181,8 +185,8 @@ end
 --- Le serveur vient de placer le joueur à (x, y, z) : le tampon repart de cette destination, avec ce seul relevé.
 --- Les relevés suivants se mesurent depuis elle, et non depuis le point de départ de la téléportation (le saut de
 --- position n'est jamais comparé). Sans ce relevé de départ, la surveillance restait aveugle jusqu'à la deuxième
---- mesure après le délai de la téléportation, et un client qui demande une téléportation de palier toutes les 2 s
---- ne se faisait jamais mesurer. Le tampon est modifié et rendu.
+--- mesure après le délai de la téléportation, et des téléportations rapprochées ne laissaient jamais le joueur se
+--- faire mesurer. Le tampon est modifié et rendu.
 function Capacites.amorcer(tampon: Tampon, instant: number, x: number, y: number, z: number): Tampon
 	table.clear(tampon)
 	table.insert(tampon, { instant = instant, x = x, y = y, z = z })

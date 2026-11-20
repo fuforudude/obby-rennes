@@ -73,7 +73,7 @@ end
 --- fonction que l'ouverture de l'ascension côté src/serveur/Ascension.luau : les deux services doivent toujours dire
 --- la même chose, sinon ils se disputent la réapparition.
 local function placeParAscension(joueur: Player, donnees: Regles.Donnees): boolean
-	return Regles.placeParAscension(joueur:GetAttribute("EnAscension") == true, donnees)
+	return Regles.placeParAscension(joueur:GetAttribute(Regles.ATTRIBUT_EN_ASCENSION) == true, donnees)
 end
 
 --- Pose le personnage sur son dernier checkpoint, tourné vers la suite du parcours (+X).

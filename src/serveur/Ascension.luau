@@ -53,7 +53,7 @@ local pcallAvecErreur: (...any) -> (boolean, any) = pcall :: any
 local etatAscension: RemoteEvent
 
 -- Attribut posé sur le Player : « c'est Ascension.luau qui place ce joueur » (lu par Parcours.luau).
-local ATTRIBUT_EN_ASCENSION = "EnAscension"
+local ATTRIBUT_EN_ASCENSION = Regles.ATTRIBUT_EN_ASCENSION
 -- Hors tentative, l'état de l'ascension est renvoyé toutes ces secondes : un client qui pose sa connexion après le
 -- chargement des données ne rate pas son record de hauteur (voir releverTous).
 local PERIODE_ETAT_REPOS = 2
