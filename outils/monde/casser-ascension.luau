@@ -12,6 +12,10 @@
 --   mobiles      Duree des plateformes mobiles ramenée à 0,3 s -> « le saut d'arrivée … par cycle »
 --   effondrables DelaiRetour porté à 20 s -> « DelaiRetour … de 1,2 à 8 s attendues »
 --   tournants    Vitesse ramenée à 1,2 rad/s -> « pas plus rapide que le tuto »
+--   mur          un mur solide sans requête entre le pied et Pas1_1 -> « saut … barré »
+--   mur-acces    un mur solide sans requête devant PanneauDuToit -> « saut ArmoireDeLaVerriere -> PanneauDuToit barré »
+--   passager     une poutre solide sans requête au-dessus de la course d'une nacelle -> « elle ou son passager »
+--   laser-habillage  un habillage solide dans le balayage d'un laser -> « traverse »
 --   bouts        bouts des barres tournantes portés à 3 studs -> « dépasse de la barre »
 --   tag-sans-simulateur  tag « Fragile » (un piège du tuto, connu du jeu) posé sur une dalle du chemin
 --                -> « tag « Fragile » sans simulateur » (aucune famille du registre FAMILLES ne le contrôle)
@@ -34,7 +38,7 @@ local sortie = process.args[2] or "ascension-cassee.rbxm"
 local source = process.args[3] or "monde/Ascension.rbxm"
 assert(
 	panne,
-	"panne attendue : marches, lasers, pieges, repos, poussee, balanciers, mobiles, effondrables, tournants, bouts, "
+	"panne attendue : marches, lasers, pieges, repos, poussee, balanciers, mobiles, effondrables, tournants, bouts, mur, mur-acces, passager, laser-habillage, "
 		.. "tag-sans-simulateur ou famille-inconnue"
 )
 
@@ -161,6 +165,57 @@ function pannes.tournants(): string
 		n += 1
 	end
 	return `{n} barres tournantes ramenées à 1,2 rad/s (le tuto en fait 1,6)`
+end
+
+-- Un solide sans requête (le verifier ne le compte pas comme plateforme), dans le dossier des obstacles.
+local function solide(nom: string, taille, cf)
+	local p = roblox.Instance.new("Part")
+	p.Name = nom
+	p.Anchored = true
+	p.CanQuery = false
+	p.Size = taille
+	p.CFrame = cf
+	p.Parent = modele:FindFirstChild("Obstacles")
+end
+
+function pannes.mur(): string
+	local pied = tagues("PiedAscension")[1]
+	local pas = modele:FindFirstChild("Chemin"):FindFirstChild("Pas1_1")
+	local milieu = (pied.CFrame.Position + pas.CFrame.Position) / 2
+	local vers = pas.CFrame.Position - pied.CFrame.Position
+	-- En travers du saut, au ras de Pas1_1, trop haut pour les deux sauts enchaînés.
+	local dir = Vector3.new(vers.X, 0, vers.Z).Unit
+	local centre = pas.CFrame.Position - dir * (pas.Size.Magnitude / 2 + 1)
+	solide(
+		"MurDeTriche",
+		Vector3.new(1, 60, 60),
+		CFrame.new(centre.X, milieu.Y, centre.Z) * CFrame.Angles(0, math.atan2(-dir.Z, dir.X), 0)
+	)
+	return "un mur entre le pied et Pas1_1"
+end
+
+pannes["mur-acces"] = function(): string
+	local p = modele:FindFirstChild("Acces"):FindFirstChild("PanneauDuToit").CFrame.Position
+	solide("MurDeTriche", Vector3.new(60, 60, 1), CFrame.new(p.X, p.Y, p.Z - 4))
+	return "un mur devant PanneauDuToit"
+end
+
+function pannes.passager(): string
+	local m = tagues("Mobile")[1]
+	local milieu = m.CFrame.Position + m:GetAttribute("Deplacement") / 2
+	solide("PoutreDeTriche", Vector3.new(1, 1, 1), CFrame.new(milieu + Vector3.new(0, 4, 0)))
+	return `une poutre 4 studs au-dessus de la course de {m.Name}`
+end
+
+pannes["laser-habillage"] = function(): string
+	local l = tagues("Laser")[1]
+	for _, d in modele:FindFirstChild("Chemin"):GetChildren() do
+		if d:IsA("BasePart") and d.CanCollide and not d.CanQuery then
+			d.CFrame = CFrame.new((l:GetAttribute("Depart") + l:GetAttribute("Arrivee")) / 2)
+			return `{d.Name} posé dans le balayage de {l.Name}`
+		end
+	end
+	error("aucun habillage solide dans le chemin")
 end
 
 function pannes.bouts(): string

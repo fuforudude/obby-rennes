@@ -82,6 +82,7 @@ Physique.Reglages = Reglages
 -- quand il décolle au dernier pixel.
 Physique.MARGE_BORD = 2
 
+Physique.V0, Physique.G = V0, G -- décollage et gravité, pour rejouer un arc (couloirs.luau)
 Physique.HAUTEUR_SIMPLE = HAUTEUR_SIMPLE
 Physique.HAUTEUR_DOUBLE = HAUTEUR_DOUBLE
 
@@ -111,6 +112,11 @@ function Physique.vitesseSol(caps: number): number
 	return P.vitesseMarche * (if a(caps, "course") then Reglages.COURSE_FACTEUR else 1)
 end
 
+--- Studs gagnés par le dash d'un envol (0 sans le dash).
+function Physique.gainDash(caps: number): number
+	return if a(caps, "dash") then Jeu.extensionDash(Physique.vitesseSol(caps)) else 0
+end
+
 --- Portée horizontale maximale (studs) d'un envol qui se pose `montee` studs plus haut, avec `caps`. -1 si la
 --- montée est hors de portée.
 function Physique.portee(montee: number, caps: number): number
@@ -119,11 +125,7 @@ function Physique.portee(montee: number, caps: number): number
 		return -1
 	end
 	local v = Physique.vitesseSol(caps)
-	local d = v * t
-	if a(caps, "dash") then
-		d += Jeu.extensionDash(v)
-	end
-	return d
+	return v * t + Physique.gainDash(caps)
 end
 
 --- Ce saut (vide entre bords, montée) est-il franchissable en physique réelle avec `caps` ? Marge de bord comprise :

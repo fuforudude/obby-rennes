@@ -1959,23 +1959,25 @@ return function(R, biblio)
 		},
 		SDV.verriere
 	)
-	-- Éclats de verre restés dans le cadre : on voit que la verrière a été traversée (fantômes, sans ombre).
+	-- Éclats de verre restés sur le cadre : on voit que la verrière a été traversée. Couchés sur l'acier, hors de
+	-- l'ouverture : debout ou au-dessus du vide, ils passeraient pour un bord où se poser.
 	local eclats = {
-		{ x = 834, z = 2.8, rx = -32, ry = 4 },
-		{ x = 841.5, z = 2.6, rx = -26, ry = -7 },
-		{ x = 843.2, z = 6.5, rx = -30, ry = 90 },
-		{ x = 843.4, z = 11.5, rx = 24, ry = 90 },
-		{ x = 839, z = 13.4, rx = 28, ry = -5 },
-		{ x = 833.4, z = 13.2, rx = 33, ry = 8 },
+		{ x = 834, z = 1.3 },
+		{ x = 841.5, z = 1.3 },
+		{ x = 844.7, z = 6.5, enLong = true },
+		{ x = 844.7, z = 11.5, enLong = true },
+		{ x = 839, z = 14.7 },
+		{ x = 833.4, z = 14.7 },
 	}
 	for i, e in eclats do
+		local longueur = if i % 2 == 0 then 1.7 else 2.1
 		local eclat = piece(
 			vinci,
 			"EclatVerriere",
-			if i % 2 == 0 then 3.4 else 4.2,
-			0.25,
-			2.6,
-			CFrame.new(e.x, 56.6, e.z) * CFrame.Angles(math.rad(e.rx), math.rad(e.ry), math.rad(i * 3 - 9)),
+			if e.enLong then 0.5 else longueur,
+			0.12,
+			if e.enLong then longueur else 0.5,
+			CFrame.new(e.x, SDV.toit + 1.46, e.z),
 			Color3.fromRGB(190, 225, 240),
 			Enum.Material.Glass
 		)

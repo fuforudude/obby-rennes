@@ -1,5 +1,6 @@
 -- Usage : lune run outils/monde/verifier-sauts.luau [fichier.rbxm] (défaut monde/Parcours.rbxm ; après lune run outils/monde/generer.luau).
--- Vérifie le tracé : depuis le départ, peut-on atteindre chaque checkpoint en sautant de plateforme en plateforme ?
+-- Vérifie le tracé : depuis le départ, peut-on atteindre chaque checkpoint en sautant de plateforme en plateforme, sans
+-- qu'un solide barre le saut (couloirs.luau) ?
 -- Saut possible si : montée <= 4,5 ; vide horizontal (entre bords) <= 6,5 (+ 1 par tranche de 4 de descente, au plus 2,5) ;
 -- ces valeurs sont les CONTROLE_* de src/partage/Reglages.luau, lues au lancement.
 --
@@ -24,6 +25,8 @@ local roblox = require("@lune/roblox")
 -- Physique réelle du moteur (outils/monde/physique.luau) : elle ne sert qu'à la preuve de stricte nécessité des
 -- portes, plus bas. Le modèle prudent ci-dessous reste la règle pour tout le reste.
 local Physique = require("./physique")
+local Formes = require("./formes")
+local Couloirs = require("./couloirs")
 
 local modele = roblox.deserializeModel(fs.readFile(process.args[1] or "monde/Parcours.rbxm"))[1]
 
@@ -57,6 +60,7 @@ type Plateforme = {
 	bas: number?,
 	cp: number?,
 	donne: number?,
+	bord: boolean?, -- bord décoratif (garde-corps, pignon, décor des événements) : on peut s'y poser, on n'y passe pas
 }
 local plateformes: { Plateforme } = {}
 local solides = {}
@@ -90,24 +94,35 @@ if fs.isFile("monde/Evenements.rbxm") then
 		end
 	end
 end
+-- Tout ce qui peut barrer un saut (couloirs.luau) : les solides qui ne bougent pas, plateformes ou non.
+local obstacles = {}
+for _, d in modele:GetDescendants() do
+	if d:IsA("BasePart") and d.CanCollide and not (d:HasTag("Tournant") or d:HasTag("Mobile")) then
+		table.insert(obstacles, Formes.lire(d))
+	end
+end
 for _, d in pieces do
 	if not d:IsA("BasePart") then
 		continue
 	end
 	local estZone = d.Parent and d.Parent.Name:match("^%d+_") ~= nil
-	if not estZone and d:IsDescendantOf(modele) then
+	local duDecor = not d:IsDescendantOf(modele)
+	if duDecor then
+		table.insert(obstacles, Formes.lire(d))
+	elseif not estZone then
 		continue
 	end
 	if d:HasTag("Mortel") then
 		local x1, x2, z1, z2 = emprise(d, 0, 0)
+		local _, hy = demis(d)
 		table.insert(mortels, {
 			nom = d.Parent.Name .. "/" .. d.Name,
 			x1 = x1,
 			x2 = x2,
 			z1 = z1,
 			z2 = z2,
-			haut = d.CFrame.Position.Y + d.Size.Y / 2,
-			bas = d.CFrame.Position.Y - d.Size.Y / 2,
+			haut = d.CFrame.Position.Y + hy,
+			bas = d.CFrame.Position.Y - hy,
 		})
 	end
 	if d.CanCollide and not d:HasTag("Mortel") and d.Transparency < 1 then
@@ -142,6 +157,8 @@ for _, d in pieces do
 			haut = haut,
 			cp = n,
 			donne = donne,
+			-- Le chemin porte un contour (Parcours.luau) ou un checkpoint ; le reste n'en est que le bord.
+			bord = duDecor or not (d:HasTag("Checkpoint") or d:FindFirstChild("Contour")),
 		})
 	end
 end
@@ -180,6 +197,20 @@ local function sautPossible(a: Plateforme, b: Plateforme, capacites: number, ree
 	return vide(a, b) <= videMax + bonus
 end
 
+-- Un saut du modèle prudent doit aussi passer : au moins COULOIR_MIN de ses arcs se posent malgré les solides. Le
+-- parcours garde tous ses checkpoints jusqu'à 0,3 : la marge est d'un facteur trois. Retenu par paire et capacités.
+local COULOIR_MIN = 0.1
+local couloirs: { [number]: number } = {}
+local function couloir(i: number, j: number, capacites: number): number
+	local cle = (i * #plateformes + j) * ETATS + capacites
+	local part = couloirs[cle]
+	if not part then
+		part = Couloirs.partLibre(plateformes[i], plateformes[j], capacites, obstacles, COULOIR_MIN)
+		couloirs[cle] = part
+	end
+	return part
+end
+
 local depart
 for i, p in plateformes do
 	if p.cp == 0 then
@@ -214,8 +245,10 @@ end
 -- des capacités que l'on refuse de donner : avec 0 on explore le parcours tel qu'il se joue, avec le masque d'une
 -- capacité on vérifie que son passage d'apprentissage barre bien la route. Rend, par plateforme atteinte, les
 -- capacités dont on y dispose, et par quelle plateforme on y est arrivé (pour afficher la route trouvée quand une
--- porte ne tient pas : c'est elle qu'il faut corriger).
-local function explorer(privee: number, reel: boolean?): ({ [number]: number }, { [number]: number })
+-- porte ne tient pas : c'est elle qu'il faut corriger). Les bords décoratifs ne comptent qu'en physique réelle : pour
+-- prouver qu'une porte tient, tout appui compte ; pour dire qu'un joueur passe, il lui faut le chemin. `degage` : on
+-- exige en plus un couloir dégagé (seulement pour dire que le parcours se fait, jamais pour prouver une porte).
+local function explorer(privee: number, reel: boolean?, degage: boolean?): ({ [number]: number }, { [number]: number })
 	local atteint: { [number]: number } = {}
 	local venant: { [number]: number } = {}
 	local file = {}
@@ -236,9 +269,19 @@ local function explorer(privee: number, reel: boolean?): ({ [number]: number }, 
 		local i = table.remove(file, 1)
 		local capacites = atteint[i]
 		for j, q in plateformes do
-			if sautPossible(plateformes[i], q, capacites, reel) then
-				pousser(j, capacites, i)
+			if (q.bord and not reel) or not sautPossible(plateformes[i], q, capacites, reel) then
+				continue
 			end
+			if degage then
+				local avec = bit32.bor(capacites, q.donne or 0)
+				if atteint[j] and bit32.band(avec, bit32.bnot(atteint[j])) == 0 then
+					continue -- déjà atteinte avec ces capacités : rien à rejouer
+				end
+				if couloir(i, j, capacites) < COULOIR_MIN then
+					continue
+				end
+			end
+			pousser(j, capacites, i)
 		end
 	end
 	return atteint, venant
@@ -256,15 +299,17 @@ local function inatteignables(atteint: { [number]: number }): { number }
 	return manquants
 end
 
-local atteint = explorer(0)
+local atteint = explorer(0, false, true)
 local manquants = inatteignables(atteint)
+-- Les portes se jugent sans les couloirs : un saut barré ne prouve pas qu'une capacité est nécessaire.
+local coupes = inatteignables(explorer(0))
 print(
 	`{#plateformes} plateformes, checkpoints inatteignables : {if #manquants == 0
 		then "aucun"
 		else table.concat(manquants, ", ")}`
 )
 for i, p in plateformes do
-	if not atteint[i] then
+	if not atteint[i] and not p.bord then
 		print("  inatteignable : " .. p.nom .. string.format(" (x %.0f, haut %.1f)", (p.x1 + p.x2) / 2, p.haut))
 	end
 end
@@ -334,7 +379,7 @@ local function exigences(c: number): (number, { string })
 		local i = (k - caps) // ETATS
 		local c0 = cout[k]
 		for j, q in plateformes do
-			if j == i or not sautPossible(plateformes[i], q, caps) then
+			if j == i or q.bord or not sautPossible(plateformes[i], q, caps) then
 				continue
 			end
 			local exigeant = not sautPossible(plateformes[i], q, bit32.band(caps, bit32.bnot(c)))
@@ -396,18 +441,18 @@ for _, nom in ORDRE do
 			posees[nom],
 			montee,
 			videMax,
-			#sans - #manquants,
+			#sans - #coupes,
 			table.concat(sans, ", ")
 		)
 	)
 	-- On ne juge les portes que sur un parcours entier : s'il est déjà coupé ailleurs, tout est inatteignable de
 	-- toute façon et l'écart ne veut plus rien dire.
-	if #manquants == 0 and #sans == 0 then
+	if #coupes == 0 and #sans == 0 then
 		print(`  DÉFAUT : le passage d'apprentissage de {nom} se franchit sans elle (porte sans effet)`)
 		defauts += 1
 	end
 	-- Une capacité ne doit pas servir qu'une fois : après sa dalle, le parcours doit l'exiger encore.
-	if #manquants == 0 then
+	if #coupes == 0 then
 		local combien, sauts = exigences(CAPACITES[nom])
 		print(`    {combien} saut(s) exigent {nom} sur la route la moins exigeante (minimum {MIN_EXIGENCES}) :`)
 		for _, n in sauts do
@@ -460,7 +505,7 @@ for caps = 0, TOUTES do
 	)
 end
 for _, nom in ORDRE do
-	if not posees[nom] or #manquants > 0 then
+	if not posees[nom] or #coupes > 0 then
 		continue
 	end
 	local atteintReel, venantReel = explorer(CAPACITES[nom], true)
@@ -510,7 +555,8 @@ local bas = 0
 for _, p in plateformes do
 	for _, s in solides do
 		local sx1, sx2, sz1, sz2 = emprise(s, 0, 0)
-		local dessous = s.CFrame.Position.Y - s.Size.Y / 2
+		local _, hy = demis(s)
+		local dessous = s.CFrame.Position.Y - hy
 		local chevauche = math.min(p.x2, sx2) - math.max(p.x1, sx1) > 0.5
 			and math.min(p.z2, sz2) - math.max(p.z1, sz1) > 0.5
 		if chevauche and dessous > p.haut + 0.01 and dessous < p.haut + HAUTEUR_LIBRE then

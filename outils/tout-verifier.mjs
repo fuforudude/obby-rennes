@@ -182,14 +182,32 @@ const cassees = [
   ["casser-bords", "traverse", "verifier-bords", ["GardeCorps, posée sur Parcours.4_LaTour.Balcon, se traverse"]],
   ["casser-bords", "invisible", "verifier-bords", ["GardeCorps : solide et invisible"]],
   ["casser-bords", "aplomb", "verifier-bords", ["Facade : habillage solide hors de l'aplomb"]],
-  ["casser-bords", "penche", "verifier-bords", ["Facade : habillage solide penché"]],
+  ["casser-bords", "penche", "verifier-bords", ["Cale : habillage solide penché"], "seul"],
   ["casser-bords", "rebord", "verifier-bords", ["Facade : on tient debout sur cet habillage"]],
+  ["casser-bords", "maillage", "verifier-bords", ["GardeCorps : Part solide, sa collision peut s'écarter"], "seul"],
+  ["casser-bords", "mobile", "verifier-bords", ["Lisere prolonge Ascension.Pied.PiedAscension"]],
+  ["casser-bords", "toit", "verifier-bords", ["EclatVerriere prolonge Parcours.9_SupDeVinci.Encadrement"], "seul"],
+  ["casser-bords", "exception", "verifier-bords", ["FaisceauEtage$ » inutile"], "seul"],
+  ["casser-bords", "mur", "verifier-sauts", ["checkpoints inatteignables : 9, 10"]],
+  ["casser-bords", "balcon", "verifier-sauts", ["checkpoints inatteignables : 8, 9"]],
+  ["casser-bords", "passage", "verifier-evenements", ["sa trajectoire traverse Evenements.Decor.Chaussee"]],
+  [
+    "casser-bords",
+    "balancier",
+    "verifier-evenements",
+    ["PortillonValidation touche Evenements.Decor.PortiqueStation.Valideur"],
+  ],
+  ["casser-ascension", "mur", "verifier-ascension", ["saut PiedAscension -> Pas1_1 barré"]],
+  ["casser-ascension", "mur-acces", "verifier-ascension", ["saut ArmoireDeLaVerriere -> PanneauDuToit barré"]],
+  ["casser-ascension", "passager", "verifier-ascension", ["PoutreDeTriche, elle ou son passager"]],
+  ["casser-ascension", "laser-habillage", "verifier-ascension", ["traverse la dalle Ascension.Chemin."]],
   // Contrôle null : c'est la fabrique elle-même (la génération trafiquée) qui doit échouer avec le message.
   ["casser-ascension", "famille-inconnue", null, ["famille d'obstacle inconnue « Ascenseur »"]],
 ];
 rmSync(dossierCasse, { recursive: true, force: true });
 mkdirSync(dossierCasse, { recursive: true });
-for (const [fabrique, panne, controle, attendus] of cassees) {
+// « seul » : la panne ne doit produire que ce défaut-là.
+for (const [fabrique, panne, controle, attendus, seul] of cassees) {
   etape(`Carte cassée ${fabrique} ${panne} refusée par ${controle ?? "la génération"}`, () => {
     const fichier = join("build", "cartes-cassees", `${fabrique}-${panne}.rbxm`);
     const f = lancer(...lune(`outils/monde/${fabrique}.luau`, panne, fichier));
@@ -233,6 +251,10 @@ for (const [fabrique, panne, controle, attendus] of cassees) {
         c.sortie,
         `${controle} échoue, mais sans le message attendu : ${manquants.map((m) => `« ${m} »`).join(", ")}`,
       );
+    }
+    const nbDefauts = c.sortie.split("\n").filter((l) => l.includes("DÉFAUT :")).length;
+    if (seul && nbDefauts !== 1) {
+      echouer(`carte cassée ${fabrique} ${panne}`, c.sortie, `${nbDefauts} défauts, un seul attendu`);
     }
   });
 }

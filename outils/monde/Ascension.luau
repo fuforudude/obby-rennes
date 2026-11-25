@@ -900,7 +900,7 @@ return function(R, biblio)
 	-- Le liseré ne dépasse pas de la dalle : plus large qu'elle, il passerait pour du sol.
 	fantome(bloc(dPied, "Lisere", 26.2, 0.4, 26.2, CX, BASE + 0.1, CZ, segments[1].couleur, Enum.Material.Neon))
 	for _, c in { -1, 1 } do
-		-- Solide, sur la dalle, et plus haut (17) que les deux sauts enchaînés : on ne grimpe pas dessus.
+		-- Solide, sur la dalle, en retrait du bord d'où l'on part vers la première dalle.
 		decor(
 			bloc(
 				dPied,
@@ -908,15 +908,15 @@ return function(R, biblio)
 				1,
 				17,
 				1,
-				CX - 12.5,
+				CX - 8,
 				BASE + 17,
-				CZ + c * 12,
+				CZ + c * 12.5,
 				segments[1].couleur,
 				Enum.Material.Metal
 			)
 		)
 	end
-	local fronton = fantome(bloc(dPied, "Portique", 1.2, 4, 26, CX - 12.5, BASE + 17.1, CZ, Color3.fromRGB(20, 20, 30)))
+	local fronton = fantome(bloc(dPied, "Portique", 1.2, 4, 26, CX - 8, BASE + 17.1, CZ, Color3.fromRGB(20, 20, 30)))
 	texte(Enum.NormalId.Right, "L'ASCENSION", segments[1].couleur).Parent = fronton
 	local regles = fantome(bloc(dPied, "Regles", 12, 6, 0.4, CX + 2, BASE + 11, CZ - 14, Color3.fromRGB(20, 20, 30)))
 	texte(Enum.NormalId.Back, "Tomber ramène ici.\nAucun palier : 258 studs d'un trait.", couleurs.or_).Parent = regles
@@ -942,18 +942,30 @@ return function(R, biblio)
 		couleurs.or_,
 		true
 	)
-	-- Un bout de toit arraché sous le pied : on comprend qu'il flotte. Solide, dans l'aplomb de la dalle ; les poutres
-	-- vont jusqu'au toit de la fac, loin des dalles de l'accès.
-	decor(brut(dPied, "ToitArrache", 25.6, 3, 25.6, CFrame.new(CX, BASE - 2.5, CZ), couleurs.toit, Enum.Material.Slate))
+	-- Un bout de toit arraché sous le pied : on comprend qu'il flotte. Solide, dans l'aplomb de la dalle ; il s'arrête à
+	-- Z = 6 pour ne pas plafonner le saut d'accès ArmoireDeLaVerriere -> PanneauDuToit. Les poutres vont du pied au toit
+	-- de la fac, loin des dalles de l'accès.
+	decor(
+		brut(
+			dPied,
+			"ToitArrache",
+			25.6,
+			3,
+			18.8,
+			CFrame.new(CX, BASE - 2.5, CZ - 3.4),
+			couleurs.toit,
+			Enum.Material.Slate
+		)
+	)
 	for _, d in { -1, 1 } do
 		decor(
 			brut(
 				dPied,
 				"Poutre",
 				1.4,
-				BASE - 4 - SDV.toit,
+				BASE - 1 - SDV.toit,
 				1.4,
-				CFrame.new(CX + d * 10, (BASE - 4 + SDV.toit) / 2, CZ + d * 8),
+				CFrame.new(CX + d * 10, (BASE - 1 + SDV.toit) / 2, CZ + d * 8),
 				couleurs.acier,
 				Enum.Material.Metal
 			)

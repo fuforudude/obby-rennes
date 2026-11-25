@@ -9,6 +9,7 @@
 --   chemin en retirant chaque capacité et on exige qu'elle échoue (même technique que la « porte sans effet » de
 --   outils/monde/verifier-sauts.luau). C'est ce contrôle qui garantit que la tour exige les trois capacités du pied
 --   au sommet ; sans lui, rien n'empêche un tracé qui se franchit au saut simple ;
+-- - aucun solide, plateforme ou non, ne barre un saut du chemin ou de l'accès (arcs rejoués, couloirs.luau) ;
 -- - les six familles d'obstacles (« PiegeMur », « Laser », « Effondrable », « Balancier », « Mobile », « Tournant »)
 --   portent les attributs de leur contrat, et **chacune laisse au moins 1,2 s de passage libre par cycle** sur
 --   chaque dalle qu'elle menace (simulation sur 120 s, méthode de outils/monde/verifier-evenements.luau) ; aucun
@@ -46,6 +47,8 @@ local CFrame, Vector3 = roblox.CFrame, roblox.Vector3
 -- partiel (voir « On n'entre dans la tour qu'en ayant fini le tuto »). Les règles de saut ci-dessous restent le
 -- modèle prudent, qui décide de la difficulté du tracé.
 local Physique = require("./physique")
+local Formes = require("./formes")
+local Couloirs = require("./couloirs")
 
 -- Horaires du jeu (src/partage/Horaires.luau) : la sinusoïde des balanciers. Même chargement que
 -- outils/monde/verifier-evenements.luau, avec la formule recopiée si le module n'est pas sur cette branche.
@@ -249,6 +252,7 @@ end
 
 local plateformes: { Plateforme } = {}
 local solides: { Plateforme } = {}
+local barrages = {} -- tout ce qui peut barrer un saut : les solides qui ne bougent pas, des deux cartes (couloirs.luau)
 local mortels: { Plateforme } = {}
 local etages = {}
 -- Registre des familles d'obstacles (une par tag posé par le registre `poseurs` d'outils/monde/Ascension.luau) :
@@ -324,6 +328,9 @@ for _, d in modele:GetDescendants() do
 			boite.x1, boite.x2 = math.min(boite.x1, boite.x1 + dep.X), math.max(boite.x2, boite.x2 + dep.X)
 			boite.z1, boite.z2 = math.min(boite.z1, boite.z1 + dep.Z), math.max(boite.z2, boite.z2 + dep.Z)
 		end
+	end
+	if d.CanCollide and not estObstacle and not d:HasTag("Mobile") then
+		table.insert(barrages, Formes.lire(d))
 	end
 	if d.CanCollide and d.Transparency < 1 and not estObstacle then
 		table.insert(solides, boite)
@@ -418,6 +425,9 @@ for _, d in roblox.deserializeModel(fs.readFile(cheminParcours))[1]:GetDescendan
 		bas = mn.Y,
 		part = d,
 	}
+	if d.CanCollide and not (d:HasTag("Tournant") or d:HasTag("Mobile")) then
+		table.insert(barrages, Formes.lire(d))
+	end
 	if d.CanCollide and d.Transparency < 1 then
 		table.insert(solidesParcours, boite)
 	end
@@ -722,6 +732,70 @@ else
 			`l'accès ne commence pas par la dalle marquée DepartAcces ({depart.nom}) mais par {suite[2] and suite[2].nom}`
 		)
 	end
+end
+
+---------------------------------------------------------------------------------------------------------------
+-- Couloirs dégagés : chaque saut de l'accès et du chemin garde une part minimale d'arcs qui se posent (couloirs.luau),
+-- malgré tous les solides des deux cartes, plateformes ou non. Une plateforme mobile est jugée à sa meilleure place.
+local COULOIR_CHEMIN, COULOIR_ACCES = 0.5, 0.25
+-- Le pied s'aborde entre ses deux tableaux, solides : peu d'arcs tout droits, on contourne en l'air.
+local COULOIRS_PARTICULIERS = { ["PanneauDuToit -> PiedAscension"] = 0.01 }
+do
+	local function places(p: Plateforme): { Plateforme }
+		local dep = p.part:GetAttribute("Deplacement")
+		if not p.part:HasTag("Mobile") or typeof(dep) ~= "Vector3" then
+			return { p }
+		end
+		local mn, mx = emprise(p.part)
+		local liste = {}
+		for _, k in { 0, 0.5, 1 } do
+			local d = dep * k
+			table.insert(liste, {
+				nom = p.nom,
+				x1 = mn.X + d.X,
+				x2 = mx.X + d.X,
+				z1 = mn.Z + d.Z,
+				z2 = mx.Z + d.Z,
+				haut = mx.Y + d.Y,
+				bas = mn.Y + d.Y,
+				part = p.part,
+			})
+		end
+		return liste
+	end
+	local pire, pireNom = math.huge, "aucun"
+	local function controler(suite: { Plateforme }, seuilCommun: number)
+		for i = 1, #suite - 1 do
+			local nom = `{suite[i].nom:match("[^./]+$")} -> {suite[i + 1].nom:match("[^./]+$")}`
+			local seuil = COULOIRS_PARTICULIERS[nom] or seuilCommun
+			local part = 0
+			for _, a in places(suite[i]) do
+				for _, b in places(suite[i + 1]) do
+					if part < seuil then
+						part = math.max(part, (Couloirs.partLibre(a, b, TOUTES, barrages, seuil)))
+					end
+				end
+			end
+			if part < seuil then
+				defaut(
+					string.format(
+						"saut %s barré : %.1f %% d'arcs libres (%.1f %% au moins)",
+						nom,
+						part * 100,
+						seuil * 100
+					)
+				)
+			end
+			if not COULOIRS_PARTICULIERS[nom] and part < pire then
+				pire, pireNom = part, nom
+			end
+		end
+	end
+	if (meilleurAcces[pied] or math.huge) ~= math.huge then
+		controler(remonter(viaAcces, salle, pied), COULOIR_ACCES)
+	end
+	controler(suiteSommet, COULOIR_CHEMIN)
+	print(string.format("couloirs : le plus serré garde au moins %.0f %% d'arcs libres (%s)", pire * 100, pireNom))
 end
 
 ---------------------------------------------------------------------------------------------------------------
@@ -1125,6 +1199,7 @@ local function plusLongueFenetre(possible: { boolean }, pas: number): number
 	return plusLongue * pas
 end
 
+local TAILLE_PASSAGER = 5
 FAMILLES.Mobile.simuler = function(part)
 	local nom = part:GetFullName()
 	local deplacement, duree = part:GetAttribute("Deplacement"), part:GetAttribute("Duree")
@@ -1186,13 +1261,23 @@ FAMILLES.Mobile.simuler = function(part)
 			)
 		end
 	end
-	-- Sur sa course, elle ne doit heurter aucune autre dalle.
+	-- Sur sa course, ni elle ni son passager (TAILLE_PASSAGER studs de haut) ne doivent heurter un solide.
+	local heurtes = {}
 	for i = 0, n do
 		local ici = aLInstant(i * pas)
-		for _, autre in plateformes do
-			if autre.part ~= part and aabbSeCroisent(boiteDePlateforme(ici), boiteDePlateforme(autre), 0.1) then
-				defaut(`{nom} : sa course la fait heurter {autre.nom}`)
-				break
+		local corps = boiteDePlateforme(ici)
+		corps.max += Vector3.new(0, TAILLE_PASSAGER, 0)
+		for _, autre in solides do
+			if
+				autre.part ~= part
+				and not heurtes[autre]
+				and aabbSeCroisent(corps, {
+					min = Vector3.new(autre.x1, autre.bas, autre.z1),
+					max = Vector3.new(autre.x2, autre.haut, autre.z2),
+				}, 0.1)
+			then
+				heurtes[autre] = true
+				defaut(`{nom} : sa course la fait heurter {autre.nom}, elle ou son passager`)
 			end
 		end
 	end
