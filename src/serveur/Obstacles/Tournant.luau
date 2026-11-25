@@ -35,6 +35,19 @@ local function preparer(objet: Instance): Commun.Maj?
 	charniere.Attachment0 = a0
 	charniere.Attachment1 = a1
 	charniere.Parent = part
+	-- Les pièces enfants de la barre (cubes de bout) tournent avec elle : soudées à la barre encore ancrée, elles
+	-- ne bougent pas pendant qu'on les libère ; Massless pour que la charnière ne voie que la masse de la barre.
+	-- Collision, toucher et apparence restent ceux de la carte.
+	for _, enfant in part:GetChildren() do
+		if enfant:IsA("BasePart") then
+			enfant.Massless = true
+			local soudure = Instance.new("WeldConstraint")
+			soudure.Part0 = part
+			soudure.Part1 = enfant
+			soudure.Parent = enfant
+			enfant.Anchored = false
+		end
+	end
 	part.Anchored = false
 	part:SetNetworkOwner(nil)
 	return nil
