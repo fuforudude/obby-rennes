@@ -148,9 +148,7 @@ local function surCheckpoint(numero: number, touche: BasePart)
 	local course = courses[joueur]
 	if course then
 		course.serie += 1
-		if not course.vol then
-			Mesures.checkpoint(joueur, numero)
-		end
+		Mesures.checkpoint(joueur, numero, course.vol)
 		if Regles.auraCompte(course) then
 			donnees.aura += Regles.gainCheckpoint(course.serie, Reglages)
 			majAura(joueur, donnees)
@@ -172,9 +170,7 @@ local function surChute(joueur: Player)
 	end
 	course.serie = 0
 	course.chutes += 1
-	if not course.vol then
-		Mesures.mort(joueur, donnees.etape)
-	end
+	Mesures.mort(joueur, donnees.etape, course.vol)
 	if Regles.auraCompte(course) then
 		donnees.aura = Regles.auraApresChute(donnees.aura, Reglages)
 		majAura(joueur, donnees)

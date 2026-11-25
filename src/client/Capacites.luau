@@ -194,8 +194,9 @@ end
 
 -- Réplication des effets ---------------------------------------------------------------------------------------------
 
---- Joue le son et l'effet de la capacité sur son propre personnage tout de suite, puis prévient le serveur, qui le relaie aux autres
---- joueurs (EffetCapacite). Le serveur refuse ce qui est trop fréquent ou invraisemblable : rien d'autre n'en dépend.
+--- Joue le son et l'effet de la capacité sur son propre personnage tout de suite, puis prévient le serveur, qui
+--- relaie l'effet aux autres joueurs (EffetCapacite). Le serveur refuse ce qui est trop fréquent ou invraisemblable :
+--- rien d'autre n'en dépend.
 local function jouerEffet(capacite: string, s: Session)
 	Sons.jouer(capacite) -- les clés "dash" et "doubleSaut" du catalogue d'effets
 	Effets.jouer(capacite, s.personnage)
@@ -534,6 +535,9 @@ local function noterDebloquee(nom: string)
 end
 
 local function surEtat(etat: any)
+	-- L'état en file au démarrage n'est remis qu'à la première connexion, celle d'ici : on le passe aux sons. Dans son
+	-- propre fil : une erreur de son ne bloque pas les capacités.
+	task.spawn(Sons.surEtat, etat)
 	-- `capacites` est ajouté à EtatCourse par la progression ; absent, on ne change rien.
 	local liste = if typeof(etat) == "table" then etat.capacites else nil
 	if typeof(liste) ~= "table" then

@@ -222,9 +222,7 @@ local function surPied(touche: BasePart)
 	if tentative and tentative.debut ~= nil and tentative.hauteur <= Reglages.ASCENSION_SEUIL_DEPART then
 		return -- déjà posé au départ : rester là ne remet pas le chrono à zéro sans arrêt
 	end
-	if not Parcours.aVole(joueur) then
-		Mesures.piedTour(joueur)
-	end
+	Mesures.piedTour(joueur, Parcours.aVole(joueur))
 	demarrerTentative(joueur)
 end
 
@@ -257,9 +255,7 @@ local function surSommet(touche: BasePart)
 	if not joueur or not donnees or not tentative or tentative.debut == nil then
 		return
 	end
-	if not Parcours.aVole(joueur) then
-		Mesures.sommetTour(joueur)
-	end
+	Mesures.sommetTour(joueur, Parcours.aVole(joueur))
 	local duree = maintenant() - (tentative.debut :: number)
 	if surveillanceAlerte(joueur) then
 		tentative.alertes += 1 -- dernier mot de la surveillance avant de classer

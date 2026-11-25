@@ -139,6 +139,28 @@ return function()
 		end)
 	end)
 
+	describe("qui est mesuré", function()
+		local TESTEURS = { [42] = true, [43] = false } :: { [number]: boolean }
+
+		it("un joueur à pied, hors liste, est mesuré", function()
+			expect(Mesures.estMesure(TESTEURS, 7, false)).to.equal(true)
+			expect(Mesures.estMesure({}, 42, false)).to.equal(true)
+		end)
+
+		it("un testeur ne l'est jamais, même à pied : son étape a pu être atteinte en vol", function()
+			expect(Mesures.estMesure(TESTEURS, 42, false)).to.equal(false)
+			expect(Mesures.estMesure(TESTEURS, 42, true)).to.equal(false)
+		end)
+
+		it("une partie où l'on a volé ne l'est jamais, même hors liste", function()
+			expect(Mesures.estMesure(TESTEURS, 7, true)).to.equal(false)
+		end)
+
+		it("une entrée à false dans la liste n'est pas un testeur", function()
+			expect(Mesures.estMesure(TESTEURS, 43, false)).to.equal(true)
+		end)
+	end)
+
 	describe("libellés", function()
 		it("l'étape d'une mort s'écrit sur deux chiffres, sans rien d'autre", function()
 			expect(Mesures.libelleEtape(3)).to.equal("Etape 03")

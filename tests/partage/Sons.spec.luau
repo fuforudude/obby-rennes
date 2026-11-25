@@ -1,5 +1,5 @@
 -- Les règles des sons : quelle musique où, la hauteur du son de checkpoint, arrivée ou record, et la forme des
--- catalogues (un identifiant vide = pas de son, jamais une erreur).
+-- catalogues (chaque action a un identifiant).
 return function()
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
 	local Etapes = require(ReplicatedStorage.Partage.Etapes)
@@ -102,18 +102,16 @@ return function()
 			for _, nom in { "saut", "doubleSaut", "dash", "checkpoint", "mort", "capacite", "arrivee", "record" } do
 				local son = Sons.EFFETS[nom]
 				expect(son).to.be.ok()
-				if son.id ~= "" then
-					expect(vus[son.id]).never.to.be.ok()
-					vus[son.id] = nom
-				end
+				expect(son.id == "").to.equal(false)
+				expect(vus[son.id]).never.to.be.ok()
+				vus[son.id] = nom
 			end
 		end)
 
-		it("identifiants vides ou bien formés, volumes entre 0 et 1, musique plus douce que 0,5", function()
+		it("identifiants non vides et bien formés, volumes entre 0 et 1, musique plus douce que 0,5", function()
 			for _, catalogue in { Sons.EFFETS, Sons.MUSIQUES } do
 				for _, son in catalogue do
-					local forme = son.id == ""
-						or string.match(son.id, "^rbxassetid://%d+$") ~= nil
+					local forme = string.match(son.id, "^rbxassetid://%d+$") ~= nil
 						or string.match(son.id, "^rbxasset://sounds/[%w_]+%.%w+$") ~= nil
 					expect(forme).to.equal(true)
 					expect(son.volume > 0 and son.volume <= 1).to.equal(true)

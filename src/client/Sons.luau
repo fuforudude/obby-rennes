@@ -86,7 +86,8 @@ local function fondre(son: Sound, volume: number)
 	local tween = TweenService:Create(son, TweenInfo.new(Regles.FONDU, Enum.EasingStyle.Linear), { Volume = volume })
 	fondus[son] = tween
 	tween.Completed:Once(function(etat)
-		if etat == Enum.PlaybackState.Completed then
+		-- Un fondu remplacé entre-temps n'arrête rien : sa fin peut arriver après son remplacement.
+		if fondus[son] == tween and etat == Enum.PlaybackState.Completed then
 			fondus[son] = nil
 			if volume == 0 then
 				son:Stop()
@@ -169,6 +170,23 @@ function Sons.jouer(nom: string)
 	task.spawn(jouerEffet, nom)
 end
 
+--- L'état de la course, transmis par client/Capacites (seul des deux à se connecter à EtatCourse). Reçu avant
+--- `demarrer`, il est mémorisé sans rien jouer, et appliqué au démarrage.
+function Sons.surEtat(etat: any)
+	if typeof(etat) ~= "table" or typeof(etat.etape) ~= "number" then
+		return
+	end
+	local avant = etape
+	etape = etat.etape
+	if not demarre then
+		return
+	end
+	if Regles.joueCheckpoint(avant, etat.etape, Reglages.NB_ETAPES) then
+		jouerEffet("checkpoint", Regles.vitesseCheckpoint(etat.serie, Reglages.AURA_SERIE_MAX))
+	end
+	majMusique()
+end
+
 function Sons.couperMusique(b: boolean)
 	groupe("Musique").Volume = if b then 0 else 1
 end
@@ -201,15 +219,10 @@ function Sons.demarrer()
 		suivre(autre)
 	end
 
+	majMusique() -- l'état reçu avant le démarrage
+
 	-- Les remotes : sans bloquer le démarrage du reste du client.
 	task.spawn(function()
-		Remotes.obtenir("EtatCourse").OnClientEvent:Connect(function(etat: Remotes.EtatCourse)
-			if Regles.joueCheckpoint(etape, etat.etape, Reglages.NB_ETAPES) then
-				jouerEffet("checkpoint", Regles.vitesseCheckpoint(etat.serie, Reglages.AURA_SERIE_MAX))
-			end
-			etape = etat.etape
-			majMusique()
-		end)
 		Remotes.obtenir("EtatAscension").OnClientEvent:Connect(function(etat: Remotes.EtatAscension)
 			enAscension = etat.enAscension
 			majMusique()

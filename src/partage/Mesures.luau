@@ -42,6 +42,12 @@ function Mesures.nouveauSuivi(): Suivi
 	return { franchies = {}, etape = nil, morts = 0, envoyees = {} }
 end
 
+--- Ce joueur est-il mesuré ? Jamais un testeur, même à pied (son étape sauvegardée a pu être atteinte en vol dans une
+--- partie précédente), ni une course où l'on a volé.
+function Mesures.estMesure(testeurs: { [number]: boolean }, identifiant: number, vol: boolean): boolean
+	return not vol and testeurs[identifiant] ~= true
+end
+
 --- Cette étape de l'entonnoir est-elle à envoyer ? Vrai une seule fois par suivi.
 function Mesures.franchir(suivi: Suivi, etape: number): boolean
 	if suivi.franchies[etape] then
@@ -54,6 +60,8 @@ end
 --- La plus haute étape de l'entonnoir que la sauvegarde prouve. Envoyée au chargement, elle évite qu'un joueur déjà
 --- avancé avant les mesures passe pour un abandon à l'arrivée (Roblox tient pour faites les étapes sautées, et ignore
 --- les répétées).
+--- `anciensRecordsTour` n'est pas lu : les records d'une tour remplacée (Reglages.VERSION_TOUR) ne prouvent rien sur
+--- l'actuelle, et les étapes déjà envoyées pour l'ancienne restent acquises chez Roblox.
 function Mesures.dejaAtteinte(donnees: DonneesLues, nbEtapes: number): number
 	if donnees.meilleurTempsAscension > 0 then
 		return Mesures.etapeSommet(nbEtapes)

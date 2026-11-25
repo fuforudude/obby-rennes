@@ -2,8 +2,8 @@
 -- Les mesures envoyées à Roblox (AnalyticsService, visibles dans le Creator Hub) : l'entonnoir « première partie » et
 -- les morts par étape. Règles pures et testées : src/partage/Mesures.luau.
 -- Roblox n'accepte les envois que d'un serveur de place publiée : rien ne part de Studio.
--- Appelé par Parcours et Ascension, qui n'appellent PAS pendant une partie où le joueur a volé (mode testeur) : aucune
--- mesure d'un vol. Seul champ ajouté : le numéro d'étape ; jamais d'identifiant ni de nom de joueur.
+-- Un testeur n'a pas de suivi, et Parcours et Ascension disent si le joueur a volé : aucune mesure d'un vol
+-- (ReglesMesures.estMesure). Seul champ ajouté : le numéro d'étape ; jamais d'identifiant ni de nom de joueur.
 -- Une erreur ici n'atteint jamais l'appelant : chaque fonction publique tourne dans son propre fil.
 local AnalyticsService = game:GetService("AnalyticsService")
 local Players = game:GetService("Players")
@@ -69,8 +69,13 @@ local function envoyerMorts(joueur: Player, envoi: ReglesMesures.Envoi?)
 	end
 end
 
+--- Le suivi du joueur s'il est mesuré en ce moment (`vol` : il a volé pendant cette course), sinon nil.
+local function suiviMesure(joueur: Player, vol: boolean): ReglesMesures.Suivi?
+	return if ReglesMesures.estMesure(Reglages.TESTEURS, joueur.UserId, vol) then suivis[joueur] else nil
+end
+
 local function suivre(joueur: Player)
-	if not suivis[joueur] then
+	if not suivis[joueur] and ReglesMesures.estMesure(Reglages.TESTEURS, joueur.UserId, false) then
 		suivis[joueur] = ReglesMesures.nouveauSuivi()
 		franchir(joueur, ReglesMesures.ARRIVEE_EN_JEU)
 	end
@@ -78,10 +83,10 @@ end
 
 local Mesures = {}
 
---- Le joueur vient de valider ce checkpoint à pied.
-function Mesures.checkpoint(joueur: Player, numero: number)
+--- Le joueur vient de valider ce checkpoint. `vol`, ici et plus bas : il a volé pendant cette course.
+function Mesures.checkpoint(joueur: Player, numero: number, vol: boolean)
 	task.spawn(function()
-		local suivi = suivis[joueur]
+		local suivi = suiviMesure(joueur, vol)
 		if suivi then
 			franchir(joueur, ReglesMesures.etapeCheckpoint(numero))
 			envoyerMorts(joueur, ReglesMesures.changerEtape(suivi, numero))
@@ -90,21 +95,29 @@ function Mesures.checkpoint(joueur: Player, numero: number)
 end
 
 --- Le joueur vient de mourir dans le parcours, son dernier checkpoint étant `etape`.
-function Mesures.mort(joueur: Player, etape: number)
+function Mesures.mort(joueur: Player, etape: number, vol: boolean)
 	task.spawn(function()
-		local suivi = suivis[joueur]
+		local suivi = suiviMesure(joueur, vol)
 		if suivi then
 			envoyerMorts(joueur, ReglesMesures.mort(suivi, etape))
 		end
 	end)
 end
 
-function Mesures.piedTour(joueur: Player)
-	task.spawn(franchir, joueur, ReglesMesures.etapePied(Reglages.NB_ETAPES))
+function Mesures.piedTour(joueur: Player, vol: boolean)
+	task.spawn(function()
+		if suiviMesure(joueur, vol) then
+			franchir(joueur, ReglesMesures.etapePied(Reglages.NB_ETAPES))
+		end
+	end)
 end
 
-function Mesures.sommetTour(joueur: Player)
-	task.spawn(franchir, joueur, ReglesMesures.etapeSommet(Reglages.NB_ETAPES))
+function Mesures.sommetTour(joueur: Player, vol: boolean)
+	task.spawn(function()
+		if suiviMesure(joueur, vol) then
+			franchir(joueur, ReglesMesures.etapeSommet(Reglages.NB_ETAPES))
+		end
+	end)
 end
 
 function Mesures.demarrer()
@@ -113,10 +126,7 @@ function Mesures.demarrer()
 		suivre(joueur)
 	end
 	Donnees.surChargement(function(joueur: Player, donnees: Regles.Donnees)
-		-- Pas pour un testeur : son étape sauvegardée a pu être atteinte en volant dans une partie précédente.
-		if not Reglages.TESTEURS[joueur.UserId] then
-			franchir(joueur, ReglesMesures.dejaAtteinte(donnees, Reglages.NB_ETAPES))
-		end
+		franchir(joueur, ReglesMesures.dejaAtteinte(donnees, Reglages.NB_ETAPES))
 	end)
 	Players.PlayerRemoving:Connect(function(joueur)
 		local suivi = suivis[joueur]
