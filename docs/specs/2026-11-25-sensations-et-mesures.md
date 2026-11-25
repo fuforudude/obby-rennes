@@ -1,6 +1,6 @@
 # Sensations et mesures (lot 1 des améliorations continues)
 
-Statut : brouillon
+Statut : validée (2026-11-25)
 Date : 2026-11-25
 
 ## Besoin
@@ -26,9 +26,9 @@ Le jeu est muet : un saut, un checkpoint ou un record ne se sent pas. Et nous ne
 |---|---|---|---|
 | Premier lot | Sensations + mesures / Raisons de revenir / À plusieurs / Tour renouvelée | Sensations + mesures | Choix de l'utilisateur. |
 | Cadence | Oui à chaque lot / Enchaîner | Oui à chaque lot | Choix de l'utilisateur. |
-| Source des sons | Creator Store de Roblox (audio du compte Roblox) / audio importé par l'utilisateur | À valider : Creator Store | Gratuit, pas de fichier à importer ni de droits à gérer. Aucun morceau sous marque ou d'artiste. |
-| Musique au lancement | Activée, douce / coupée | À valider : activée à volume doux | Usage courant ; la coupure est à un doigt. |
-| Choix son coupé | Pour la partie en cours / sauvegardé | À valider : partie en cours | Ne touche pas aux sauvegardes dans ce lot. |
+| Source des sons | Creator Store de Roblox (audio du compte Roblox) / audio importé par l'utilisateur | Creator Store (validé) | Gratuit, pas de fichier à importer ni de droits à gérer. Aucun morceau sous marque ou d'artiste. |
+| Musique au lancement | Activée, douce / coupée | Activée à volume doux (validé) | Usage courant ; la coupure est à un doigt. |
+| Choix son coupé | Pour la partie en cours / sauvegardé | Partie en cours (validé) | Ne touche pas aux sauvegardes dans ce lot. |
 
 ## Tâches
 1. **Gameplay** (45 min) : `src/partage/Sons.luau` (règles pures : musique d'une zone, ton du checkpoint selon la série, choix entre arrivée et record ; identifiants et volumes) ; `src/client/Sons.luau` (lecture, fondu, API `Sons.couperMusique(b)`, `Sons.couperEffets(b)`), branché sur les remotes existants `EtatCourse`, `Arrivee`, `CapaciteDebloquee`, `EtatAscension` ; `src/serveur/Mesures.luau` et règles pures de regroupement. Tests d'abord. Un identifiant de son non vérifié est signalé, jamais inventé.
@@ -43,4 +43,4 @@ Durée estimée du jalon : 2 h (contrôles, QA et livraison compris)
 - Écrans : deux petits boutons.
 
 ## Questions ouvertes
-- Les trois lignes « À valider » du tableau.
+Aucune.
