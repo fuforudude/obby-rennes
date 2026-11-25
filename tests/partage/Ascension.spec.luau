@@ -67,6 +67,20 @@ return function()
 			expect(Ascension.estClassable(tentative({ debut = false }))).to.equal(false)
 		end)
 
+		it("un record de temps est un temps classable plus court ; la première montée classable en est un", function()
+			expect(Ascension.estRecordTemps(0, 60, true, 15)).to.equal(true) -- comme le premier temps à Sup de Vinci
+			expect(Ascension.estRecordTemps(60, 59, true, 15)).to.equal(true)
+			expect(Ascension.estRecordTemps(60, 60, true, 15)).to.equal(false)
+			expect(Ascension.estRecordTemps(60, 75, true, 15)).to.equal(false)
+		end)
+
+		it("jamais de record de temps non classable (alerte, vol) ou plus court que possible", function()
+			expect(Ascension.estRecordTemps(0, 60, false, 15)).to.equal(false)
+			expect(Ascension.estRecordTemps(60, 30, false, 15)).to.equal(false)
+			expect(Ascension.estRecordTemps(60, 14.9, true, 15)).to.equal(false)
+			expect(Ascension.estRecordTemps(60, 15, true, 15)).to.equal(true)
+		end)
+
 		it("un record de hauteur est une hauteur plus grande que l'ancienne", function()
 			expect(Ascension.estRecordHauteur(0, 42)).to.equal(true)
 			expect(Ascension.estRecordHauteur(42, 80)).to.equal(true)

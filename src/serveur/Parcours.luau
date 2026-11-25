@@ -273,6 +273,7 @@ function Parcours.passerEtape(joueur: Player): boolean
 	donnees.etape += 1
 	course.passages += 1
 	course.serie = 0 -- une étape achetée ne rapporte pas d'aura et casse la série
+	Mesures.checkpoint(joueur, donnees.etape, course.vol) -- pour les mesures, un checkpoint fait
 	placer(joueur) -- prévient la surveillance lui-même
 	if donnees.etape == Reglages.NB_ETAPES then
 		terminer(joueur)

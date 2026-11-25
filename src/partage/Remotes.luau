@@ -56,7 +56,11 @@ export type EtatAscension = {
 	meilleureHauteur: number, -- record personnel sauvegardé, en studs
 	debut: number?, -- heure serveur du départ au pied ; nil = pas de chrono (sommet atteint, ou hors ascension)
 	classable: boolean, -- aucune alerte de surveillance pendant cette tentative
+	recordSommet: boolean?, -- nil = sommet pas atteint dans cette tentative ; sinon : le temps de tour est-il battu ?
 }
+
+-- Ce que `etatAscension` lit d'une tentative (serveur/Ascension).
+export type TentativeEnCours = { debut: number?, hauteur: number, recordSommet: boolean? }
 
 local NOMS = {
 	"EtatCourse",
@@ -120,6 +124,22 @@ function Remotes.etatCourse(
 		aura = donnees.aura,
 		serie = course.serie,
 		capacites = debloquees,
+	}
+end
+
+--- Construit la charge du remote EtatAscension (`tentative` nil : hors ascension). Pure et testée, comme `etatCourse`.
+function Remotes.etatAscension(
+	tentative: TentativeEnCours?,
+	meilleureHauteur: number,
+	classable: boolean
+): EtatAscension
+	return {
+		enAscension = tentative ~= nil,
+		hauteur = if tentative then tentative.hauteur else 0,
+		meilleureHauteur = meilleureHauteur,
+		debut = if tentative then tentative.debut else nil,
+		classable = classable,
+		recordSommet = if tentative then tentative.recordSommet else nil,
 	}
 end
 

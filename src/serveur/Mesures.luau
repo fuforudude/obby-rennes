@@ -83,7 +83,7 @@ end
 
 local Mesures = {}
 
---- Le joueur vient de valider ce checkpoint. `vol`, ici et plus bas : il a volé pendant cette course.
+--- Le joueur vient de valider (ou d'acheter) ce checkpoint. `vol`, ici et plus bas : il a volé pendant cette course.
 function Mesures.checkpoint(joueur: Player, numero: number, vol: boolean)
 	task.spawn(function()
 		local suivi = suiviMesure(joueur, vol)

@@ -96,6 +96,38 @@ return function()
 		end)
 	end)
 
+	describe("sommet de la tour", function()
+		local EN_COURS = { recordSommet = nil }
+		local ARRIVE = { recordSommet = false }
+		local RECORD = { recordSommet = true }
+
+		it("au sommet, le son de record si le temps est battu, sinon celui d'arrivée", function()
+			expect(Sons.sommet(EN_COURS, RECORD)).to.equal("record")
+			expect(Sons.sommet(EN_COURS, ARRIVE)).to.equal("arrivee")
+		end)
+
+		it("une seule fois par montée : les états répétés ne rejouent rien", function()
+			expect(Sons.sommet(RECORD, RECORD)).never.to.be.ok()
+			expect(Sons.sommet(ARRIVE, ARRIVE)).never.to.be.ok()
+		end)
+
+		it("rien pendant la montée, ni en repartant du pied", function()
+			expect(Sons.sommet(EN_COURS, EN_COURS)).never.to.be.ok()
+			expect(Sons.sommet(RECORD, EN_COURS)).never.to.be.ok()
+		end)
+
+		it("la montée suivante joue de nouveau", function()
+			expect(Sons.sommet(RECORD, EN_COURS)).never.to.be.ok()
+			expect(Sons.sommet(EN_COURS, ARRIVE)).to.equal("arrivee")
+		end)
+
+		it("un premier message reçu déjà au sommet (file, rappel) ne joue rien", function()
+			expect(Sons.sommet(nil, RECORD)).never.to.be.ok()
+			expect(Sons.sommet(nil, ARRIVE)).never.to.be.ok()
+			expect(Sons.sommet(nil, EN_COURS)).never.to.be.ok()
+		end)
+	end)
+
 	describe("catalogues", function()
 		it("chaque action a son effet, et deux actions n'ont pas le même son", function()
 			local vus = {}

@@ -29,6 +29,7 @@ local fondus: { [Sound]: Tween } = {}
 local musiqueActuelle: string? = nil
 local etape: number? = nil
 local enAscension = false
+local dernierEtatAscension: Remotes.EtatAscension? = nil
 local demarre = false
 
 local function groupe(nom: string): SoundGroup
@@ -224,8 +225,13 @@ function Sons.demarrer()
 	-- Les remotes : sans bloquer le démarrage du reste du client.
 	task.spawn(function()
 		Remotes.obtenir("EtatAscension").OnClientEvent:Connect(function(etat: Remotes.EtatAscension)
+			local effet = Regles.sommet(dernierEtatAscension, etat)
+			dernierEtatAscension = etat
 			enAscension = etat.enAscension
 			majMusique()
+			if effet then
+				jouerEffet(effet)
+			end
 		end)
 		Remotes.obtenir("Arrivee").OnClientEvent:Connect(function(_temps: number, _classable: boolean, record: boolean)
 			jouerEffet(Regles.arrivee(record))

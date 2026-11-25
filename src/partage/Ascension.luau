@@ -5,6 +5,10 @@
 -- Il n'y a plus de paliers depuis la tour exigeante (docs/specs/2026-11-18-tour-exigeante.md) : aucun checkpoint
 -- entre le pied et le sommet, donc plus de téléportation, plus de seuil d'aura, plus de liste à sauvegarder.
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Regles = require(ReplicatedStorage.Partage.Regles)
+
 -- Barème de l'aura de l'ascension (les valeurs du jeu sont dans Reglages ; les tests passent les leurs).
 export type Bareme = {
 	ASCENSION_AURA_BASE: number,
@@ -68,6 +72,13 @@ function Ascension.etagePaye(tentative: Tentative, hauteurEtage: number): boolea
 		return false
 	end
 	return hauteurEtage == hauteurEtage
+end
+
+--- Nouveau record du temps de tour ? Même définition qu'à Sup de Vinci (serveur/Parcours) : classable, pas plus rapide
+--- que possible (`tempsMin` : un pied ou un sommet mal placés dans la carte inscriraient sinon un temps imbattable, pour
+--- toujours), et meilleur que l'ancien. La première montée classable (ancien = 0) est donc un record.
+function Ascension.estRecordTemps(ancien: number, duree: number, classable: boolean, tempsMin: number): boolean
+	return classable and duree >= tempsMin and Regles.estRecord(ancien, duree)
 end
 
 --- Nouveau record de hauteur ? (la plus grande gagne, contrairement aux temps)

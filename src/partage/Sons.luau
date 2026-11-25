@@ -68,4 +68,16 @@ function Sons.arrivee(record: boolean): string
 	return if record then "record" else "arrivee"
 end
 
+-- Ce que `sommet` lit d'un EtatAscension (partage/Remotes).
+export type EtatSommet = { recordSommet: boolean? }
+
+--- L'effet à jouer quand l'état de l'ascension passe de `avant` (nil : première réception) à `apres`, ou nil. Il ne joue
+--- qu'au passage « sommet pas atteint » -> « atteint » : ni sur un état répété, ni sur un premier message déjà au sommet.
+function Sons.sommet(avant: EtatSommet?, apres: EtatSommet): string?
+	if avant == nil or avant.recordSommet ~= nil or apres.recordSommet == nil then
+		return nil
+	end
+	return Sons.arrivee(apres.recordSommet)
+end
+
 return Sons

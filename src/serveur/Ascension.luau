@@ -66,6 +66,7 @@ type Tentative = {
 	etages: { [number]: boolean }, -- étages déjà touchés pendant cette tentative (payés ou non)
 	hauteur: number, -- dernière hauteur relevée, en studs au-dessus du pied
 	hauteurEnvoyee: number, -- hauteur du dernier EtatAscension envoyé (pour ne pas parler à chaque relevé)
+	recordSommet: boolean?, -- nil = sommet pas atteint ; sinon : le temps de tour est-il battu ? (son du client)
 }
 
 local tentatives: { [Player]: Tentative } = {}
@@ -125,13 +126,8 @@ local function envoyerEtat(joueur: Player)
 		return
 	end
 	local tentative = tentatives[joueur]
-	etatAscension:FireClient(joueur, {
-		enAscension = tentative ~= nil,
-		hauteur = if tentative then tentative.hauteur else 0,
-		meilleureHauteur = donnees.meilleureHauteur,
-		debut = if tentative then tentative.debut else nil,
-		classable = tentative ~= nil and RegleAscension.estClassable(tentative),
-	})
+	local classable = tentative ~= nil and RegleAscension.estClassable(tentative)
+	etatAscension:FireClient(joueur, Remotes.etatAscension(tentative, donnees.meilleureHauteur, classable))
 	if tentative then
 		tentative.hauteurEnvoyee = tentative.hauteur
 	end
@@ -164,6 +160,7 @@ local function demarrerTentative(joueur: Player)
 		etages = {},
 		hauteur = 0,
 		hauteurEnvoyee = 0,
+		recordSommet = nil,
 	}
 	joueur:SetAttribute(ATTRIBUT_EN_ASCENSION, true)
 	Surveillance.nouvelleTentative(joueur) -- la marque « suspect » de la surveillance repart de zéro
@@ -262,13 +259,15 @@ local function surSommet(touche: BasePart)
 	end
 	local classable = RegleAscension.estClassable(tentative)
 	tentative.debut = nil -- le chrono s'arrête
-	-- Un temps plus court qu'ASCENSION_TEMPS_MIN_CLASSABLE est impossible à la main : il n'entre pas au classement
-	-- (un pied ou un sommet mal placés dans la carte y inscriraient sinon un temps imbattable, pour toujours).
-	if
-		classable
-		and duree >= Reglages.ASCENSION_TEMPS_MIN_CLASSABLE
-		and Regles.estRecord(donnees.meilleurTempsAscension, duree)
-	then
+	-- Un temps plus court qu'ASCENSION_TEMPS_MIN_CLASSABLE est impossible à la main : il n'entre pas au classement.
+	local record = RegleAscension.estRecordTemps(
+		donnees.meilleurTempsAscension,
+		duree,
+		classable,
+		Reglages.ASCENSION_TEMPS_MIN_CLASSABLE
+	)
+	tentative.recordSommet = record
+	if record then
 		donnees.meilleurTempsAscension = duree
 		Classement.soumettreAscension(joueur, duree)
 	end
