@@ -39,17 +39,10 @@ local EXCEPTIONS: { { motif: string, raison: string } } = {
 		raison = "bouche d'ombre d'où sort la rame ; son toit, solide, contournerait les escalators",
 	},
 	{
-		motif = "^Parcours%.7_Parlement%.Comble$",
-		raison = "pente à 70° : solide, on la monterait pour longer l'ardoise mortelle",
-	},
-	{
 		motif = "^Parcours%.4_LaTour%.NezDeDalle$",
 		raison = "relief de 0,4 de la façade : solide, il ferait une échelle de rebords le long de la spirale",
 	},
 	{ motif = "^Parcours%.4_LaTour%.Refend$", raison = "relief de 0,4 de la façade de la tour" },
-	{ motif = "^Parcours%.4_LaTour%.Acrotere$", raison = "couronnement du toit de la tour, hors du chemin" },
-	{ motif = "^Parcours%.4_LaTour%.NomResidence$", raison = "enseigne du toit de la tour, hors du chemin" },
-	{ motif = "^Parcours%.4_LaTour%.Edicule$", raison = "édicule du toit de la tour, hors du chemin" },
 	{ motif = "^Parcours%.References%.CadreAffiche$", raison = "cadre d'une affiche (texte) au bord de la rue" },
 	{ motif = "^Evenements%.PanneauxAnecdotes%.", raison = "panneau de texte à côté d'un checkpoint" },
 	{

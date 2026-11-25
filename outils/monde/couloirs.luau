@@ -2,7 +2,8 @@
 -- dans les limites de vide et de montée, un mur, un plafond ou un décor solide en travers peut le barrer. On rejoue
 -- donc des sauts entiers d'une plateforme à l'autre (physique réelle de outils/monde/physique.luau) et on compte la
 -- part qui se pose. Le sauteur vise tout droit un point d'arrivée, à pleine vitesse, et s'y laisse tomber ; un mur
--- l'arrête sans l'empêcher de monter, un plafond lui coupe son élan, un autre solide sous ses pieds fait rater l'arc.
+-- l'arrête sans l'empêcher de monter, un plafond lui coupe son élan, un autre solide sous ses pieds fait rater l'arc, une pièce
+-- mortelle frôlée aussi.
 -- Tous les solides comptent, plateformes ou non (CanQuery ou non). Un joueur qui contourne fait au moins aussi bien.
 local Formes = require("./formes")
 local Physique = require("./physique")
@@ -83,6 +84,7 @@ function Couloirs.partLibre(a: Rect, b: Rect, caps: number, solides: { any }, se
 			table.insert(proches, s)
 		end
 	end
+	local tue = false
 	local function heurte(x: number, y: number, z: number): boolean
 		for _, s in proches do
 			local mn, mx = s.mn, s.mx
@@ -96,6 +98,7 @@ function Couloirs.partLibre(a: Rect, b: Rect, caps: number, solides: { any }, se
 			then
 				for _, h in SPHERES do
 					if Formes.distance(s, x, y + h, z) < RAYON then
+						tue = tue or s.mortel
 						return true
 					end
 				end
@@ -107,7 +110,8 @@ function Couloirs.partLibre(a: Rect, b: Rect, caps: number, solides: { any }, se
 	local function seRejoue(p: { number }, q: { number }, d: number, t2: number, dash: boolean): boolean
 		local ux, uz = if d > 0 then (q[1] - p[1]) / d else 0, if d > 0 then (q[2] - p[2]) / d else 0
 		local fait, y, vy, t, second = 0, a.haut, V0, 0, false
-		while true do
+		tue = false
+		while not tue do
 			t += PAS_TEMPS
 			if not second and t >= t2 then
 				second, vy = true, math.max(vy, V0)
@@ -143,6 +147,7 @@ function Couloirs.partLibre(a: Rect, b: Rect, caps: number, solides: { any }, se
 				fait = suivant
 			end
 		end
+		return false
 	end
 
 	local arcs = {}

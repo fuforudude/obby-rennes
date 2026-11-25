@@ -14,6 +14,8 @@
 --   tournants    Vitesse ramenée à 1,2 rad/s -> « pas plus rapide que le tuto »
 --   mur          un mur solide sans requête entre le pied et Pas1_1 -> « saut … barré »
 --   mur-acces    un mur solide sans requête devant PanneauDuToit -> « saut ArmoireDeLaVerriere -> PanneauDuToit barré »
+--   frole-mortel une murette mortelle au milieu du saut Pas1_5 -> Pas1_6 (inoffensive, on passerait par-dessus ;
+--                4e argument « inoffensif » pour le voir) -> « saut Pas1_5 -> Pas1_6 barré »
 --   passager     une poutre solide sans requête au-dessus de la course d'une nacelle -> « elle ou son passager »
 --   laser-habillage  un habillage solide dans le balayage d'un laser -> « traverse »
 --   bouts        bouts des barres tournantes portés à 3 studs -> « dépasse de la barre »
@@ -38,7 +40,7 @@ local sortie = process.args[2] or "ascension-cassee.rbxm"
 local source = process.args[3] or "monde/Ascension.rbxm"
 assert(
 	panne,
-	"panne attendue : marches, lasers, pieges, repos, poussee, balanciers, mobiles, effondrables, tournants, bouts, mur, mur-acces, passager, laser-habillage, "
+	"panne attendue : marches, lasers, pieges, repos, poussee, balanciers, mobiles, effondrables, tournants, bouts, mur, mur-acces, frole-mortel, passager, laser-habillage, "
 		.. "tag-sans-simulateur ou famille-inconnue"
 )
 
@@ -176,6 +178,7 @@ local function solide(nom: string, taille, cf)
 	p.Size = taille
 	p.CFrame = cf
 	p.Parent = modele:FindFirstChild("Obstacles")
+	return p
 end
 
 function pannes.mur(): string
@@ -198,6 +201,23 @@ pannes["mur-acces"] = function(): string
 	local p = modele:FindFirstChild("Acces"):FindFirstChild("PanneauDuToit").CFrame.Position
 	solide("MurDeTriche", Vector3.new(60, 60, 1), CFrame.new(p.X, p.Y, p.Z - 4))
 	return "un mur devant PanneauDuToit"
+end
+
+pannes["frole-mortel"] = function(): string
+	local chemin = modele:FindFirstChild("Chemin")
+	local a, b = chemin:FindFirstChild("Pas1_5").CFrame.Position, chemin:FindFirstChild("Pas1_6").CFrame.Position
+	local vers = Vector3.new(b.X - a.X, 0, b.Z - a.Z).Unit
+	local milieu = (a + b) / 2
+	local haut = math.max(a.Y, b.Y) + 4
+	local p = solide(
+		"MuretteDeTriche",
+		Vector3.new(1, 12, 30),
+		CFrame.new(milieu.X, haut - 6, milieu.Z) * CFrame.Angles(0, math.atan2(-vers.Z, vers.X), 0)
+	)
+	if process.args[4] ~= "inoffensif" then
+		p:AddTag("Mortel")
+	end
+	return "une murette mortelle entre Pas1_5 et Pas1_6"
 end
 
 function pannes.passager(): string
