@@ -189,6 +189,7 @@ const cassees = [
   ["casser-bords", "toit", "verifier-bords", ["EclatVerriere prolonge Parcours.9_SupDeVinci.Encadrement"], "seul"],
   ["casser-bords", "exception", "verifier-bords", ["FaisceauEtage$ » inutile"], "seul"],
   ["casser-bords", "mur", "verifier-sauts", ["checkpoints inatteignables : 9, 10"]],
+  ["casser-bords", "comble", "verifier-sauts", ["mortel trop proche : 7_Parlement/Comble"]],
   ["casser-bords", "balcon", "verifier-sauts", ["checkpoints inatteignables : 8, 9"]],
   ["casser-bords", "passage", "verifier-evenements", ["sa trajectoire traverse Evenements.Decor.Chaussee"]],
   [
@@ -199,6 +200,7 @@ const cassees = [
   ],
   ["casser-ascension", "mur", "verifier-ascension", ["saut PiedAscension -> Pas1_1 barré"]],
   ["casser-ascension", "mur-acces", "verifier-ascension", ["saut ArmoireDeLaVerriere -> PanneauDuToit barré"]],
+  ["casser-ascension", "frole-mortel", "verifier-ascension", ["saut Pas1_5 -> Pas1_6 barré"]],
   ["casser-ascension", "passager", "verifier-ascension", ["PoutreDeTriche, elle ou son passager"]],
   ["casser-ascension", "laser-habillage", "verifier-ascension", ["traverse la dalle Ascension.Chemin."]],
   // Contrôle null : c'est la fabrique elle-même (la génération trafiquée) qui doit échouer avec le message.

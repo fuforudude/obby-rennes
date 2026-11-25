@@ -40,6 +40,7 @@ function Formes.lire(d)
 		hy = hy,
 		hz = hz,
 		forme = forme,
+		mortel = d:HasTag("Mortel"),
 		mn = cf.Position - e,
 		mx = cf.Position + e,
 	}

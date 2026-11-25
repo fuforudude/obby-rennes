@@ -1459,10 +1459,10 @@ return function(R, biblio)
 				f.CastShadow = false
 			end
 		end
-		fantome(boite(tour, "Acrotere", CX - 14.4, CX + 14.4, 78, 79, -14.4, 14.4, blanc, Enum.Material.Concrete))
-		fantome(boite(tour, "Edicule", CX - 6, CX + 4, 79, 84, -5, 5, bleu, Enum.Material.Concrete))
+		appui(boite(tour, "Acrotere", CX - 14.4, CX + 14.4, 78, 79, -14.4, 14.4, blanc, Enum.Material.Concrete))
+		appui(boite(tour, "Edicule", CX - 6, CX + 4, 79, 84, -5, 5, bleu, Enum.Material.Concrete))
 		local nomTour =
-			fantome(boite(tour, "NomResidence", CX - 14.6, CX - 14.4, 79, 82, -10, 10, Color3.fromRGB(25, 25, 35)))
+			appui(boite(tour, "NomResidence", CX - 14.6, CX - 14.4, 79, 82, -10, 10, Color3.fromRGB(25, 25, 35)))
 		texte(Enum.NormalId.Left, "RÉSIDENCE LE CRACHIN", accents.tour).Parent = nomTour
 	end
 
@@ -1639,8 +1639,8 @@ return function(R, biblio)
 	-- Traits retenus : les deux grandes façades (±Z) et le pignon qu'on escalade (-X) reprennent cette composition ; le
 	-- comble à la Mansart (brisis à environ 70° en ardoise, de l'égout à 26 jusqu'au bord du toit plat à 40) est porté
 	-- par des ailes fantômes de 5 studs de part et d'autre du corps : le toit plat mortel où l'on court (« terrasse
-	-- faîtière » d'ardoise glissante), ses lucarnes, la gouttière et les corniches gardent leur emprise. Les ailes et
-	-- le brisis sont fantômes : qui tombe du toit les traverse et finit dans le vide, comme avant.
+	-- faîtière » d'ardoise glissante), ses lucarnes, la gouttière et les corniches gardent leur emprise. Les ailes sont
+	-- fantômes ; le brisis est mortel comme le toit plat : qui glisse du toit y reste.
 	do
 		local ombre = Color3.fromRGB(45, 45, 55)
 		local plomb = Color3.fromRGB(85, 92, 110)
@@ -1801,17 +1801,22 @@ return function(R, biblio)
 			fantome(boite(parlement, "Entablement", 684.4, 745.6, 24, 25, za, zb, clair, Enum.Material.Limestone))
 			za, zb = zr(s, 20.1, 20.5)
 			fantome(boite(parlement, "Balustrade", 685, 745, 25, 26.6, za, zb, clair, Enum.Material.Limestone))
-			-- Le brisis d'ardoise, de l'égout (z = ±20, y = 26) au bord du toit plat (z = ±15, y = 40).
-			pente(
-				parlement,
-				"Comble",
-				60,
-				14,
-				5,
-				CFrame.new(715, 33, s * 17.5) * CFrame.Angles(0, if s > 0 then math.pi else 0, 0),
-				ardoiseParlement,
-				Enum.Material.Slate
+			-- Le brisis d'ardoise, de l'égout (z = ±20, y = 26) au bord du toit plat (z = ±15, y = 40) : aussi glissant,
+			-- donc aussi mortel et solide, que le toit plat. Il commence à X = 687, à 2 studs de la dernière corniche : on
+			-- ne le frôle pas en montant.
+			local comble = mortel(
+				pente(
+					parlement,
+					"Comble",
+					58,
+					14,
+					5,
+					CFrame.new(716, 33, s * 17.5) * CFrame.Angles(0, if s > 0 then math.pi else 0, 0),
+					ardoiseParlement,
+					Enum.Material.Slate
+				)
 			)
+			comble.CanCollide, comble.CanTouch, comble.CanQuery = true, true, true
 			for _, lx in { 693, 703, 727, 737 } do
 				za, zb = zr(s, 16, 19.1)
 				fantome(

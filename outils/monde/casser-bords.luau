@@ -17,6 +17,7 @@
 --   mur         -> un mur solide sans requête en travers du tuto, à x = 463,5
 --   balcon      -> le balcon 8 de la spirale retiré (ou celui du rang en 3e argument ; après le 9, le dash
 --                  et le double saut en sautent un de toute façon) : les garde-corps ne remplacent pas un balcon
+--   comble      -> le comble mortel du Parlement prolongé jusqu'aux corniches qu'on escalade
 -- Par verifier-evenements.luau :
 --   passage     -> la chaussée relevée en travers de la voie
 --   balancier   -> un valideur dans le balayage de son portillon
@@ -129,6 +130,19 @@ local PANNES: { [string]: Panne } = {
 			mur.Size = Vector3.new(1, 140, 140)
 			mur.CFrame = CFrame.new(463.5, 60, 0)
 			mur.Parent = p.Parent
+		end,
+	},
+	comble = {
+		carte = "Parcours",
+		dossier = "7_Parlement",
+		piece = "Comble",
+		casser = function(p)
+			for _, e in p.Parent:GetChildren() do
+				if e.Name == "Comble" then
+					e.Size += Vector3.new(6, 0, 0)
+					e.CFrame = e.CFrame - Vector3.new(3, 0, 0)
+				end
+			end
 		end,
 	},
 	balcon = {
