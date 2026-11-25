@@ -29,6 +29,10 @@ Le jeu est muet : un saut, un checkpoint ou un record ne se sent pas. Et nous ne
 | Source des sons | Creator Store de Roblox (audio du compte Roblox) / audio importé par l'utilisateur | Creator Store (validé) | Gratuit, pas de fichier à importer ni de droits à gérer. Aucun morceau sous marque ou d'artiste. |
 | Musique au lancement | Activée, douce / coupée | Activée à volume doux (validé) | Usage courant ; la coupure est à un doigt. |
 | Choix son coupé | Pour la partie en cours / sauvegardé | Partie en cours (validé) | Ne touche pas aux sauvegardes dans ce lot. |
+| Son au sommet de la tour | Arrivée ou record / Arrivée seulement / Rien | Arrivée ou record | Même règle qu'à Sup de Vinci ; le serveur transmet le record dans un message existant. |
+| Étape achetée dans les mesures | La compter / Ne pas l'envoyer | La compter comme faite | L'entonnoir dit toujours où en sont les joueurs. |
+| Son d'une étape achetée | Oui / Non | Oui, son de checkpoint | La progression s'entend. |
+| Nombre de musiques | Trois / Quatre | Trois pour ce lot | Morceaux neutres du compte Roblox, à écouter dans Studio. |
 
 ## Tâches
 1. **Gameplay** (45 min) : `src/partage/Sons.luau` (règles pures : musique d'une zone, ton du checkpoint selon la série, choix entre arrivée et record ; identifiants et volumes) ; `src/client/Sons.luau` (lecture, fondu, API `Sons.couperMusique(b)`, `Sons.couperEffets(b)`), branché sur les remotes existants `EtatCourse`, `Arrivee`, `CapaciteDebloquee`, `EtatAscension` ; `src/serveur/Mesures.luau` et règles pures de regroupement. Tests d'abord. Un identifiant de son non vérifié est signalé, jamais inventé.
