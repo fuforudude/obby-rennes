@@ -1,6 +1,9 @@
 --!strict
 -- Tous les textes de l'interface, en un seul endroit pour pouvoir les traduire.
 -- (Les zones, anecdotes et vannes viennent de src/partage/Etapes.luau, les vannes de chute de Vannes.luau.)
+--- Les mots d'un bouton de coupure du son : son nom, puis son état quand il joue et quand il est coupé.
+export type BoutonSon = { nom: string, actif: string, coupe: string }
+
 local Textes = {
 	chargement = "…",
 	aura = "Aura",
@@ -39,6 +42,10 @@ local Textes = {
 	volActif = "Vol actif",
 	volNonClasse = "Partie non classée",
 
+	-- Boutons de coupure du son (BoutonsSons.luau).
+	musique = { nom = "Musique", actif = "activée", coupe = "coupée" } :: BoutonSon,
+	effets = { nom = "Effets", actif = "actifs", coupe = "coupés" } :: BoutonSon,
+
 	-- Ascension.
 	hauteurRecord = "Record",
 	nonClasse = "non classé",
@@ -51,6 +58,14 @@ function Textes.annonceCommande(capacite: string, touche: string?): string
 		return ""
 	end
 	return `{action.avant}{touche or Textes.annonceBouton}{action.apres}`
+end
+
+--- « Musique » sur une ligne et « activée » dessous ; coupé : le nom barré (RichText) et « coupée ».
+function Textes.boutonSon(son: BoutonSon, coupe: boolean): string
+	if coupe then
+		return `<s>{son.nom}</s>\n{son.coupe}`
+	end
+	return `{son.nom}\n{son.actif}`
 end
 
 --- « Record 245 m », puis « · non classé » quand la tentative ne compte plus.
