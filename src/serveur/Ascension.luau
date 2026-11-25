@@ -37,6 +37,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Classement = require(script.Parent.Classement)
 local Donnees = require(script.Parent.Donnees)
+local Mesures = require(script.Parent.Mesures)
 local Parcours = require(script.Parent.Parcours)
 -- Surveillance des déplacements (serveur/Capacites). Pas de cycle : Ascension -> Parcours -> Capacites -> Donnees,
 -- et le retour se fait par l'abonnement `Parcours.avantRecommencer`.
@@ -221,6 +222,9 @@ local function surPied(touche: BasePart)
 	if tentative and tentative.debut ~= nil and tentative.hauteur <= Reglages.ASCENSION_SEUIL_DEPART then
 		return -- déjà posé au départ : rester là ne remet pas le chrono à zéro sans arrêt
 	end
+	if not Parcours.aVole(joueur) then
+		Mesures.piedTour(joueur)
+	end
 	demarrerTentative(joueur)
 end
 
@@ -252,6 +256,9 @@ local function surSommet(touche: BasePart)
 	local tentative = joueur and tentatives[joueur]
 	if not joueur or not donnees or not tentative or tentative.debut == nil then
 		return
+	end
+	if not Parcours.aVole(joueur) then
+		Mesures.sommetTour(joueur)
 	end
 	local duree = maintenant() - (tentative.debut :: number)
 	if surveillanceAlerte(joueur) then

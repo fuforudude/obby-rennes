@@ -36,6 +36,7 @@ local Effets = require(script.Parent.EffetsVisuels)
 local RegleEffets = require(ReplicatedStorage.Partage.EffetsCapacites)
 local Reglages = require(ReplicatedStorage.Partage.Reglages)
 local Remotes = require(ReplicatedStorage.Partage.Remotes)
+local Sons = require(script.Parent.Sons)
 local Vol = require(script.Parent.Vol)
 
 local TOUCHE_DASH = Enum.KeyCode.Q -- la touche marquée A sur un clavier français (AZERTY)
@@ -193,9 +194,10 @@ end
 
 -- Réplication des effets ---------------------------------------------------------------------------------------------
 
---- Joue l'effet de la capacité sur son propre personnage tout de suite, puis prévient le serveur, qui le relaie aux autres
+--- Joue le son et l'effet de la capacité sur son propre personnage tout de suite, puis prévient le serveur, qui le relaie aux autres
 --- joueurs (EffetCapacite). Le serveur refuse ce qui est trop fréquent ou invraisemblable : rien d'autre n'en dépend.
 local function jouerEffet(capacite: string, s: Session)
+	Sons.jouer(capacite) -- les clés "dash" et "doubleSaut" du catalogue d'effets
 	Effets.jouer(capacite, s.personnage)
 	local remote = signalerEffet
 	if remote then

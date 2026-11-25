@@ -7,6 +7,7 @@ type Service = { demarrer: () -> () }
 
 -- Les ModuleScript, pas encore chargés : un module qui plante dès son `require` est rattrapé comme un `demarrer` raté.
 local SERVICES: { { nom: string, module: ModuleScript } } = {
+	{ nom = "Mesures", module = script.Mesures }, -- suit les joueurs avant que les autres services ne lui parlent
 	{ nom = "Obstacles", module = script.Obstacles },
 	{ nom = "Evenements", module = script.Evenements },
 	{ nom = "Classement", module = script.Classement },

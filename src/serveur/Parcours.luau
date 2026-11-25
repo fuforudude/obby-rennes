@@ -9,6 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Capacites = require(script.Parent.Capacites)
 local Classement = require(script.Parent.Classement)
 local Donnees = require(script.Parent.Donnees)
+local Mesures = require(script.Parent.Mesures)
 local Reglages = require(ReplicatedStorage.Partage.Reglages)
 local Regles = require(ReplicatedStorage.Partage.Regles)
 local Remotes = require(ReplicatedStorage.Partage.Remotes)
@@ -147,6 +148,9 @@ local function surCheckpoint(numero: number, touche: BasePart)
 	local course = courses[joueur]
 	if course then
 		course.serie += 1
+		if not course.vol then
+			Mesures.checkpoint(joueur, numero)
+		end
 		if Regles.auraCompte(course) then
 			donnees.aura += Regles.gainCheckpoint(course.serie, Reglages)
 			majAura(joueur, donnees)
@@ -168,6 +172,9 @@ local function surChute(joueur: Player)
 	end
 	course.serie = 0
 	course.chutes += 1
+	if not course.vol then
+		Mesures.mort(joueur, donnees.etape)
+	end
 	if Regles.auraCompte(course) then
 		donnees.aura = Regles.auraApresChute(donnees.aura, Reglages)
 		majAura(joueur, donnees)
