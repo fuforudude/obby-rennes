@@ -5,7 +5,8 @@
 -- menu en coin. Le record et « non classé » ne se voient qu'à l'arrivée.
 -- Ascension (après Sup de Vinci) : « 7/15 » devient la hauteur (« 182 m »), le chrono est celui de l'ascension, une
 -- ligne discrète dessous donne le record de hauteur et « non classé ». S'y ajoutent, montés ici et dans le même écran :
--- les capacités débloquées (IconesCapacites, en bas au centre) et l'annonce d'un déblocage (AnnonceCapacite, au centre).
+-- les capacités débloquées (IconesCapacites, en bas au centre), l'annonce d'un déblocage (AnnonceCapacite, au centre)
+-- et les deux boutons de coupure du son (BoutonsSons, juste au-dessus des capacités).
 -- Tout ce qui s'affiche vient de l'état envoyé par le serveur ; le serveur seul décide (le bouton envoie une demande).
 -- Tailles en proportions de l'écran, bornées par des contraintes ; boutons d'au moins 44 px ; animations < 0,3 s.
 local ContextActionService = game:GetService("ContextActionService")
@@ -22,6 +23,7 @@ local Remotes = require(ReplicatedStorage.Partage.Remotes)
 local Vannes = require(ReplicatedStorage.Partage.Vannes)
 
 local AnnonceCapacite = require(script.Parent.AnnonceCapacite)
+local BoutonsSons = require(script.Parent.BoutonsSons)
 local Composants = require(script.Parent.Composants)
 local IconesCapacites = require(script.Parent.IconesCapacites)
 local Panneaux = require(script.Parent.Panneaux)
@@ -267,6 +269,7 @@ function Hud.monter()
 	-- Les composants de l'ascension, dans le même écran : capacités, annonce de déblocage.
 	IconesCapacites.monter(gui)
 	AnnonceCapacite.monter(gui)
+	BoutonsSons.monter(gui)
 	Vol.monter(gui) -- n'écoute que EtatVol : rien n'est créé tant que le serveur n'envoie pas `true`
 
 	gui.Parent = joueur:WaitForChild("PlayerGui")
