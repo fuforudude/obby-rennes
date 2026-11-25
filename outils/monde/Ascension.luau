@@ -1086,15 +1086,17 @@ return function(R, biblio)
 			Enum.Material.Metal
 		)
 		for _, bout in { -1, 1 } do
+			-- Enfant direct de la barre : le serveur le soude à elle au démarrage, il tourne avec. Il ne dépasse de la
+			-- barre que de 0,05 (juste de quoi la recouvrir) : ce que le contrôle simule, c'est la barre.
 			piece(
-				dObstacles,
+				barre,
 				"BoutTournant",
 				1.6,
-				1.6,
-				1.6,
+				1.3,
+				1.1,
 				CFrame.new(px, y + 2.8, pz)
 					* CFrame.Angles(0, a + math.pi / 2, 0)
-					* CFrame.new(bout * (bras - 0.8), 0, 0),
+					* CFrame.new(bout * (bras - 0.75), 0, 0),
 				couleurs.pancarte,
 				Enum.Material.Neon
 			)

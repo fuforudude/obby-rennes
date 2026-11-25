@@ -1020,19 +1020,33 @@ return function(R, biblio)
 		)
 	end
 
-	-- Bôme d'une péniche amarrée le long du ponton (599, 5) : elle balaie le ponton à hauteur de taille.
+	-- Bôme sur un mât planté dans l'eau, le long du ponton (599, 5) : elle balaie le ponton à hauteur de taille. La
+	-- péniche, elle, est échouée au loin derrière la Vilaine (x 653, z -70, au ras du sol) : traversable, elle reste
+	-- hors de portée de saut de toute surface solide, les trois capacités en main (outils/monde/physique.luau). Rien ne
+	-- l'est dans la rivière : le bord le plus éloigné du chemin y est encore 15,7 studs trop près.
 	do
 		local d = dossier(decor, "PenicheAmarree")
-		boite(d, "Coque", 591, 604, 1.5, 3.6, -12.5, -5.9, Color3.fromRGB(40, 70, 120), Enum.Material.Wood)
-		boite(d, "Rouf", 593, 602, 3.6, 5.2, -11.8, -8.2, Color3.fromRGB(235, 225, 200), Enum.Material.Wood)
+		boite(d, "Coque", 653, 666, SOL, SOL + 2.1, -76.6, -70, Color3.fromRGB(40, 70, 120), Enum.Material.Wood)
+		boite(
+			d,
+			"Rouf",
+			655,
+			664,
+			SOL + 2.1,
+			SOL + 3.7,
+			-75.9,
+			-72.3,
+			Color3.fromRGB(235, 225, 200),
+			Enum.Material.Wood
+		)
 		fantome(
 			piece(
 				d,
 				"Mat",
-				14,
+				15.1,
 				0.5,
 				0.5,
-				CFrame.new(599, 9.6, -6.4) * DEBOUT,
+				CFrame.new(599, 9.05, -6.4) * DEBOUT,
 				Color3.fromRGB(200, 190, 170),
 				Enum.Material.Wood,
 				Enum.PartType.Cylinder

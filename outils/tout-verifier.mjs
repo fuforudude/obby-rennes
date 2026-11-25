@@ -176,6 +176,7 @@ const cassees = [
   ["casser-ascension", "mobiles", "verifier-ascension", ["par cycle"]],
   ["casser-ascension", "effondrables", "verifier-ascension", ["DelaiRetour 20 s"]],
   ["casser-ascension", "tournants", "verifier-ascension", ["pas plus rapide que le tuto"]],
+  ["casser-ascension", "bouts", "verifier-ascension", ["BoutTournant : dépasse de la barre"]],
   ["casser-ascension", "tag-sans-simulateur", "verifier-ascension", ["tag « Fragile » sans simulateur"]],
   ["casser-bords", "bord", "verifier-bords", ["Lisere prolonge Ascension.Pied.PiedAscension"]],
   ["casser-bords", "traverse", "verifier-bords", ["GardeCorps, posée sur Parcours.4_LaTour.Balcon, se traverse"]],

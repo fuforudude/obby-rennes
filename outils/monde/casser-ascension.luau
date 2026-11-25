@@ -12,6 +12,7 @@
 --   mobiles      Duree des plateformes mobiles ramenée à 0,3 s -> « le saut d'arrivée … par cycle »
 --   effondrables DelaiRetour porté à 20 s -> « DelaiRetour … de 1,2 à 8 s attendues »
 --   tournants    Vitesse ramenée à 1,2 rad/s -> « pas plus rapide que le tuto »
+--   bouts        bouts des barres tournantes portés à 3 studs -> « dépasse de la barre »
 --   tag-sans-simulateur  tag « Fragile » (un piège du tuto, connu du jeu) posé sur une dalle du chemin
 --                -> « tag « Fragile » sans simulateur » (aucune famille du registre FAMILLES ne le contrôle)
 --   famille-inconnue     le générateur outils/monde/Ascension.luau, avec une famille « Ascenseur » glissée dans
@@ -33,7 +34,7 @@ local sortie = process.args[2] or "ascension-cassee.rbxm"
 local source = process.args[3] or "monde/Ascension.rbxm"
 assert(
 	panne,
-	"panne attendue : marches, lasers, pieges, repos, poussee, balanciers, mobiles, effondrables, tournants, "
+	"panne attendue : marches, lasers, pieges, repos, poussee, balanciers, mobiles, effondrables, tournants, bouts, "
 		.. "tag-sans-simulateur ou famille-inconnue"
 )
 
@@ -160,6 +161,20 @@ function pannes.tournants(): string
 		n += 1
 	end
 	return `{n} barres tournantes ramenées à 1,2 rad/s (le tuto en fait 1,6)`
+end
+
+function pannes.bouts(): string
+	local n = 0
+	for _, b in tagues("Tournant") do
+		for _, e in b:GetChildren() do
+			if e:IsA("BasePart") then
+				e.Size = Vector3.new(3, 3, 3)
+				n += 1
+			end
+		end
+	end
+	assert(n > 0, `aucun bout de barre tournante dans {source}`)
+	return `{n} bouts de barre portés à 3 studs`
 end
 
 -- Un piège connu du jeu (TAGS_CONNUS de verifier-contrats) mais que verifier-ascension ne sait pas simuler : sa

@@ -903,6 +903,7 @@ end
 
 ---------------------------------------------------------------------------------------------------------------
 -- Barres tournantes : plus rapides que celles du tuto (1,6 rad/s).
+local DEPASSEMENT_BOUT = 0.05
 FAMILLES.Tournant.simuler = function(b)
 	local nom = b:GetFullName()
 	local vitesse = b:GetAttribute("Vitesse")
@@ -923,6 +924,30 @@ FAMILLES.Tournant.simuler = function(b)
 		defaut(`{nom} : une barre tournante pousse : elle doit être solide`)
 	end
 	local cf0, taille = b.CFrame, b.Size
+	-- Ses enfants (les bouts de néon) tournent avec elle, soudés par le serveur : ils doivent rester dans ce que le
+	-- contrôle simule, la barre, à DEPASSEMENT_BOUT près, sans jamais pousser eux-mêmes.
+	for _, e in b:GetChildren() do
+		if not e:IsA("BasePart") then
+			continue
+		end
+		local rel = cf0:Inverse() * e.CFrame
+		local mn, mx = Vector3.new(math.huge, math.huge, math.huge), Vector3.new(-math.huge, -math.huge, -math.huge)
+		for _, sx in { -0.5, 0.5 } do
+			for _, sy in { -0.5, 0.5 } do
+				for _, sz in { -0.5, 0.5 } do
+					local q = rel * Vector3.new(sx * e.Size.X, sy * e.Size.Y, sz * e.Size.Z)
+					mn, mx = mn:Min(q), mx:Max(q)
+				end
+			end
+		end
+		local depasse = mx:Max(-mn) - taille / 2
+		if math.max(depasse.X, depasse.Y, depasse.Z) > DEPASSEMENT_BOUT + 0.001 then
+			defaut(`{nom}.{e.Name} : dépasse de la barre, il balaie plus que ce qui est contrôlé`)
+		end
+		if e.CanCollide or not e.Anchored then
+			defaut(`{nom}.{e.Name} : doit être ancré et sans collision (le serveur le soude à la barre)`)
+		end
+	end
 	local autour = CFrame.new(cf0.Position)
 	table.insert(mouvants, {
 		nom = nom,
