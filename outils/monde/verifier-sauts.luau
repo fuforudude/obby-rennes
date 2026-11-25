@@ -63,20 +63,39 @@ local solides = {}
 local mortels: { Plateforme } = {}
 local defauts = 0
 
-local function emprise(p, dx, dz)
-	local s, pos = p.Size, p.CFrame.Position
-	return pos.X - s.X / 2 + math.min(0, dx),
-		pos.X + s.X / 2 + math.max(0, dx),
-		pos.Z - s.Z / 2 + math.min(0, dz),
-		pos.Z + s.Z / 2 + math.max(0, dz)
+-- Demi-dimensions de la boîte alignée sur les axes (une pièce peut être tournée : rive, pignon).
+local function demis(p): (number, number, number)
+	local a, b, c =
+		p.CFrame.XVector * (p.Size.X / 2), p.CFrame.YVector * (p.Size.Y / 2), p.CFrame.ZVector * (p.Size.Z / 2)
+	return math.abs(a.X) + math.abs(b.X) + math.abs(c.X),
+		math.abs(a.Y) + math.abs(b.Y) + math.abs(c.Y),
+		math.abs(a.Z) + math.abs(b.Z) + math.abs(c.Z)
 end
 
-for _, d in modele:GetDescendants() do
+local function emprise(p, dx, dz)
+	local pos = p.CFrame.Position
+	local hx, _, hz = demis(p)
+	return pos.X - hx + math.min(0, dx),
+		pos.X + hx + math.max(0, dx),
+		pos.Z - hz + math.min(0, dz),
+		pos.Z + hz + math.max(0, dz)
+end
+
+local pieces = modele:GetDescendants()
+-- Le décor solide des événements (chaussée, voies, échafaudages) prolonge des plateformes du tuto : on peut s'y poser.
+if fs.isFile("monde/Evenements.rbxm") then
+	for _, d in roblox.deserializeModel(fs.readFile("monde/Evenements.rbxm"))[1]:GetDescendants() do
+		if d:IsA("BasePart") and d.CanCollide and d.CanQuery and not d:HasTag("Balancier") then
+			table.insert(pieces, d)
+		end
+	end
+end
+for _, d in pieces do
 	if not d:IsA("BasePart") then
 		continue
 	end
 	local estZone = d.Parent and d.Parent.Name:match("^%d+_") ~= nil
-	if not estZone then
+	if not estZone and d:IsDescendantOf(modele) then
 		continue
 	end
 	if d:HasTag("Mortel") then
@@ -102,7 +121,8 @@ for _, d in modele:GetDescendants() do
 			dx, dz = dep.X, dep.Z
 		end
 		local x1, x2, z1, z2 = emprise(d, dx, dz)
-		local haut = d.CFrame.Position.Y + d.Size.Y / 2
+		local _, hy = demis(d)
+		local haut = d.CFrame.Position.Y + hy
 		local n = d:GetAttribute("Numero")
 		local donne = 0
 		if d:HasTag("DeblocageCapacite") then

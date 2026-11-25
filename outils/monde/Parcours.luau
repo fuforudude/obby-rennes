@@ -89,6 +89,17 @@ return function(R, biblio)
 		return etiqueter(p, "Mobile")
 	end
 
+	-- Bord solide d'un obstacle (garde-corps, pignon) : on s'y cogne, on peut même s'y poser. Il compte comme
+	-- plateforme dans les contrôles de saut (CanQuery), mais ce n'est pas le chemin : pas de contour.
+	local SANS_CONTOUR: { [string]: boolean } = {}
+	local function appui(p)
+		p.CanCollide = true
+		p.CanQuery = true
+		p.CanTouch = false
+		SANS_CONTOUR[p.Name] = true
+		return p
+	end
+
 	local function tournant(p, vitesse: number)
 		p:SetAttribute("Vitesse", vitesse)
 		p.CanQuery = false
@@ -291,15 +302,15 @@ return function(R, biblio)
 			pan(x1 - 0.5, x2 + 0.5, trou.z2, z2 + 0.5)
 			pan(x1 - 0.5, trou.x1, trou.z1, trou.z2)
 			pan(trou.x2, x2 + 0.5, trou.z1, trou.z2)
-			-- Cadre d'acier débordant (visible du dessous comme du dessus) et liseré néon sur la lèvre : tous deux
-			-- fantômes et posés en dehors de l'ouverture, pour que rien n'accroche au passage.
+			-- Cadre d'acier débordant (visible du dessous comme du dessus) et liseré néon sur la lèvre : solides comme le
+			-- toit qu'ils bordent, et posés en dehors de l'ouverture.
 			local cadre = Color3.fromRGB(255, 255, 255)
 			local anneaux = {
 				{ e = 1, y1 = haut - 1.2, y2 = haut + 1.4, c = Color3.fromRGB(120, 128, 140), m = Enum.Material.Metal },
 				{ e = 0.4, y1 = haut + 1.4, y2 = haut + 1.8, c = cadre, m = Enum.Material.Neon },
 			}
 			for _, a in anneaux do
-				fantome(
+				decor(
 					boite(
 						parent,
 						"Encadrement",
@@ -313,7 +324,7 @@ return function(R, biblio)
 						a.m
 					)
 				)
-				fantome(
+				decor(
 					boite(
 						parent,
 						"Encadrement",
@@ -327,8 +338,8 @@ return function(R, biblio)
 						a.m
 					)
 				)
-				fantome(boite(parent, "Encadrement", trou.x1 - a.e, trou.x1, a.y1, a.y2, trou.z1, trou.z2, a.c, a.m))
-				fantome(boite(parent, "Encadrement", trou.x2, trou.x2 + a.e, a.y1, a.y2, trou.z1, trou.z2, a.c, a.m))
+				decor(boite(parent, "Encadrement", trou.x1 - a.e, trou.x1, a.y1, a.y2, trou.z1, trou.z2, a.c, a.m))
+				decor(boite(parent, "Encadrement", trou.x2, trou.x2 + a.e, a.y1, a.y2, trou.z1, trou.z2, a.c, a.m))
 			end
 		end
 		-- Bandes de fenêtres sur les grandes faces (décor, sans collision).
@@ -355,24 +366,33 @@ return function(R, biblio)
 
 	-- Toit à deux pans posé à la hauteur `base`, centré en (x, z) : deux WedgePart dos à dos, faîtage le long de X
 	-- (`leLongDeX`) ou de Z. `longueur` suit le faîtage, `largeur` va d'un égout à l'autre. Avec une `longueur`
-	-- très faible, c'est un triangle debout : pignon, fronton, ogive de porte.
+	-- très faible, c'est un triangle debout : pignon, fronton, ogive de porte. Rend les deux pans (fantômes).
 	local function deuxPans(parent, nom, x, base, z, longueur, largeur, hauteur, leLongDeX, couleur, materiau)
 		local y = base + hauteur / 2
 		materiau = materiau or Enum.Material.Slate
 		if leLongDeX then
-			pente(parent, nom, longueur, hauteur, largeur / 2, CFrame.new(x, y, z - largeur / 4), couleur, materiau)
-			pente(
+			return pente(
 				parent,
 				nom,
 				longueur,
 				hauteur,
 				largeur / 2,
-				CFrame.new(x, y, z + largeur / 4) * CFrame.Angles(0, math.pi, 0),
+				CFrame.new(x, y, z - largeur / 4),
 				couleur,
 				materiau
-			)
+			),
+				pente(
+					parent,
+					nom,
+					longueur,
+					hauteur,
+					largeur / 2,
+					CFrame.new(x, y, z + largeur / 4) * CFrame.Angles(0, math.pi, 0),
+					couleur,
+					materiau
+				)
 		else
-			pente(
+			return pente(
 				parent,
 				nom,
 				longueur,
@@ -381,17 +401,17 @@ return function(R, biblio)
 				CFrame.new(x - largeur / 4, y, z) * CFrame.Angles(0, math.pi / 2, 0),
 				couleur,
 				materiau
-			)
-			pente(
-				parent,
-				nom,
-				longueur,
-				hauteur,
-				largeur / 2,
-				CFrame.new(x + largeur / 4, y, z) * CFrame.Angles(0, -math.pi / 2, 0),
-				couleur,
-				materiau
-			)
+			),
+				pente(
+					parent,
+					nom,
+					longueur,
+					hauteur,
+					largeur / 2,
+					CFrame.new(x + largeur / 4, y, z) * CFrame.Angles(0, -math.pi / 2, 0),
+					couleur,
+					materiau
+				)
 		end
 	end
 
@@ -520,38 +540,47 @@ return function(R, biblio)
 		end
 	end
 
-	-- Pignon pointu debout dans le plan z = zf : triangle de hourdis et ses deux rives de bois.
-	local function pignon(parent, x, base, zf, largeur, hauteur, teinte, bois)
-		deuxPans(parent, "Pignon", x, base, zf, 0.3, largeur, hauteur, false, teinte, Enum.Material.Plaster)
+	-- Pignon pointu debout dans le plan z = zf : triangle de hourdis et ses deux rives de bois. `pose` est
+	-- appliquée à chaque pièce : `appui` pour les maisons du chemin (le pignon borde le toit où l'on marche).
+	local function pignon(parent, x, base, zf, largeur, hauteur, teinte, bois, pose)
+		pose = pose or fantome
+		local a1, a2 =
+			deuxPans(parent, "Pignon", x, base, zf, 0.3, largeur, hauteur, false, teinte, Enum.Material.Plaster)
+		pose(a1)
+		pose(a2)
 		local l, a = math.sqrt(hauteur * hauteur + largeur * largeur / 4), math.atan2(hauteur, largeur / 2)
 		for _, s in { -1, 1 } do
+			pose(
+				piece(
+					parent,
+					"Rive",
+					l + 0.4,
+					0.5,
+					0.5,
+					CFrame.new(x + s * largeur / 4, base + hauteur / 2, zf) * CFrame.Angles(0, 0, -s * a),
+					bois,
+					Enum.Material.Wood
+				)
+			)
+		end
+		pose(
 			piece(
 				parent,
-				"Rive",
-				l + 0.4,
-				0.5,
-				0.5,
-				CFrame.new(x + s * largeur / 4, base + hauteur / 2, zf) * CFrame.Angles(0, 0, -s * a),
+				"Poinçon",
+				0.4,
+				hauteur * 0.8,
+				0.4,
+				CFrame.new(x, base + hauteur * 0.4, zf),
 				bois,
 				Enum.Material.Wood
 			)
-		end
-		piece(
-			parent,
-			"Poinçon",
-			0.4,
-			hauteur * 0.8,
-			0.4,
-			CFrame.new(x, base + hauteur * 0.4, zf),
-			bois,
-			Enum.Material.Wood
 		)
 	end
 
 	-- Maison du chemin : on marche sur sa dalle de toit (emprise inchangée : (largeur + 0.4)², dessus à `dessus`).
 	-- Dessous, le corps (solide, comme avant) est fait d'étages en encorbellement : le rez est le plus étroit et
 	-- chaque étage avance de 0,3 de chaque côté, le dernier fait exactement `largeur` sous la dalle. Pignons pointus
-	-- fantômes sur les faces ±Z, hors de la trajectoire (on saute le long de X).
+	-- solides sur les faces ±Z, hors de la trajectoire (on saute le long de X).
 	local function maisonChemin(parent, nom, x, z, largeur, dessus, teinte, bois, avecPignons, enseigne)
 		local toit =
 			dalle(parent, "Toit", largeur + 0.4, largeur + 0.4, x, dessus, z, couleurs.toit, Enum.Material.Slate)
@@ -610,7 +639,7 @@ return function(R, biblio)
 		end
 		if avecPignons then
 			for _, s in { -1, 1 } do
-				pignon(parent, x, dessus - 1, z + s * (largeur / 2 + 0.45), largeur, 4.5, teinte, bois)
+				pignon(parent, x, dessus - 1, z + s * (largeur / 2 + 0.45), largeur, 4.5, teinte, bois, appui)
 			end
 		end
 		if enseigne then
@@ -1266,12 +1295,17 @@ return function(R, biblio)
 		if i == 9 then
 			deblocage(tour, b, "doubleSaut", "DOUBLE SAUT", accents.tour)
 		end
-		-- Garde-corps vitré (fantôme) sur le bord extérieur du balcon, celui qui ne mène à aucun autre balcon.
+		-- Garde-corps vitré, solide, sur le bord extérieur du balcon, celui qui ne mène à aucun autre balcon. Pas sur le
+		-- balcon du double saut (monté dessus, on ne serait plus qu'à 6,7 studs du suivant : un saut simple en fait
+		-- 7,2) ni sur les balcons fragiles (il resterait debout quand le balcon s'efface).
+		if i == 5 or i == 9 or i == 12 then
+			continue
+		end
 		local dx, dz = pos[1] - CX, pos[2]
 		local surX = math.abs(dx) > math.abs(dz)
 		local gx = if surX then pos[1] + (if dx > 0 then 2.4 else -2.4) else pos[1]
 		local gz = if surX then pos[2] else pos[2] + (if dz > 0 then 2.4 else -2.4)
-		local verre = fantome(
+		local verre = appui(
 			bloc(
 				tour,
 				"GardeCorps",
@@ -1807,31 +1841,33 @@ return function(R, biblio)
 				deuxPans(parlement, "ToitLucarne", lx, 33, s * 17.6, 3.4, 3, 1.6, false, ardoiseParlement)
 			end
 			-- Galerie faîtière de plomb, hermines et lys dorés, statues dorées aux extrémités.
-			za, zb = zr(s, 14.9, 15.3)
-			fantome(boite(parlement, "GalerieFaitiere", 690, 745, 40.6, 41.5, za, zb, plomb, Enum.Material.Metal))
+			za, zb = zr(s, 15, 15.2) -- à ras du toit : qui y met le pied touche l'ardoise
+			fantome(boite(parlement, "GalerieFaitiere", 690, 745, 40.2, 40.8, za, zb, plomb, Enum.Material.Metal))
 			for k = 0, 5 do
 				boule(
 					parlement,
 					if k % 2 == 0 then "Hermine" else "Lys",
 					0.9,
 					694 + k * 8.5,
-					41.9,
+					41.3,
 					s * 15.1,
 					couleurs.or_,
 					Enum.Material.Metal
 				)
 			end
 			for _, sx in { 690.8, 744.6 } do
-				cylindre(
-					parlement,
-					"Statue",
-					2.2,
-					0.8,
-					CFrame.new(sx, 42.6, s * 15.1) * DEBOUT,
-					couleurs.or_,
-					Enum.Material.Metal
+				appui(
+					cylindre(
+						parlement,
+						"Statue",
+						2.2,
+						0.8,
+						CFrame.new(sx, 42, s * 15.1) * DEBOUT,
+						couleurs.or_,
+						Enum.Material.Metal
+					)
 				)
-				boule(parlement, "TeteStatue", 0.8, sx, 44, s * 15.1, couleurs.or_, Enum.Material.Metal)
+				appui(boule(parlement, "TeteStatue", 0.8, sx, 43.4, s * 15.1, couleurs.or_, Enum.Material.Metal))
 			end
 		end
 		-- La face -X, qu'on escalade : même composition en relief fantôme (0,8 au plus devant x = 685).
@@ -1872,8 +1908,8 @@ return function(R, biblio)
 			piece(parlement, "BaieAttique", 0.2, 5, 2.4, CFrame.new(684.9, 31, s * 10.5), vitre, Enum.Material.Glass)
 		end
 		fantome(boite(parlement, "Entablement", 684.2, 685, 25, 26, -20.8, 20.8, clair, Enum.Material.Limestone))
-		cylindre(parlement, "FrontonCintre", 0.4, 8, CFrame.new(684.8, 34, 0), tuffeau, Enum.Material.Limestone)
-		cylindre(parlement, "CadranSolaire", 0.2, 2.6, CFrame.new(684.6, 35, 0), couleurs.or_, Enum.Material.Metal)
+		cylindre(parlement, "FrontonCintre", 0.2, 8, CFrame.new(684.9, 34, 0), tuffeau, Enum.Material.Limestone)
+		cylindre(parlement, "CadranSolaire", 0.1, 2.6, CFrame.new(684.75, 35, 0), couleurs.or_, Enum.Material.Metal)
 	end
 
 	---------------------------------------------------------------------------------------------------------------
@@ -2091,13 +2127,13 @@ return function(R, biblio)
 	affiche("ASCENSEUR EN PANNE\ndepuis 2019", 440, 44, -1, Color3.fromRGB(240, 160, 40), noir)
 	affiche(
 		"TRANSMUSICALES\ncomplet · les bouchons d'oreilles aussi",
-		510, -- hors de la trouée qui montre les portes Mordelaises et la cathédrale
+		504.5, -- hors de la trouée qui montre les portes Mordelaises et la cathédrale, et devant la porte cochère
 		36,
 		-1,
 		Color3.fromRGB(20, 20, 30),
 		Color3.fromRGB(255, 70, 180)
 	)
-	affiche("SKIBIDI PARTIEL\n8 h · amphi B · pas de rattrapage", 520, 16, 1, Color3.fromRGB(255, 220, 40), noir)
+	affiche("SKIBIDI PARTIEL\n8 h · amphi B · pas de rattrapage", 538, 16, 1, Color3.fromRGB(255, 220, 40), noir)
 	affiche("IL NE PLEUT PAS À RENNES\nil bruine.", 575, 12, -1, Color3.fromRGB(120, 140, 160), blanc)
 	affiche("BAIGNADE INTERDITE\n(sauf si tu rates le saut)", 605, 12, 1, Color3.fromRGB(40, 150, 230), blanc)
 	affiche("KOUIGN-AMANN\n0 % de beurre doux, 100 % de bonheur", 660, 26, -1, Color3.fromRGB(230, 170, 70), noir)
@@ -2619,7 +2655,7 @@ return function(R, biblio)
 			end
 			if p:HasTag("Mortel") then
 				contour(p, couleurs.danger, 0.2)
-			elseif not p:HasTag("Checkpoint") and p.CanCollide and p.CanQuery then
+			elseif not p:HasTag("Checkpoint") and p.CanCollide and p.CanQuery and not SANS_CONTOUR[p.Name] then
 				contour(p, accent)
 			end
 		end

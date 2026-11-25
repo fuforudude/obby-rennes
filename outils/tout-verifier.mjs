@@ -132,6 +132,7 @@ etape("Génération de la carte, carte commitée = carte générée", () => {
 });
 
 reussir("Contrôle des contrats (tags, checkpoints 0..NB_ETAPES)", ...lune("outils/monde/verifier-contrats.luau"));
+reussir("Contrôle des bords (ce qui paraît solide porte le joueur)", ...lune("outils/monde/verifier-bords.luau"));
 // Registre des cartes (outils/monde/monde.json, lu aussi par generer.luau et verifier-contrats.luau) : chaque carte
 // nomme son contrôle de carte (« controle »), lancé ici sans argument (il lit ses cartes par défaut). Une carte sans
 // contrôle, ou dont le contrôle n'existe pas, est refusée : ajouter une carte, c'est aussi la contrôler.
@@ -176,6 +177,12 @@ const cassees = [
   ["casser-ascension", "effondrables", "verifier-ascension", ["DelaiRetour 20 s"]],
   ["casser-ascension", "tournants", "verifier-ascension", ["pas plus rapide que le tuto"]],
   ["casser-ascension", "tag-sans-simulateur", "verifier-ascension", ["tag « Fragile » sans simulateur"]],
+  ["casser-bords", "bord", "verifier-bords", ["Lisere prolonge Ascension.Pied.PiedAscension"]],
+  ["casser-bords", "traverse", "verifier-bords", ["GardeCorps, posée sur Parcours.4_LaTour.Balcon, se traverse"]],
+  ["casser-bords", "invisible", "verifier-bords", ["GardeCorps : solide et invisible"]],
+  ["casser-bords", "aplomb", "verifier-bords", ["Facade : habillage solide hors de l'aplomb"]],
+  ["casser-bords", "penche", "verifier-bords", ["Facade : habillage solide penché"]],
+  ["casser-bords", "rebord", "verifier-bords", ["Facade : on tient debout sur cet habillage"]],
   // Contrôle null : c'est la fabrique elle-même (la génération trafiquée) qui doit échouer avec le message.
   ["casser-ascension", "famille-inconnue", null, ["famille d'obstacle inconnue « Ascenseur »"]],
 ];

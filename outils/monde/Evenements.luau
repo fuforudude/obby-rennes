@@ -60,6 +60,13 @@ return function(R, biblio)
 		)
 	end
 
+	-- Décor qui prolonge une surface où l'on marche : solide, et compté comme plateforme par verifier-sauts (CanQuery).
+	local function appui(p)
+		p.CanCollide = true
+		p.CanQuery = true
+		return p
+	end
+
 	-- Rotation autour de la verticale pour que la face avant (-Z local) regarde dans la direction (dx, dz).
 	local function versLaDirection(dx, dz)
 		return CFrame.Angles(0, math.atan2(-dx, -dz), 0)
@@ -369,18 +376,21 @@ return function(R, biblio)
 			TAILLE_FEU
 		)
 		finir(m, corps)
-		-- Décor : voie sous l'escalator, tunnels aux deux bouts, poteau et boîtier du feu.
-		boite(
-			decor,
-			"Voie",
-			x - 2,
-			x + 2,
-			dessus - 2.2,
-			dessus - 1,
-			-zMoins - 12,
-			zPlus + 12,
-			Color3.fromRGB(120, 125, 135),
-			Enum.Material.Concrete
+		-- Décor : voie sous l'escalator (solide : elle le prolonge), tunnels aux deux bouts (on y entre : solide, leur
+		-- toit contournerait l'escalator en panne), poteau et boîtier du feu.
+		appui(
+			boite(
+				decor,
+				"Voie",
+				x - 2,
+				x + 2,
+				dessus - 2.2,
+				dessus - 1,
+				-zMoins - 12,
+				zPlus + 12,
+				Color3.fromRGB(120, 125, 135),
+				Enum.Material.Concrete
+			)
 		)
 		for _, bout in { -zMoins, zPlus } do
 			boite(
@@ -486,28 +496,32 @@ return function(R, biblio)
 			{ Vector3.new(0, 9 + decalageLampe, 0) },
 			TAILLE_FEU
 		)
-		boite(
-			decor,
-			"TubeEchafaudage",
-			tx - 0.18,
-			tx + 0.18,
-			SOL,
-			dessus + 4.2 + decalageLampe,
-			tz - 0.18,
-			tz + 0.18,
-			Color3.fromRGB(240, 160, 40),
-			Enum.Material.Metal
+		appui(
+			boite(
+				decor,
+				"TubeEchafaudage",
+				tx - 0.18,
+				tx + 0.18,
+				SOL,
+				dessus + 4.2 + decalageLampe,
+				tz - 0.18,
+				tz + 0.18,
+				Color3.fromRGB(240, 160, 40),
+				Enum.Material.Metal
+			)
 		)
-		boite(
-			decor,
-			"BoitierFeu",
-			tx - 0.4,
-			tx + 0.4,
-			dessus + 4.2 + decalageLampe,
-			dessus + 5.2 + decalageLampe,
-			tz - 0.4,
-			tz + 0.4,
-			Color3.fromRGB(120, 20, 20)
+		appui(
+			boite(
+				decor,
+				"BoitierFeu",
+				tx - 0.4,
+				tx + 0.4,
+				dessus + 4.2 + decalageLampe,
+				dessus + 5.2 + decalageLampe,
+				tz - 0.4,
+				tz + 0.4,
+				Color3.fromRGB(120, 20, 20)
+			)
 		)
 		tubesPoses[cle] = true
 		return finir(m, corps)
@@ -527,7 +541,7 @@ return function(R, biblio)
 	-- à 12 studs au-dessus de la bande (y ≈ 22) et à z = ±8, devant le mur (face en z = ±9 ; un disque de 2 studs qui
 	-- se tourne vers la caméra déborde de 1 stud, d'où 8 et non 8,6). Hors de la voie, hors du balayage des véhicules,
 	-- et rien d'opaque entre lui et l'auvent ou la terrasse (contrôlé par verifier-evenements.luau). Le toit des
-	-- portes (y 30 à 31) est bien plus haut : un « ! » posé dessus (y 33) était caché derrière lui.
+	-- portes (y 43 à 44) est bien plus haut : un « ! » posé dessus était caché derrière lui.
 	local soif = dossier(racineEvenements, "RueDeLaSoif")
 	local VOIE_X, DESSUS_TERRASSE = 518.8, 10
 	local nbVehicules = 0
@@ -684,40 +698,72 @@ return function(R, biblio)
 	trottinette(-1, 12, 2.1)
 	voiture(-1, 24, 17.7)
 
-	-- Les portes cochères (décor sans collision), au-delà de la portée de l'enseigne, et la chaussée entre elles et
-	-- la terrasse.
+	-- Les portes cochères, au-delà de la portée de l'enseigne, et la chaussée entre elles et la terrasse : solides, la
+	-- terrasse continue jusque sous les arches. Leur toit est à 44 : depuis l'auvent (24), les deux sauts enchaînés
+	-- montent de 14,4 ; plus bas, il contournerait la terrasse, son trafic et son enseigne.
+	local HAUT_PORTE = 43
 	local pierre = Color3.fromRGB(225, 205, 175)
 	for _, cote in { -1, 1 } do
 		local z1, z2 = if cote < 0 then -16.4 else 9, if cote < 0 then -9 else 16.4
-		boite(decor, "PorteCochere", 511.5, VOIE_X - 2.1, SOL, 30, z1, z2, pierre, Enum.Material.Brick)
-		boite(decor, "PorteCochere", VOIE_X + 2.1, 524, SOL, 30, z1, z2, pierre, Enum.Material.Brick)
-		boite(decor, "PorteCochere", VOIE_X - 2.1, VOIE_X + 2.1, 17, 30, z1, z2, pierre, Enum.Material.Brick)
-		boite(
-			decor,
-			"PorteCochere",
-			VOIE_X - 2.1,
-			VOIE_X + 2.1,
-			SOL,
-			9.9,
-			z1,
-			z2,
-			Color3.fromRGB(70, 70, 75),
-			Enum.Material.Asphalt
+		appui(boite(decor, "PorteCochere", 511.5, VOIE_X - 2.1, SOL, HAUT_PORTE, z1, z2, pierre, Enum.Material.Brick))
+		appui(boite(decor, "PorteCochere", VOIE_X + 2.1, 524, SOL, HAUT_PORTE, z1, z2, pierre, Enum.Material.Brick))
+		appui(
+			boite(
+				decor,
+				"PorteCochere",
+				VOIE_X - 2.1,
+				VOIE_X + 2.1,
+				17,
+				HAUT_PORTE,
+				z1,
+				z2,
+				pierre,
+				Enum.Material.Brick
+			)
+		)
+		appui(
+			boite(
+				decor,
+				"PorteCochere",
+				VOIE_X - 2.1,
+				VOIE_X + 2.1,
+				SOL,
+				9.9,
+				z1,
+				z2,
+				Color3.fromRGB(70, 70, 75),
+				Enum.Material.Asphalt
+			)
 		)
 		local za, zb = if cote < 0 then -9 else 5, if cote < 0 then -5 else 9
-		boite(
-			decor,
-			"Chaussee",
-			VOIE_X - 2.1,
-			VOIE_X + 2.1,
-			9.3,
-			9.9,
-			za,
-			zb,
-			Color3.fromRGB(70, 70, 75),
-			Enum.Material.Asphalt
+		appui(
+			boite(
+				decor,
+				"Chaussee",
+				VOIE_X - 2.1,
+				VOIE_X + 2.1,
+				9.3,
+				9.9,
+				za,
+				zb,
+				Color3.fromRGB(70, 70, 75),
+				Enum.Material.Asphalt
+			)
 		)
-		local toit = boite(decor, "Toit", 511, 524.5, 30, 31, z1, z2, Color3.fromRGB(85, 95, 120), Enum.Material.Slate)
+		local toit = appui(
+			boite(
+				decor,
+				"Toit",
+				511,
+				524.5,
+				HAUT_PORTE,
+				HAUT_PORTE + 1,
+				z1,
+				z2,
+				Color3.fromRGB(85, 95, 120),
+				Enum.Material.Slate
+			)
+		)
 		toit.CastShadow = true
 	end
 
@@ -838,17 +884,20 @@ return function(R, biblio)
 				Vector3.new(246, 14.5, -2),
 				Vector3.new(248, 19, 2)
 			)
-			local valideur = boite(
-				station,
-				"Valideur",
-				246.5,
-				247.5,
-				14,
-				19.4,
-				6.05 * cote - 0.25,
-				6.05 * cote + 0.25,
-				Color3.fromRGB(60, 65, 75),
-				Enum.Material.Metal
+			-- Solide, contre la dalle mais hors du balayage du battant (qui va jusqu'à 6,05).
+			local valideur = appui(
+				boite(
+					station,
+					"Valideur",
+					246.5,
+					247.5,
+					13,
+					19.4,
+					6.4 * cote - 0.25,
+					6.4 * cote + 0.25,
+					Color3.fromRGB(60, 65, 75),
+					Enum.Material.Metal
+				)
 			)
 			valideur.CastShadow = true
 			boite(
@@ -858,8 +907,8 @@ return function(R, biblio)
 				247.6,
 				18.4,
 				19,
-				6.05 * cote - 0.3,
-				6.05 * cote + 0.3,
+				6.4 * cote - 0.28,
+				6.4 * cote + 0.28,
 				Color3.fromRGB(80, 230, 90),
 				Enum.Material.Neon
 			)

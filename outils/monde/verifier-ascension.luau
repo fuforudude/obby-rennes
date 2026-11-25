@@ -1245,9 +1245,9 @@ for _, m in mouvants do
 	if #menacees == 0 then
 		defaut(`{m.nom} : ne menace aucune dalle du chemin (obstacle posé hors du chemin ?)`)
 	end
-	-- Aucun obstacle ne doit traverser une dalle : il la coincerait, ou passerait au travers.
+	-- Aucun obstacle ne doit traverser une dalle ni son habillage solide : il la coincerait, ou passerait au travers.
 	local voisines = {}
-	for _, p in plateformes do
+	for _, p in solides do
 		local boite = boiteDePlateforme(p)
 		if aabbSeCroisent(enveloppe, boite) then
 			table.insert(voisines, { p = p, obb = obbDeBoite(boite) })

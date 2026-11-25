@@ -224,6 +224,17 @@ for _, d in parcoursModele:GetDescendants() do
 	end
 end
 
+-- Le décor solide des événements eux-mêmes (chaussée, portes, voies, échafaudages) : ni un objet qui passe ni un
+-- balancier ne doit le toucher.
+for _, d in evenementsModele:GetDescendants() do
+	if d:IsA("BasePart") and d.CanCollide and not d:HasTag("Balancier") then
+		table.insert(
+			solides,
+			{ nom = d:GetFullName(), boite = aabbDePiece(d.CFrame, d.Size), obb = obb(d.CFrame, d.Size) }
+		)
+	end
+end
+
 -- Volume de réapparition d'un checkpoint : cylindre de rayon RAYON_APPARITION autour du centre de la dalle, du dessus
 -- à dessus + HAUTEUR_APPARITION. Il est échantillonné (un anneau tous les 0,25 stud de rayon, un point tous les
 -- 0,25 stud le long de chaque anneau, un niveau tous les 0,25 stud) ; une pièce testée contre ces points est élargie de DILATATION (environ la moitié du pas) pour

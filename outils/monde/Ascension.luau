@@ -21,8 +21,9 @@
 -- Une respiration très courte par tranche évite d'enchaîner soixante sauts extrêmes sans reprendre son souffle.
 --
 -- Lisibilité : on ne pose les pieds que sur des **dalles horizontales**, saturées et cernées de la couleur de leur
--- tranche (contour SelectionBox). Tout le reste — les objets qui portent les dalles et le décor de fond — est
--- fantôme (sans collision, sans toucher, sans requête) et penché : rien de plat et de coloré ne peut tromper.
+-- tranche (contour SelectionBox). Les objets qui portent les dalles sont solides et tiennent dans leur aplomb : ce qui
+-- paraît être l'obstacle porte le joueur, et aucun saut n'en est raccourci (outils/monde/verifier-bords.luau). Le décor
+-- de fond est fantôme (sans collision, sans toucher, sans requête) et penché : rien de plat ne peut tromper.
 --
 -- Ce que le jeu attend (contrats de docs/specs/2026-11-18-tour-exigeante.md) :
 -- - tag « PiedAscension » : la plateforme de départ, où la chute renvoie ;
@@ -190,7 +191,7 @@ return function(R, biblio)
 
 	---------------------------------------------------------------------------------------------------------------
 	-- Outils de construction et textes : la bibliothèque commune (outils/monde/biblio.luau), un seul exemplaire.
-	-- Tout est fantôme ici sauf les dalles du chemin et les obstacles qui poussent (`brut`, solide).
+	-- `piece`, `boule`, `cylindre` et `pente` sont fantômes ; `habiller` rend solide ce qui porte une dalle.
 	local bloc, dalle, decor, fantome, brut, piece =
 		biblio.bloc, biblio.dalle, biblio.decor, biblio.fantome, biblio.brut, biblio.piece
 	local boule, cylindre, pente, DEBOUT = biblio.boule, biblio.cylindre, biblio.pente, biblio.DEBOUT
@@ -219,12 +220,24 @@ return function(R, biblio)
 
 	---------------------------------------------------------------------------------------------------------------
 	-- Le vocabulaire visuel de l'ascension : chaque dalle du chemin est habillée d'un objet rennais, posé SOUS elle
-	-- (la dalle est son toit, son assise, son plateau). Tout l'habillage est fantôme et volontairement penché.
+	-- (la dalle est son toit, son assise, son plateau). L'habillage est solide, d'aplomb et tient sous sa dalle
+	-- (`habiller`, plus bas) : ce qui paraît être l'obstacle porte le joueur, et aucun saut n'en est raccourci.
 
 	-- Centre, dessus et demi-dimensions d'une dalle.
 	local function reperes(p)
 		local pos, s = p.CFrame.Position, p.Size
 		return pos.X, pos.Y + s.Y / 2, pos.Z, s.X / 2, s.Z / 2
+	end
+
+	-- Inclinaison ou orientation tirée, mais ramenée d'aplomb (0) ou au quart de tour : penché ou de biais, l'objet
+	-- dépasserait de sa dalle. Le tirage reste, pour que ceux qui le suivent ne bougent pas.
+	local function aplomb(a: number, b: number): number
+		entre(a, b)
+		return 0
+	end
+	local function quart(pas: number?): number
+		local p = pas or 90
+		return math.rad(p * math.floor(entre(0, 360) / p + 0.5))
 	end
 
 	local SLOGANS = {
@@ -240,18 +253,18 @@ return function(R, biblio)
 		"ON Y EST PRESQUE (NON)",
 	}
 
-	-- Morceau d'immeuble rennais retourné : façade penchée, bandeaux de fenêtres, un balcon dans le vide.
+	-- Morceau d'immeuble rennais retourné : façade, bandeaux de fenêtres, un balcon dans le vide.
 	local function objetImmeuble(parent, p, accent)
 		local x, y, z, hx, hz = reperes(p)
 		local h = entre(10, 18)
-		local inclinaison = CFrame.Angles(math.rad(entre(-18, 18)), math.rad(entre(0, 360)), math.rad(entre(-18, 18)))
+		local inclinaison = CFrame.Angles(aplomb(-18, 18), quart(), aplomb(-18, 18))
 		local corps = CFrame.new(x, y - 1 - h / 2, z) * inclinaison
 		piece(
 			parent,
 			"Facade",
-			hx * 2 + 1.5,
+			hx * 2 - 1.6, -- la place du balcon
 			h,
-			hz * 2 + 1.5,
+			hz * 2,
 			corps,
 			choix({ couleurs.facade, couleurs.pierre }),
 			Enum.Material.Concrete
@@ -260,9 +273,9 @@ return function(R, biblio)
 			piece(
 				parent,
 				"Fenetres",
-				hx * 2 + 1.7,
+				hx * 2 - 1.4,
 				1.8,
-				hz * 2 + 1.7,
+				hz * 2 + 0.2,
 				corps * CFrame.new(0, h * k, 0),
 				Color3.fromRGB(150, 200, 235),
 				Enum.Material.Glass
@@ -271,10 +284,10 @@ return function(R, biblio)
 		piece(
 			parent,
 			"Balcon",
-			3.5,
+			1.2,
 			0.4,
 			2.5,
-			corps * CFrame.new(hx + 2, h * 0.3, 0) * CFrame.Angles(0, 0, math.rad(12)),
+			corps * CFrame.new(hx - 0.4, h * 0.3, 0),
 			couleurs.acier,
 			Enum.Material.Metal
 		)
@@ -284,7 +297,7 @@ return function(R, biblio)
 			0.5,
 			h * 0.8,
 			0.5,
-			corps * CFrame.new(hx * 0.6, 0, hz * 0.9),
+			corps * CFrame.new(hx * 0.6, 0, hz - 0.1),
 			couleurs.colombage,
 			Enum.Material.Wood
 		)
@@ -292,9 +305,9 @@ return function(R, biblio)
 			piece(
 				parent,
 				"ToitArrache",
-				hx * 2 + 2,
+				hx * 2 - 1.6, -- pas plus large que la façade : ce serait un rebord
 				2,
-				hz * 2 + 2,
+				hz * 2,
 				corps * CFrame.new(0, -h / 2 - 1, 0),
 				couleurs.toit,
 				Enum.Material.Slate
@@ -307,8 +320,8 @@ return function(R, biblio)
 	local function objetBus(parent, p, accent)
 		local x, y, z, hx, hz = reperes(p)
 		local longX = hx >= hz
-		local sx, sz = if longX then hx * 2 + 4 else hx * 2 + 1, if longX then hz * 2 + 1 else hz * 2 + 4
-		local corps = CFrame.new(x, y - 4.5, z) * CFrame.Angles(0, 0, math.rad(entre(-7, 7)))
+		local sx, sz = hx * 2, hz * 2
+		local corps = CFrame.new(x, y - 4.5, z) * CFrame.Angles(0, 0, aplomb(-7, 7))
 		piece(parent, "Bus", sx, 7, sz, corps, couleurs.bus)
 		piece(parent, "BandeBus", sx + 0.2, 1.8, sz + 0.2, corps * CFrame.new(0, -2, 0), couleurs.metro)
 		piece(
@@ -351,21 +364,21 @@ return function(R, biblio)
 		contour(p, accent)
 	end
 
-	-- Rame de métro debout : la dalle est le flanc d'une voiture plantée à la verticale.
+	-- Rame de métro debout : la dalle est le bout d'une voiture plantée à la verticale.
 	local function objetRame(parent, p, accent)
 		local x, y, z, hx, hz = reperes(p)
-		local inclinaison = CFrame.Angles(math.rad(entre(70, 110)), math.rad(entre(0, 360)), 0)
-		local corps = CFrame.new(x, y - 8, z) * inclinaison
-		piece(parent, "Rame", hx * 2 + 1, 16, hz * 2 + 1, corps, couleurs.quai, Enum.Material.Metal)
-		piece(parent, "BandeauRame", hx * 2 + 1.2, 2.2, hz * 2 + 1.2, corps * CFrame.new(0, 5, 0), couleurs.metro)
-		for _, k in { -3, 2 } do
+		local inclinaison = CFrame.Angles(aplomb(70, 110), quart(), 0)
+		local corps = CFrame.new(x, y - 5.5, z) * inclinaison -- pas plus long : il descendrait dans les sauts d'en dessous
+		piece(parent, "Rame", hx * 2, 9, hz * 2, corps, couleurs.quai, Enum.Material.Metal)
+		piece(parent, "BandeauRame", hx * 2 + 0.2, 2.2, hz * 2 + 0.2, corps * CFrame.new(0, 3, 0), couleurs.metro)
+		for _, k in { -2.6, 0.2 } do
 			piece(
 				parent,
 				"PorteRame",
-				hx * 2 + 1.3,
-				3,
+				hx * 2 + 0.2,
+				2.4,
 				2.2,
-				corps * CFrame.new(0, k, hz),
+				corps * CFrame.new(0, k, hz - 1),
 				Color3.fromRGB(40, 50, 70),
 				Enum.Material.Glass
 			)
@@ -373,16 +386,16 @@ return function(R, biblio)
 		cylindre(
 			parent,
 			"Pantographe",
-			4,
+			3,
 			0.4,
-			corps * CFrame.new(0, -8, 0) * CFrame.Angles(0, 0, math.rad(90)),
+			corps * CFrame.new(0, -4.5, 0) * CFrame.Angles(0, 0, math.rad(90)),
 			couleurs.acier,
 			Enum.Material.Metal
 		)
 		contour(p, accent)
 	end
 
-	-- Grue de chantier : la dalle est sa flèche, la tour part en biais dans le vide.
+	-- Grue de chantier : la dalle est sa flèche, la tour plonge dans le vide.
 	local function objetGrue(parent, p, accent)
 		local x, y, z, hx, hz = reperes(p)
 		local longX = hx >= hz
@@ -402,9 +415,9 @@ return function(R, biblio)
 			parent,
 			"TourGrue",
 			2.2,
-			22,
+			10, -- plus long, il descendrait dans les sauts du tour d'en dessous
 			2.2,
-			CFrame.new(x, y - 13, z) * CFrame.Angles(math.rad(entre(-14, 14)), 0, math.rad(entre(-14, 14))),
+			CFrame.new(x, y - 7, z) * CFrame.Angles(aplomb(-14, 14), 0, aplomb(-14, 14)),
 			jaune,
 			mat
 		)
@@ -414,13 +427,13 @@ return function(R, biblio)
 			3,
 			3,
 			3,
-			CFrame.new(x + (if longX then -hx - 1 else 0), y - 2.5, z + (if longX then 0 else -hz - 1)),
+			CFrame.new(x + (if longX then -hx + 1.5 else 0), y - 2.5, z + (if longX then 0 else -hz + 1.5)),
 			couleurs.beton,
 			Enum.Material.Concrete
 		)
 		local bout = CFrame.new(x + (if longX then hx - 1 else 0), y - 1, z + (if longX then 0 else hz - 1))
-		piece(parent, "Cable", 0.2, 7, 0.2, bout * CFrame.new(0, -3.5, 0), Color3.fromRGB(40, 40, 45), mat)
-		piece(parent, "Crochet", 1.2, 1.2, 1.2, bout * CFrame.new(0, -7.5, 0), couleurs.acier, mat)
+		piece(parent, "Cable", 0.2, 3, 0.2, bout * CFrame.new(0, -1.5, 0), Color3.fromRGB(40, 40, 45), mat)
+		piece(parent, "Crochet", 1.2, 1.2, 1.2, bout * CFrame.new(0, -3.5, 0), couleurs.acier, mat)
 		contour(p, accent)
 	end
 
@@ -437,7 +450,7 @@ return function(R, biblio)
 					h,
 					0.45,
 					CFrame.new(x + sx * (hx - 0.4), y - 1 - h / 2, z + sz * (hz - 0.4))
-						* CFrame.Angles(0, 0, math.rad(entre(-5, 5))),
+						* CFrame.Angles(0, 0, aplomb(-5, 5)),
 					couleurs.acier,
 					Enum.Material.Metal
 				)
@@ -449,17 +462,17 @@ return function(R, biblio)
 			hx * 1.8,
 			0.4,
 			hz * 1.8,
-			CFrame.new(x, y - h * 0.55, z),
+			CFrame.new(x, y - 5, z), -- trop près de la dalle pour qu'on tienne debout entre les deux
 			couleurs.ponton,
 			Enum.Material.Wood
 		)
 		piece(
 			parent,
-			"Diagonale",
-			math.sqrt((hx * 2) ^ 2 + h ^ 2),
+			"Moise",
+			hx * 2 - 0.8,
 			0.3,
 			0.3,
-			CFrame.new(x, y - 1 - h / 2, z + hz - 0.4) * CFrame.Angles(0, 0, math.atan2(h, hx * 2)),
+			CFrame.new(x, y - 3, z + hz - 0.4),
 			couleurs.acier,
 			Enum.Material.Metal
 		)
@@ -481,19 +494,18 @@ return function(R, biblio)
 		local x, y, z, hx, hz = reperes(p)
 		local longX = hx >= hz
 		local l = (if longX then hx else hz) * 2 - 0.5
-		local cadre = CFrame.new(x, y - 5, z)
-			* CFrame.Angles(0, if longX then 0 else math.rad(90), math.rad(entre(-9, 9)))
+		local cadre = CFrame.new(x, y - 5, z) * CFrame.Angles(0, if longX then 0 else math.rad(90), aplomb(-9, 9))
 		local affiche = piece(parent, "Affiche", l, 7, 0.4, cadre, Color3.fromRGB(25, 25, 35))
 		texte(Enum.NormalId.Front, choix(SLOGANS), couleurs.or_).Parent = affiche
 		texte(Enum.NormalId.Back, choix(SLOGANS), couleurs.checkpoint).Parent = affiche
-		piece(parent, "Lisere", l + 0.4, 0.3, 0.6, cadre * CFrame.new(0, 3.7, 0), accent, Enum.Material.Neon)
+		piece(parent, "Lisere", l, 0.3, 0.6, cadre * CFrame.new(0, 3.7, 0), accent, Enum.Material.Neon)
 		for _, d in { -1, 1 } do
 			piece(
 				parent,
 				"Pied",
 				0.6,
 				12,
-				0.6,
+				0.38, -- pas plus épais que l'affiche : ce serait un rebord
 				cadre * CFrame.new(d * l * 0.35, -9, 0),
 				couleurs.acier,
 				Enum.Material.Metal
@@ -502,21 +514,21 @@ return function(R, biblio)
 		contour(p, accent)
 	end
 
-	-- Canapé : la dalle est l'assise.
+	-- Canapé retourné : la dalle est posée sur son dessous, le dossier pend.
 	local function objetCanape(parent, p, accent)
 		local x, y, z, hx, hz = reperes(p)
 		local tissu = choix({ Color3.fromRGB(190, 70, 90), Color3.fromRGB(70, 110, 170), Color3.fromRGB(110, 150, 90) })
-		local base = CFrame.new(x, y - 2.5, z) * CFrame.Angles(0, math.rad(entre(0, 360)), math.rad(entre(-8, 8)))
-		piece(parent, "Assise", hx * 2 + 0.6, 3, hz * 2 + 0.6, base, tissu, Enum.Material.Fabric)
-		piece(parent, "Dossier", hx * 2 + 0.6, 4, 1.2, base * CFrame.new(0, 3, -hz), tissu, Enum.Material.Fabric)
+		local base = CFrame.new(x, y - 2.5, z) * CFrame.Angles(0, quart(), aplomb(-8, 8))
+		piece(parent, "Assise", hx * 2, 3, hz * 2, base, tissu, Enum.Material.Fabric)
+		piece(parent, "Dossier", hx * 2, 4, 1.2, base * CFrame.new(0, -3, 0.6 - hz), tissu, Enum.Material.Fabric)
 		for _, d in { -1, 1 } do
 			piece(
 				parent,
 				"Accoudoir",
 				1.2,
 				3,
-				hz * 2 + 0.6,
-				base * CFrame.new(d * hx, 1.5, 0),
+				hz * 2,
+				base * CFrame.new(d * (hx - 0.6), -2, 0),
 				tissu,
 				Enum.Material.Fabric
 			)
@@ -527,29 +539,17 @@ return function(R, biblio)
 			hx,
 			0.8,
 			hz,
-			base * CFrame.new(0, 1.8, 0.4),
+			base * CFrame.new(0, -1.8, 0.4),
 			Color3.fromRGB(240, 230, 200),
 			Enum.Material.Fabric
 		)
-		for _, d in { -1, 1 } do
-			piece(
-				parent,
-				"PiedCanape",
-				0.6,
-				1.6,
-				0.6,
-				base * CFrame.new(d * hx * 0.7, -2.2, 0),
-				couleurs.bois,
-				Enum.Material.Wood
-			)
-		end
 		contour(p, accent)
 	end
 
 	-- Armoire couchée : la dalle est son flanc.
 	local function objetArmoire(parent, p, accent)
 		local x, y, z, hx, hz = reperes(p)
-		local base = CFrame.new(x, y - 3, z) * CFrame.Angles(math.rad(entre(-12, 12)), math.rad(entre(0, 360)), 0)
+		local base = CFrame.new(x, y - 3, z) * CFrame.Angles(aplomb(-12, 12), quart(), 0)
 		piece(parent, "Armoire", hx * 2 + 0.5, 5, hz * 2 + 0.5, base, couleurs.bois, Enum.Material.Wood)
 		for _, d in { -1, 1 } do
 			piece(
@@ -567,7 +567,7 @@ return function(R, biblio)
 				"Poignee",
 				0.8,
 				0.3,
-				base * CFrame.new(d * 0.6, 0, hz + 0.6) * CFrame.Angles(math.rad(90), 0, 0),
+				base * CFrame.new(d * 0.6, 0, hz + 0.4) * CFrame.Angles(math.rad(90), 0, 0),
 				couleurs.acier,
 				Enum.Material.Metal
 			)
@@ -596,16 +596,14 @@ return function(R, biblio)
 					0.5,
 					4,
 					0.5,
-					CFrame.new(x + sx * (hx - 0.6), y - 3, z + sz * (hz - 0.6))
-						* CFrame.Angles(math.rad(entre(-6, 6)), 0, 0),
+					CFrame.new(x + sx * (hx - 0.6), y - 3, z + sz * (hz - 0.6)) * CFrame.Angles(aplomb(-6, 6), 0, 0),
 					couleurs.bois,
 					Enum.Material.Wood
 				)
 			end
 		end
 		piece(parent, "Caisson", hx, 2.5, hz, CFrame.new(x + hx * 0.4, y - 2.5, z), couleurs.bois, Enum.Material.Wood)
-		local chaise = CFrame.new(x - hx - 1, y - 5, z)
-			* CFrame.Angles(math.rad(entre(-25, 25)), math.rad(entre(0, 360)), math.rad(entre(-25, 25)))
+		local chaise = CFrame.new(x - hx + 1.4, y - 4, z) * CFrame.Angles(aplomb(-25, 25), quart(), aplomb(-25, 25))
 		piece(parent, "Chaise", 2.4, 0.4, 2.4, chaise, couleurs.chaise)
 		piece(parent, "DossierChaise", 2.4, 2.4, 0.4, chaise * CFrame.new(0, 1.4, -1), couleurs.chaise)
 		local copie = piece(
@@ -621,20 +619,20 @@ return function(R, biblio)
 		contour(p, accent)
 	end
 
-	-- Bouée de la Vilaine : la dalle est posée au milieu de l'anneau.
+	-- Bouée de la Vilaine : la dalle est posée sur l'anneau, aussi large que lui.
 	local function objetBouee(parent, p, accent)
 		local x, y, z, hx, hz = reperes(p)
-		local r = math.max(hx, hz) + 2
-		cylindre(parent, "Bouee", 2.2, r * 2, CFrame.new(x, y - 2, z) * DEBOUT, Color3.fromRGB(245, 245, 245))
+		local r = math.max(hx, hz)
+		cylindre(parent, "Bouee", 1.2, r * 2, CFrame.new(x, y - 1.6, z) * DEBOUT, Color3.fromRGB(245, 245, 245))
 		for i = 0, 3 do
 			local a = i * math.pi / 2 + math.rad(45)
 			piece(
 				parent,
 				"Quartier",
-				r * 0.8,
-				2.4,
-				r * 0.8,
-				CFrame.new(x + math.cos(a) * r * 0.75, y - 2, z + math.sin(a) * r * 0.75) * CFrame.Angles(0, -a, 0),
+				r * 0.55,
+				1.4,
+				r * 0.55,
+				CFrame.new(x + math.cos(a) * r * 0.5, y - 1.6, z + math.sin(a) * r * 0.5) * CFrame.Angles(0, -a, 0),
 				if i % 2 == 0 then couleurs.metro else Color3.fromRGB(245, 245, 245)
 			)
 		end
@@ -644,7 +642,7 @@ return function(R, biblio)
 			0.25,
 			9,
 			0.25,
-			CFrame.new(x + r, y - 6, z) * CFrame.Angles(math.rad(14), 0, 0),
+			CFrame.new(x + r - 0.5, y - 6, z),
 			couleurs.ponton,
 			Enum.Material.Fabric
 		)
@@ -654,38 +652,30 @@ return function(R, biblio)
 	-- Poubelle du cortège : la dalle est son couvercle.
 	local function objetPoubelle(parent, p, accent)
 		local x, y, z, hx, hz = reperes(p)
-		local corps = CFrame.new(x, y - 3.5, z) * CFrame.Angles(math.rad(entre(-10, 10)), 0, math.rad(entre(-10, 10)))
+		local corps = CFrame.new(x, y - 3.5, z) * CFrame.Angles(aplomb(-10, 10), 0, aplomb(-10, 10))
 		piece(parent, "Bac", hx * 2 - 0.4, 6, hz * 2 - 0.4, corps, couleurs.bac)
-		piece(
-			parent,
-			"Rebord",
-			hx * 2 + 0.3,
-			0.6,
-			hz * 2 + 0.3,
-			corps * CFrame.new(0, 2.8, 0),
-			Color3.fromRGB(30, 120, 65)
-		)
+		piece(parent, "Rebord", hx * 2, 0.6, hz * 2, corps * CFrame.new(0, 2.8, 0), Color3.fromRGB(30, 120, 65))
 		for _, d in { -1, 1 } do
 			cylindre(
 				parent,
 				"Roulette",
 				0.6,
 				1.4,
-				corps * CFrame.new(d * (hx - 0.8), -3.2, 0) * CFrame.Angles(0, math.rad(90), 0),
+				corps * CFrame.new(d * (hx - 1), -3.2, 0) * CFrame.Angles(0, math.rad(90), 0),
 				Color3.fromRGB(30, 30, 30)
 			)
 		end
-		boule(parent, "Sac", 3, x + hx + 1, y - 2, z - hz, Color3.fromRGB(35, 35, 40))
+		boule(parent, "Sac", 3, x + hx - 1.8, y - 8, z - hz + 1.8, Color3.fromRGB(35, 35, 40))
 		contour(p, accent)
 	end
 
 	-- Pancarte du cortège, plantée à l'envers.
 	local function objetPancarte(parent, p, accent)
 		local x, y, z, hx, hz = reperes(p)
-		local base = CFrame.new(x, y - 1, z) * CFrame.Angles(0, math.rad(entre(0, 360)), math.rad(entre(-12, 12)))
+		local base = CFrame.new(x, y - 1, z) * CFrame.Angles(0, quart(), aplomb(-12, 12))
 		piece(parent, "Manche", 0.5, 14, 0.5, base * CFrame.new(0, -8, 0), couleurs.bois, Enum.Material.Wood)
 		local carton =
-			piece(parent, "Carton", math.max(hx, hz) * 2.2, 5, 0.35, base * CFrame.new(0, -5, 0.6), couleurs.pancarte)
+			piece(parent, "Carton", math.max(hx, hz) * 2, 5, 0.35, base * CFrame.new(0, -5, 0.6), couleurs.pancarte)
 		texte(Enum.NormalId.Front, choix(SLOGANS), Color3.fromRGB(35, 30, 20), couleurs.pancarte).Parent = carton
 		piece(parent, "Scotch", 1.6, 0.2, 0.8, base * CFrame.new(0, -2.6, 0.5), couleurs.papier, Enum.Material.Fabric)
 		contour(p, accent)
@@ -694,7 +684,7 @@ return function(R, biblio)
 	-- La galette-saucisse géante : la dalle est la galette, la saucisse roule à côté.
 	local function objetGalette(parent, p, accent)
 		local x, y, z, hx, hz = reperes(p)
-		local r = math.max(hx, hz) + 2.5
+		local r = math.max(hx, hz)
 		cylindre(
 			parent,
 			"Galette",
@@ -718,17 +708,17 @@ return function(R, biblio)
 			r * 1.6,
 			0.1,
 			r * 1.6,
-			CFrame.new(x, y - 2.7, z) * CFrame.Angles(math.rad(6), math.rad(entre(0, 360)), 0),
+			CFrame.new(x, y - 2.65, z) * CFrame.Angles(0, quart(), 0),
 			couleurs.papier
 		)
-		piece(parent, "Moutarde", 0.6, 0.25, r, CFrame.new(x, y - 0.6, z - r * 0.55), couleurs.pancarte)
+		piece(parent, "Moutarde", 0.6, 0.25, r * 0.8, CFrame.new(x, y - 0.6, z - r * 0.55), couleurs.pancarte)
 		contour(p, accent)
 	end
 
 	-- Container de chantier, panneau de rue, cabine : des objets simples pour varier.
 	local function objetContainer(parent, p, accent)
 		local x, y, z, hx, hz = reperes(p)
-		local base = CFrame.new(x, y - 3, z) * CFrame.Angles(math.rad(entre(-9, 9)), math.rad(entre(0, 360)), 0)
+		local base = CFrame.new(x, y - 3, z) * CFrame.Angles(aplomb(-9, 9), quart(180), 0)
 		local teinte = choix({ Color3.fromRGB(200, 70, 60), Color3.fromRGB(60, 120, 160), couleurs.pancarte })
 		piece(parent, "Container", hx * 2 + 0.6, 5, hz * 2 + 0.6, base, teinte, Enum.Material.CorrodedMetal)
 		for _, d in { -1, 1 } do
@@ -763,6 +753,40 @@ return function(R, biblio)
 		{ construire = objetGalette, long = false },
 		{ construire = objetContainer, long = true },
 	}
+
+	-- Pose l'habillage d'une dalle, le réduit d'un seul tenant (autour du centre de la face de dessous) jusqu'à ce qu'il
+	-- tienne dans son aplomb, et le rend solide. Solide sans requête (`decor`) : ce n'est pas une plateforme, et on ne
+	-- peut se tenir debout nulle part dessus (outils/monde/verifier-bords.luau le prouve). Restent traversables les
+	-- reliefs plaqués (0,1 stud : solides, ils feraient des rebords) et la corde de la bouée.
+	local RELIEFS = { Fenetres = true, BandeBus = true, PorteRame = true, Copie = true, Cordage = true }
+	local function habiller(objet, parent, p, accent)
+		local x, y, z, hx, hz = reperes(p)
+		local dejaLa = #parent:GetChildren()
+		objet(parent, p, accent)
+		local pieces, k = {}, 1
+		for i, e in parent:GetChildren() do
+			if i <= dejaLa or e.Name == "Copie" then
+				continue
+			end
+			local cf, t = e.CFrame, e.Size
+			local a, b, c = cf.XVector * (t.X / 2), cf.YVector * (t.Y / 2), cf.ZVector * (t.Z / 2)
+			k = math.min(
+				k,
+				(hx - 0.05) / (math.abs(cf.X - x) + math.abs(a.X) + math.abs(b.X) + math.abs(c.X)),
+				(hz - 0.05) / (math.abs(cf.Z - z) + math.abs(a.Z) + math.abs(b.Z) + math.abs(c.Z))
+			)
+			table.insert(pieces, e)
+		end
+		local pied = Vector3.new(x, y - 1, z)
+		for _, e in pieces do
+			local position = e.CFrame.Position
+			e.Size *= k
+			e.CFrame = (e.CFrame - position) + (pied + (position - pied) * k)
+			if not RELIEFS[e.Name] then
+				e.CanCollide = true
+			end
+		end
+	end
 
 	local function melange(a, b, t: number)
 		return Color3.new(a.R + (b.R - a.R) * t, a.G + (b.G - a.G) * t, a.B + (b.B - a.B) * t)
@@ -873,24 +897,26 @@ return function(R, biblio)
 	contour(pied, segments[1].couleur, 0.22)
 	etiquette(pied, "PIED DE L'ASCENSION", segments[1].couleur, 7, 400)
 	lumiere(pied, segments[1].couleur, 40, 1.6)
-	fantome(bloc(dPied, "Lisere", 28, 0.4, 28, CX, BASE + 0.1, CZ, segments[1].couleur, Enum.Material.Neon))
+	-- Le liseré ne dépasse pas de la dalle : plus large qu'elle, il passerait pour du sol.
+	fantome(bloc(dPied, "Lisere", 26.2, 0.4, 26.2, CX, BASE + 0.1, CZ, segments[1].couleur, Enum.Material.Neon))
 	for _, c in { -1, 1 } do
-		fantome(
+		-- Solide, sur la dalle, et plus haut (17) que les deux sauts enchaînés : on ne grimpe pas dessus.
+		decor(
 			bloc(
 				dPied,
 				"PilierPortique",
 				1,
-				14,
+				17,
 				1,
-				CX - 13,
-				BASE + 14,
+				CX - 12.5,
+				BASE + 17,
 				CZ + c * 12,
 				segments[1].couleur,
 				Enum.Material.Metal
 			)
 		)
 	end
-	local fronton = fantome(bloc(dPied, "Portique", 1.2, 4, 26, CX - 13, BASE + 17, CZ, Color3.fromRGB(20, 20, 30)))
+	local fronton = fantome(bloc(dPied, "Portique", 1.2, 4, 26, CX - 12.5, BASE + 17.1, CZ, Color3.fromRGB(20, 20, 30)))
 	texte(Enum.NormalId.Right, "L'ASCENSION", segments[1].couleur).Parent = fronton
 	local regles = fantome(bloc(dPied, "Regles", 12, 6, 0.4, CX + 2, BASE + 11, CZ - 14, Color3.fromRGB(20, 20, 30)))
 	texte(Enum.NormalId.Back, "Tomber ramène ici.\nAucun palier : 258 studs d'un trait.", couleurs.or_).Parent = regles
@@ -916,27 +942,21 @@ return function(R, biblio)
 		couleurs.or_,
 		true
 	)
-	-- Un bout de toit arraché sous le pied : on comprend qu'il flotte.
-	piece(
-		dPied,
-		"ToitArrache",
-		30,
-		3,
-		30,
-		CFrame.new(CX, BASE - 3, CZ) * CFrame.Angles(math.rad(4), 0, math.rad(-3)),
-		couleurs.toit,
-		Enum.Material.Slate
-	)
+	-- Un bout de toit arraché sous le pied : on comprend qu'il flotte. Solide, dans l'aplomb de la dalle ; les poutres
+	-- vont jusqu'au toit de la fac, loin des dalles de l'accès.
+	decor(brut(dPied, "ToitArrache", 25.6, 3, 25.6, CFrame.new(CX, BASE - 2.5, CZ), couleurs.toit, Enum.Material.Slate))
 	for _, d in { -1, 1 } do
-		piece(
-			dPied,
-			"Poutre",
-			1.4,
-			12,
-			1.4,
-			CFrame.new(CX + d * 10, BASE - 9, CZ - d * 8) * CFrame.Angles(math.rad(18 * d), 0, math.rad(12)),
-			couleurs.acier,
-			Enum.Material.Metal
+		decor(
+			brut(
+				dPied,
+				"Poutre",
+				1.4,
+				BASE - 4 - SDV.toit,
+				1.4,
+				CFrame.new(CX + d * 10, (BASE - 4 + SDV.toit) / 2, CZ + d * 8),
+				couleurs.acier,
+				Enum.Material.Metal
+			)
 		)
 	end
 
@@ -1112,13 +1132,15 @@ return function(R, biblio)
 		pancarte:SetAttribute("Poussee", 1.6)
 		pancarte:AddTag("Balancier")
 		texte(Enum.NormalId.Right, choix(SLOGANS), Color3.fromRGB(35, 30, 20), couleurs.pancarte).Parent = pancarte
-		-- La poutre et ses deux chandelles : on voit d'où pend la pancarte.
+		-- La poutre et ses deux chandelles : on voit d'où pend la pancarte. Assez loin de la dalle pour ne pas en faire
+		-- partie, assez près pour ne pas planter dans la dalle voisine.
+		local ecart = math.max(math.max(hx, hz) + 2, porteeVers(hx, hz, uz, ux) + 1)
 		piece(
 			dObstacles,
 			"PoutreBalancier",
 			1,
 			1,
-			math.max(hx, hz) * 2 + 8,
+			ecart * 2 + 0.8,
 			CFrame.new(pivot.X, pivot.Y, pivot.Z) * CFrame.Angles(0, a, 0),
 			couleurs.acier,
 			Enum.Material.Metal
@@ -1130,9 +1152,7 @@ return function(R, biblio)
 				0.8,
 				12,
 				0.8,
-				CFrame.new(pivot.X, pivot.Y - 6, pivot.Z)
-					* CFrame.Angles(0, a, 0)
-					* CFrame.new(0, 0, c * (math.max(hx, hz) + 3.4)),
+				CFrame.new(pivot.X, pivot.Y - 6, pivot.Z) * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, c * ecart),
 				couleurs.acier,
 				Enum.Material.Metal
 			)
@@ -1238,7 +1258,7 @@ return function(R, biblio)
 			piece(
 				dObstacles,
 				"PoutreRompue",
-				hx * 1.4,
+				hx * 0.9, -- dans l'aplomb de la dalle ; traversable : elle reste quand la dalle tombe
 				0.5,
 				0.5,
 				CFrame.new(x + c * hx * 0.5, y - 1.6, z - c * hz * 0.5) * CFrame.Angles(0, 0, math.rad(c * 14)),
@@ -1250,7 +1270,7 @@ return function(R, biblio)
 	end
 
 	-- Plateforme mobile : elle glisse en travers du chemin (jamais vers la dalle d'avant : elle la heurterait).
-	local function poserMobile(p, _teinte, dx: number, dz: number)
+	local function poserMobile(p, teinte, dx: number, dz: number)
 		local x, y, z, hx, hz = reperes(p)
 		rang("Mobile")
 		local amplitude = 11
@@ -1261,17 +1281,19 @@ return function(R, biblio)
 		p:SetAttribute("Deplacement", deplacement)
 		p:SetAttribute("Duree", entre(2.2, 3))
 		p:AddTag("Mobile")
-		-- Le rail : on voit sur quelle course la nacelle va et vient.
-		piece(
+		-- Le rail : on voit sur quelle course la nacelle va et vient. Un trait de lumière, pas une poutre : solide, il
+		-- rattraperait qui rate la nacelle.
+		local rail = piece(
 			dObstacles,
 			"RailMobile",
 			if math.abs(ux) > math.abs(uz) then amplitude + hx * 2 else 0.4,
 			0.4,
 			if math.abs(ux) > math.abs(uz) then 0.4 else amplitude + hz * 2,
 			CFrame.new(x, y - 1.2, z),
-			Color3.fromRGB(60, 64, 72),
-			Enum.Material.Metal
+			teinte,
+			Enum.Material.Neon
 		)
+		rail.Transparency = 0.6
 		return p
 	end
 
@@ -1448,7 +1470,7 @@ return function(R, biblio)
 				part.Color = melange(teinteDe(suivant.y), Color3.fromRGB(245, 245, 250), 0.45)
 				-- Les dalles qui bougent ou s'effondrent gardent leur silhouette propre : rien de lourd dessous.
 				if not dalleNue then
-					modele.construire(dChemin, part, teinteDe(suivant.y))
+					habiller(modele.construire, dChemin, part, teinteDe(suivant.y))
 				else
 					contour(part, teinteDe(suivant.y))
 				end
@@ -1474,10 +1496,18 @@ return function(R, biblio)
 	contour(sp, couleurs.or_, 0.26)
 	etiquette(sp, "SOMMET", couleurs.or_, 10, 600)
 	lumiere(sp, couleurs.or_, 50, 2)
-	fantome(bloc(dSommet, "Lisere", 28, 0.4, 28, sx, sy + 0.1, sz, couleurs.or_, Enum.Material.Neon))
+	fantome(bloc(dSommet, "Lisere", 26.2, 0.4, 26.2, sx, sy + 0.1, sz, couleurs.or_, Enum.Material.Neon))
 	-- Le trophée : la galette-saucisse dorée, sur un socle.
-	cylindre(dSommet, "GaletteDoree", 2.4, 14, CFrame.new(sx, sy + 7, sz) * DEBOUT, couleurs.or_, Enum.Material.Neon)
-	cylindre(
+	local galetteDoree = cylindre(
+		dSommet,
+		"GaletteDoree",
+		2.4,
+		14,
+		CFrame.new(sx, sy + 7, sz) * DEBOUT,
+		couleurs.or_,
+		Enum.Material.Neon
+	)
+	local saucisseDoree = cylindre(
 		dSommet,
 		"SaucisseDoree",
 		12,
@@ -1485,10 +1515,12 @@ return function(R, biblio)
 		CFrame.new(sx, sy + 9, sz) * CFrame.Angles(0, math.rad(20), 0),
 		couleurs.saucisse
 	)
+	galetteDoree.CanCollide = true -- le trophée est solide, comme son socle et son mât
+	saucisseDoree.CanCollide = true
 	for _, d in { -1, 1 } do
-		fantome(bloc(dSommet, "Socle", 2, 6, 2, sx + d * 5, sy + 6, sz + d * 5, couleurs.pierre, Enum.Material.Marble))
+		decor(bloc(dSommet, "Socle", 2, 6, 2, sx + d * 5, sy + 6, sz + d * 5, couleurs.pierre, Enum.Material.Marble))
 	end
-	fantome(
+	decor(
 		bloc(dSommet, "Mat", 0.4, 16, 0.4, sx - 9, sy + 16, sz - 9, Color3.fromRGB(220, 220, 220), Enum.Material.Metal)
 	)
 	for i = 0, 8 do
@@ -1774,7 +1806,7 @@ return function(R, biblio)
 	for i, a in acces do
 		local p = dalle(dAcces, a.nom, a.hx * 2, a.hz * 2, a.x, a.y, a.z, couleurs.beton, Enum.Material.Concrete)
 		contour(p, ACCES, 0.12)
-		a.objet(dAcces, p, ACCES)
+		habiller(a.objet, dAcces, p, ACCES)
 		if i == 1 then
 			p:SetAttribute("DepartAcces", true) -- repère du contrôle : d'ici, on doit atteindre le pied
 			etiquette(p, "SORTIE ↑ PAR LA VERRIÈRE", ACCES, 4, 200)
