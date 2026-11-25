@@ -126,7 +126,7 @@ local function envoyerEtat(joueur: Player)
 		return
 	end
 	local tentative = tentatives[joueur]
-	local classable = tentative ~= nil and RegleAscension.estClassable(tentative)
+	local classable = RegleAscension.classableAffiche(tentative)
 	etatAscension:FireClient(joueur, Remotes.etatAscension(tentative, donnees.meilleureHauteur, classable))
 	if tentative then
 		tentative.hauteurEnvoyee = tentative.hauteur

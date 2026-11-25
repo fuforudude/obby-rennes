@@ -67,6 +67,21 @@ return function()
 			expect(Ascension.estClassable(tentative({ debut = false }))).to.equal(false)
 		end)
 
+		it(
+			"au sommet (chrono arrêté), l'état affiché reste classable, mais rien ne se classe une seconde fois",
+			function()
+				expect(Ascension.classableAffiche(tentative())).to.equal(true)
+				expect(Ascension.classableAffiche(tentative({ debut = false }))).to.equal(true)
+				expect(Ascension.estClassable(tentative({ debut = false }))).to.equal(false)
+			end
+		)
+
+		it("l'état affiché n'est pas classable après une alerte (vol compris), ni hors tentative", function()
+			expect(Ascension.classableAffiche(tentative({ alertes = 1 }))).to.equal(false)
+			expect(Ascension.classableAffiche(tentative({ alertes = 1, debut = false }))).to.equal(false)
+			expect(Ascension.classableAffiche(nil)).to.equal(false)
+		end)
+
 		it("un record de temps est un temps classable plus court ; la première montée classable en est un", function()
 			expect(Ascension.estRecordTemps(0, 60, true, 15)).to.equal(true) -- comme le premier temps à Sup de Vinci
 			expect(Ascension.estRecordTemps(60, 59, true, 15)).to.equal(true)

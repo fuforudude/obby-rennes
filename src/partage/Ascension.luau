@@ -63,6 +63,12 @@ function Ascension.estClassable(tentative: Tentative): boolean
 	return tentative.debut ~= nil and tentative.alertes == 0
 end
 
+--- Le `classable` de l'état envoyé au client (nil : hors tentative). Au sommet le chrono s'arrête, mais la tentative reste
+--- ce qu'elle était jusqu'à la montée suivante : seule une alerte (surveillance ou vol) la dit « non classée ».
+function Ascension.classableAffiche(tentative: Tentative?): boolean
+	return tentative ~= nil and tentative.alertes == 0
+end
+
 --- Cet étage paie-t-il son aura dans cette tentative ? Il faut un chrono parti du pied et aucune alerte de la
 --- surveillance (une alerte coupe tout : plus rien du tout). Sans paliers, il n'y a plus de seuil de hauteur :
 --- toute la tour se grimpe d'une traite, donc tous les étages paient.
